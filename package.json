@@ -1,0 +1,24 @@
+{
+  "name": "flogram",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Flogram is a flow-based system for modeling, visualizing, and managing processes. Built with modularity and clarity in mind, it enables users to design structured workflows, system architectures, and data flows with precise, color-coded elements.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JustPing12/FLOGRAM.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JustPing12/FLOGRAM/issues"
+  },
+  "homepage": "https://github.com/JustPing12/FLOGRAM#readme"
+}
