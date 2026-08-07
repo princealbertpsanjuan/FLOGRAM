@@ -17,6 +17,7 @@ import authenticate from "../../middleware/authenticate.js";
 
 const authRouter = Router();
 
+// Public routes
 authRouter.post(
   "/register",
   registerValidation,
@@ -31,8 +32,17 @@ authRouter.post(
   login
 );
 
-authRouter.post("/logout", authenticate, logout);
+// Authenticated routes
+authRouter.get(
+  "/me",
+  authenticate,
+  getCurrentUser
+);
 
-authRouter.get("/me", authenticate, getCurrentUser);
+authRouter.post(
+  "/logout",
+  authenticate,
+  logout
+);
 
 export default authRouter;
