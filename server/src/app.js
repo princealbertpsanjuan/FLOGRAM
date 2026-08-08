@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import path from "path";
 
 import apiRouter from "./routes/index.js";
 import notFound from "./middleware/notFound.js";
@@ -23,8 +24,29 @@ app.use(
 
 app.use(morgan("dev"));
 app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10mb",
+  })
+);
 app.use(cookieParser());
+
+/*
+ * Serve uploaded files
+ *
+ * Example:
+ * uploads/flowers/example.jpg
+ *
+ * becomes accessible at:
+ * http://localhost:5000/uploads/flowers/example.jpg
+ */
+app.use(
+  "/uploads",
+  express.static(
+    path.join(process.cwd(), "uploads")
+  )
+);
 
 app.get("/", (req, res) => {
   res.status(200).json({

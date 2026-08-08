@@ -2,17 +2,18 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
-const createStorage = (folder) =>
+const createStorage = (folders) =>
   multer.diskStorage({
     destination: (req, file, cb) => {
       const uploadPath = path.join(
         process.cwd(),
         "uploads",
-        "verification",
-        folder
+        ...folders
       );
 
-      fs.mkdirSync(uploadPath, { recursive: true });
+      fs.mkdirSync(uploadPath, {
+        recursive: true,
+      });
 
       cb(null, uploadPath);
     },
@@ -38,7 +39,9 @@ const fileFilter = (req, file, cb) => {
 
   if (!allowedTypes.includes(file.mimetype)) {
     return cb(
-      new Error("Only JPG, PNG, and PDF files are allowed."),
+      new Error(
+        "Only JPG, PNG, and PDF files are allowed."
+      ),
       false
     );
   }
@@ -46,16 +49,44 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
+/*
+ * SELLER VERIFICATION DOCUMENTS
+ * uploads/verification/sellers/
+ */
 export const sellerVerificationUpload = multer({
-  storage: createStorage("sellers"),
+  storage: createStorage([
+    "verification",
+    "sellers",
+  ]),
   fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
 });
 
+/*
+ * RIDER VERIFICATION DOCUMENTS
+ * uploads/verification/riders/
+ */
 export const riderVerificationUpload = multer({
-  storage: createStorage("riders"),
+  storage: createStorage([
+    "verification",
+    "riders",
+  ]),
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+});
+
+/*
+ * FLOWER / BOUQUET IMAGES
+ * uploads/flowers/
+ */
+export const flowerUpload = multer({
+  storage: createStorage([
+    "flowers",
+  ]),
   fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024,
