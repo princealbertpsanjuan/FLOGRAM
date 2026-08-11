@@ -4,6 +4,9 @@ import {
   getFloristById,
   getMyFloristProfile,
   getPendingFlorists,
+  getPublicFloristById,
+  getPublicFloristFlowers,
+  getPublicFlorists,
   rejectFlorist,
   updateFloristProfile,
 } from "./florist.service.js";
@@ -136,7 +139,8 @@ export const approve = async (
 
     res.status(200).json({
       success: true,
-      message: "Florist approved successfully.",
+      message:
+        "Florist approved successfully.",
       data: {
         florist,
       },
@@ -160,9 +164,93 @@ export const reject = async (
 
     res.status(200).json({
       success: true,
-      message: "Florist application rejected.",
+      message:
+        "Florist application rejected.",
       data: {
         florist,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * PUBLIC
+ * Get all approved and active florist shops
+ */
+export const getPublicShops = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const florists = await getPublicFlorists();
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Florist shops retrieved successfully.",
+      data: {
+        count: florists.length,
+        florists,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * PUBLIC
+ * Get one approved florist shop
+ */
+export const getPublicShop = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const florist =
+      await getPublicFloristById(
+        req.params.floristId
+      );
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Florist shop retrieved successfully.",
+      data: {
+        florist,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * PUBLIC
+ * Get available bouquets from one florist
+ */
+export const getPublicShopFlowers = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const flowers =
+      await getPublicFloristFlowers(
+        req.params.floristId
+      );
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Florist bouquet listings retrieved successfully.",
+      data: {
+        count: flowers.length,
+        flowers,
       },
     });
   } catch (error) {

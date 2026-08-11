@@ -1,7 +1,12 @@
 import Florist from "./florist.model.js";
 import User from "../auth/auth.model.js";
 import Verification from "../verification/verification.model.js";
+import Flower from "../flowers/flower.model.js";
 
+/*
+ * SELLER
+ * Create florist profile
+ */
 export const createFloristProfile = async (
   userId,
   profileData
@@ -52,6 +57,10 @@ export const createFloristProfile = async (
   return florist;
 };
 
+/*
+ * SELLER
+ * Get own florist profile
+ */
 export const getMyFloristProfile = async (
   userId
 ) => {
@@ -73,6 +82,10 @@ export const getMyFloristProfile = async (
   return florist;
 };
 
+/*
+ * SELLER
+ * Update own florist profile
+ */
 export const updateFloristProfile = async (
   userId,
   profileData
@@ -114,6 +127,10 @@ export const updateFloristProfile = async (
   return florist;
 };
 
+/*
+ * ADMIN
+ * Get pending florists
+ */
 export const getPendingFlorists = async () => {
   return Florist.find({
     verificationStatus: "pending",
@@ -122,9 +139,15 @@ export const getPendingFlorists = async () => {
       "owner",
       "firstName lastName email phoneNumber role verificationStatus"
     )
-    .sort({ createdAt: 1 });
+    .sort({
+      createdAt: 1,
+    });
 };
 
+/*
+ * ADMIN
+ * Get florist by ID
+ */
 export const getFloristById = async (
   floristId
 ) => {
@@ -151,6 +174,10 @@ export const getFloristById = async (
   return florist;
 };
 
+/*
+ * ADMIN
+ * Approve florist
+ */
 export const approveFlorist = async (
   floristId,
   adminId
@@ -218,6 +245,10 @@ export const approveFlorist = async (
   return florist;
 };
 
+/*
+ * ADMIN
+ * Reject florist
+ */
 export const rejectFlorist = async (
   floristId,
   adminId,
@@ -285,4 +316,79 @@ export const rejectFlorist = async (
   await verification.save();
 
   return florist;
+};
+
+/*
+ * PUBLIC
+ * Get all approved and active florist shops
+ */
+export const getPublicFlorists = async () => {
+  return Florist.find({
+    verificationStatus: "approved",
+    isActive: true,
+  })
+    .populate(
+      "owner",
+      "firstName lastName"
+    )
+    .sort({
+      createdAt: -1,
+    });
+};
+
+/*
+ * PUBLIC
+ * Get one approved and active florist shop
+ */
+export const getPublicFloristById = async (
+  floristId
+) => {
+  const florist = await Florist.findOne({
+    _id: floristId,
+    verificationStatus: "approved",
+    isActive: true,
+  }).populate(
+    "owner",
+    "firstName lastName"
+  );
+
+  if (!florist) {
+    const error = new Error(
+      "Florist shop was not found."
+    );
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return florist;
+};
+
+/*
+ * PUBLIC
+ * Get available bouquets from a florist shop
+ */
+export const getPublicFloristFlowers = async (
+  floristId
+) => {
+  const florist = await Florist.findOne({
+    _id: floristId,
+    verificationStatus: "approved",
+    isActive: true,
+  });
+
+  if (!florist) {
+    const error = new Error(
+      "Florist shop was not found."
+    );
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return Flower.find({
+    florist: floristId,
+    isActive: true,
+    isAvailable: true,
+  }).sort({
+    createdAt: -1,
+  });
 };

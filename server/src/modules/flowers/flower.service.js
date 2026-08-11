@@ -167,11 +167,119 @@ export const deactivateFlower = async (
   return flower;
 };
 
-export const getPublicFlowers = async () => {
-  return Flower.find({
+/*
+ * PUBLIC FLOWER SEARCH AND DISCOVERY
+ */
+export const getPublicFlowers = async (
+  filters = {}
+) => {
+  const query = {
     isActive: true,
     isAvailable: true,
-  })
+  };
+
+  /*
+   * KEYWORD SEARCH
+   *
+   * Searches:
+   * - name
+   * - description
+   * - category
+   * - occasion
+   * - flowerTypes
+   * - colors
+   */
+  if (filters.search) {
+    const searchRegex = new RegExp(
+      filters.search,
+      "i"
+    );
+
+    query.$or = [
+      {
+        name: searchRegex,
+      },
+      {
+        description: searchRegex,
+      },
+      {
+        category: searchRegex,
+      },
+      {
+        occasion: searchRegex,
+      },
+      {
+        flowerTypes: searchRegex,
+      },
+      {
+        colors: searchRegex,
+      },
+    ];
+  }
+
+  /*
+   * CATEGORY FILTER
+   */
+  if (filters.category) {
+    query.category = {
+      $regex: `^${filters.category}$`,
+      $options: "i",
+    };
+  }
+
+  /*
+   * OCCASION FILTER
+   */
+  if (filters.occasion) {
+    query.occasion = {
+      $regex: `^${filters.occasion}$`,
+      $options: "i",
+    };
+  }
+
+  /*
+   * FLOWER TYPE FILTER
+   */
+  if (filters.flowerType) {
+    query.flowerTypes = {
+      $regex: `^${filters.flowerType}$`,
+      $options: "i",
+    };
+  }
+
+  /*
+   * COLOR FILTER
+   */
+  if (filters.color) {
+    query.colors = {
+      $regex: `^${filters.color}$`,
+      $options: "i",
+    };
+  }
+
+  /*
+   * PRICE FILTER
+   */
+  if (
+    filters.minPrice !== undefined ||
+    filters.maxPrice !== undefined
+  ) {
+    query.price = {};
+
+    if (filters.minPrice !== undefined) {
+      query.price.$gte = Number(
+        filters.minPrice
+      );
+    }
+
+    if (filters.maxPrice !== undefined) {
+      query.price.$lte = Number(
+        filters.maxPrice
+      );
+    }
+  }
+
+  return Flower.find(query)
     .populate(
       "florist",
       "shopName address"

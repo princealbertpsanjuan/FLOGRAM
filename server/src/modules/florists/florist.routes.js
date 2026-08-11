@@ -8,6 +8,9 @@ import {
   getPending,
   reject,
   updateMyProfile,
+  getPublicShops,
+  getPublicShop,
+  getPublicShopFlowers,
 } from "./florist.controller.js";
 
 import {
@@ -23,9 +26,33 @@ import authorize from "../../middleware/authorize.js";
 const floristRouter = Router();
 
 /*
+ * PUBLIC ROUTES
+ * Search & Discovery
+ */
+
+// Get all approved and active florist shops
+floristRouter.get(
+  "/public",
+  getPublicShops
+);
+
+// Get available bouquets from a specific florist
+floristRouter.get(
+  "/public/:floristId/flowers",
+  getPublicShopFlowers
+);
+
+// Get one approved florist's public profile
+floristRouter.get(
+  "/public/:floristId",
+  getPublicShop
+);
+
+/*
  * SELLER ROUTES
  */
 
+// Create seller's florist profile
 floristRouter.post(
   "/profile",
   authenticate,
@@ -35,6 +62,7 @@ floristRouter.post(
   createMyFloristProfile
 );
 
+// Get seller's own florist profile
 floristRouter.get(
   "/profile",
   authenticate,
@@ -42,6 +70,7 @@ floristRouter.get(
   getMyProfile
 );
 
+// Update seller's own florist profile
 floristRouter.patch(
   "/profile",
   authenticate,
@@ -55,6 +84,7 @@ floristRouter.patch(
  * ADMIN ROUTES
  */
 
+// Get pending florist profiles
 floristRouter.get(
   "/pending",
   authenticate,
@@ -62,13 +92,7 @@ floristRouter.get(
   getPending
 );
 
-floristRouter.get(
-  "/:floristId",
-  authenticate,
-  authorize("admin"),
-  getFlorist
-);
-
+// Approve florist
 floristRouter.patch(
   "/:floristId/approve",
   authenticate,
@@ -76,6 +100,7 @@ floristRouter.patch(
   approve
 );
 
+// Reject florist
 floristRouter.patch(
   "/:floristId/reject",
   authenticate,
@@ -83,6 +108,15 @@ floristRouter.patch(
   rejectFloristValidation,
   validateFloristRequest,
   reject
+);
+
+// Get florist by ID
+// Keep generic parameter route after specific routes.
+floristRouter.get(
+  "/:floristId",
+  authenticate,
+  authorize("admin"),
+  getFlorist
 );
 
 export default floristRouter;

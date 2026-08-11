@@ -1,0 +1,45 @@
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+
+# =========================
+# Node.js
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# =========================
+# Python
+# =========================
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# =========================
+# User Uploaded Files
+# =========================
+server/uploads/
+
+
+# =========================
+# Operating System
+# =========================
+.DS_Store
+Thumbs.db
+
+
+# =========================
+# VS Code
+# =========================
+.vscode/

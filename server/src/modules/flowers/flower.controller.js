@@ -21,7 +21,8 @@ export const create = async (
 
     res.status(201).json({
       success: true,
-      message: "Flower listing created successfully.",
+      message:
+        "Flower listing created successfully.",
       data: {
         flower,
       },
@@ -132,13 +133,26 @@ export const getPublic = async (
   next
 ) => {
   try {
-    const flowers = await getPublicFlowers();
+    const filters = {
+      search: req.query.search,
+      category: req.query.category,
+      occasion: req.query.occasion,
+      flowerType: req.query.flowerType,
+      color: req.query.color,
+      minPrice: req.query.minPrice,
+      maxPrice: req.query.maxPrice,
+    };
+
+    const flowers = await getPublicFlowers(
+      filters
+    );
 
     res.status(200).json({
       success: true,
       message:
         "Available flower listings retrieved successfully.",
       data: {
+        count: flowers.length,
         flowers,
       },
     });
