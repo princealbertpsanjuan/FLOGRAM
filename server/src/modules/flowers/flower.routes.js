@@ -5,6 +5,7 @@ import {
   getMine,
   getOne,
   getPublic,
+  imageSearch,
   remove,
   update,
 } from "./flower.controller.js";
@@ -70,6 +71,22 @@ const parseFlowerFormData = (req, res, next) => {
 flowerRouter.get(
   "/",
   getPublic
+);
+
+/*
+ * PUBLIC
+ * Computer Vision Image Search
+ *
+ * Body -> form-data
+ * image -> File
+ *
+ * Example:
+ * POST /api/v1/flowers/image-search
+ */
+flowerRouter.post(
+  "/image-search",
+  flowerUpload.single("image"),
+  imageSearch
 );
 
 /*

@@ -60,6 +60,16 @@ const flowerSchema = new mongoose.Schema(
       default: [],
     },
 
+    imageEmbedding: {
+      type: [Number],
+      default: [],
+    },
+
+    embeddingModel: {
+      type: String,
+      default: null,
+    },
+
     isAvailable: {
       type: Boolean,
       default: true,
@@ -76,6 +86,9 @@ const flowerSchema = new mongoose.Schema(
   }
 );
 
-const Flower = mongoose.model("Flower", flowerSchema);
+const Flower = mongoose.model(
+  "Flower",
+  flowerSchema
+);
 
 export default Flower;

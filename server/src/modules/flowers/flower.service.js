@@ -2,11 +2,65 @@ import Flower from "./flower.model.js";
 import Florist from "../florists/florist.model.js";
 import User from "../auth/auth.model.js";
 
+import {
+  generateImageEmbedding,
+  generateUploadedImageEmbedding,
+} from "../../services/ai.service.js";
+
 const normalizePath = (filePath) => {
   return filePath
     .replace(process.cwd(), "")
     .replaceAll("\\", "/")
     .replace(/^\/+/, "");
+};
+
+const cosineSimilarity = (
+  vectorA,
+  vectorB
+) => {
+  if (
+    !Array.isArray(vectorA) ||
+    !Array.isArray(vectorB) ||
+    vectorA.length === 0 ||
+    vectorB.length === 0 ||
+    vectorA.length !== vectorB.length
+  ) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  let magnitudeA = 0;
+  let magnitudeB = 0;
+
+  for (
+    let index = 0;
+    index < vectorA.length;
+    index += 1
+  ) {
+    dotProduct +=
+      vectorA[index] * vectorB[index];
+
+    magnitudeA +=
+      vectorA[index] * vectorA[index];
+
+    magnitudeB +=
+      vectorB[index] * vectorB[index];
+  }
+
+  if (
+    magnitudeA === 0 ||
+    magnitudeB === 0
+  ) {
+    return 0;
+  }
+
+  return (
+    dotProduct /
+    (
+      Math.sqrt(magnitudeA) *
+      Math.sqrt(magnitudeB)
+    )
+  );
 };
 
 export const createFlower = async (
@@ -36,7 +90,10 @@ export const createFlower = async (
     throw error;
   }
 
-  if (florist.verificationStatus !== "approved") {
+  if (
+    florist.verificationStatus !==
+    "approved"
+  ) {
     const error = new Error(
       "Only approved florists can create flower listings."
     );
@@ -48,6 +105,22 @@ export const createFlower = async (
     normalizePath(file.path)
   );
 
+  let imageEmbedding = [];
+  let embeddingModel = null;
+
+  if (images.length > 0) {
+    const aiResult =
+      await generateImageEmbedding(
+        images[0]
+      );
+
+    imageEmbedding =
+      aiResult.embedding;
+
+    embeddingModel =
+      aiResult.model;
+  }
+
   const flower = await Flower.create({
     seller: userId,
     florist: florist._id,
@@ -55,10 +128,15 @@ export const createFlower = async (
     description: flowerData.description,
     price: flowerData.price,
     category: flowerData.category,
-    occasion: flowerData.occasion || [],
-    flowerTypes: flowerData.flowerTypes || [],
-    colors: flowerData.colors || [],
+    occasion:
+      flowerData.occasion || [],
+    flowerTypes:
+      flowerData.flowerTypes || [],
+    colors:
+      flowerData.colors || [],
     images,
+    imageEmbedding,
+    embeddingModel,
     isAvailable:
       flowerData.isAvailable ?? true,
   });
@@ -132,8 +210,11 @@ export const updateFlower = async (
   ];
 
   allowedFields.forEach((field) => {
-    if (updateData[field] !== undefined) {
-      flower[field] = updateData[field];
+    if (
+      updateData[field] !== undefined
+    ) {
+      flower[field] =
+        updateData[field];
     }
   });
 
@@ -178,17 +259,6 @@ export const getPublicFlowers = async (
     isAvailable: true,
   };
 
-  /*
-   * KEYWORD SEARCH
-   *
-   * Searches:
-   * - name
-   * - description
-   * - category
-   * - occasion
-   * - flowerTypes
-   * - colors
-   */
   if (filters.search) {
     const searchRegex = new RegExp(
       filters.search,
@@ -217,62 +287,55 @@ export const getPublicFlowers = async (
     ];
   }
 
-  /*
-   * CATEGORY FILTER
-   */
   if (filters.category) {
     query.category = {
-      $regex: `^${filters.category}$`,
+      $regex:
+        `^${filters.category}$`,
       $options: "i",
     };
   }
 
-  /*
-   * OCCASION FILTER
-   */
   if (filters.occasion) {
     query.occasion = {
-      $regex: `^${filters.occasion}$`,
+      $regex:
+        `^${filters.occasion}$`,
       $options: "i",
     };
   }
 
-  /*
-   * FLOWER TYPE FILTER
-   */
   if (filters.flowerType) {
     query.flowerTypes = {
-      $regex: `^${filters.flowerType}$`,
+      $regex:
+        `^${filters.flowerType}$`,
       $options: "i",
     };
   }
 
-  /*
-   * COLOR FILTER
-   */
   if (filters.color) {
     query.colors = {
-      $regex: `^${filters.color}$`,
+      $regex:
+        `^${filters.color}$`,
       $options: "i",
     };
   }
 
-  /*
-   * PRICE FILTER
-   */
   if (
     filters.minPrice !== undefined ||
     filters.maxPrice !== undefined
   ) {
     query.price = {};
 
-    if (filters.minPrice !== undefined) {
+    if (
+      filters.minPrice !== undefined
+    ) {
       query.price.$gte = Number(
         filters.minPrice
       );
     }
 
-    if (filters.maxPrice !== undefined) {
+    if (
+      filters.maxPrice !== undefined
+    ) {
       query.price.$lte = Number(
         filters.maxPrice
       );
@@ -287,4 +350,92 @@ export const getPublicFlowers = async (
     .sort({
       createdAt: -1,
     });
+};
+
+/*
+ * PUBLIC / CUSTOMER
+ * IMAGE-BASED BOUQUET SEARCH
+ */
+export const searchFlowersByImage = async (
+  uploadedImage,
+  limit = 10
+) => {
+  if (!uploadedImage) {
+    const error = new Error(
+      "Search image is required."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const aiResult =
+    await generateUploadedImageEmbedding(
+      uploadedImage
+    );
+
+  const queryEmbedding =
+    aiResult.embedding;
+
+  const minimumSimilarity = 0.60;
+
+  const flowers = await Flower.find({
+    isActive: true,
+    isAvailable: true,
+    imageEmbedding: {
+      $exists: true,
+      $ne: [],
+    },
+  })
+    .populate(
+      "florist",
+      "shopName address"
+    )
+    .lean();
+
+  const rankedFlowers = flowers
+    .map((flower) => {
+      const similarity =
+        cosineSimilarity(
+          queryEmbedding,
+          flower.imageEmbedding
+        );
+
+      const {
+        imageEmbedding,
+        embeddingModel,
+        ...publicFlower
+      } = flower;
+
+      return {
+        ...publicFlower,
+        similarity: Number(
+          similarity.toFixed(4)
+        ),
+        similarityPercentage:
+          Number(
+            (
+              similarity * 100
+            ).toFixed(2)
+          ),
+      };
+    })
+    .filter(
+      (flower) =>
+        flower.similarity >=
+        minimumSimilarity
+    )
+    .sort(
+      (a, b) =>
+        b.similarity -
+        a.similarity
+    )
+    .slice(
+      0,
+      Number(limit) || 10
+    );
+
+  return {
+    model: aiResult.model,
+    results: rankedFlowers,
+  };
 };

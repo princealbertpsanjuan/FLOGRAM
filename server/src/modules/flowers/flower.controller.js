@@ -4,6 +4,7 @@ import {
   getFlowerById,
   getPublicFlowers,
   getSellerFlowers,
+  searchFlowersByImage,
   updateFlower,
 } from "./flower.service.js";
 
@@ -154,6 +155,34 @@ export const getPublic = async (
       data: {
         count: flowers.length,
         flowers,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const imageSearch = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const limit = req.query.limit || 10;
+
+    const result = await searchFlowersByImage(
+      req.file,
+      limit
+    );
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Similar flower listings retrieved successfully.",
+      data: {
+        model: result.model,
+        count: result.results.length,
+        flowers: result.results,
       },
     });
   } catch (error) {
