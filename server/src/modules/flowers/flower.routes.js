@@ -5,6 +5,7 @@ import {
   getMine,
   getOne,
   getPublic,
+  getRecommendations,
   imageSearch,
   remove,
   update,
@@ -18,55 +19,72 @@ import {
 
 import authenticate from "../../middleware/authenticate.js";
 import authorize from "../../middleware/authorize.js";
-import { flowerUpload } from "../../middleware/upload.js";
+import {
+  flowerUpload,
+} from "../../middleware/upload.js";
 
 const flowerRouter = Router();
 
-const parseFlowerFormData = (req, res, next) => {
+const parseFlowerFormData = (
+  req,
+  res,
+  next
+) => {
   try {
     if (req.body.occasion) {
-      req.body.occasion = JSON.parse(
-        req.body.occasion
-      );
+      req.body.occasion =
+        JSON.parse(
+          req.body.occasion
+        );
     }
 
     if (req.body.flowerTypes) {
-      req.body.flowerTypes = JSON.parse(
-        req.body.flowerTypes
-      );
+      req.body.flowerTypes =
+        JSON.parse(
+          req.body.flowerTypes
+        );
     }
 
     if (req.body.colors) {
-      req.body.colors = JSON.parse(
-        req.body.colors
-      );
-    }
-
-    if (req.body.price !== undefined) {
-      req.body.price = Number(
-        req.body.price
-      );
+      req.body.colors =
+        JSON.parse(
+          req.body.colors
+        );
     }
 
     if (
-      req.body.isAvailable !== undefined
+      req.body.price !== undefined
+    ) {
+      req.body.price =
+        Number(
+          req.body.price
+        );
+    }
+
+    if (
+      req.body.isAvailable !==
+      undefined
     ) {
       req.body.isAvailable =
-        req.body.isAvailable === "true";
+        req.body.isAvailable ===
+        "true";
     }
 
     next();
   } catch (error) {
-    return res.status(422).json({
-      success: false,
-      message: "Invalid flower form data.",
-    });
+    return res
+      .status(422)
+      .json({
+        success: false,
+        message:
+          "Invalid flower form data.",
+      });
   }
 };
 
 /*
  * PUBLIC
- * Get all available flower/bouquet listings
+ * Get all available flower listings
  */
 flowerRouter.get(
   "/",
@@ -74,24 +92,33 @@ flowerRouter.get(
 );
 
 /*
+ * PUBLIC / CUSTOMER
+ * Ranked bouquet recommendations
+ *
+ * Temporary testing endpoint.
+ * Later this will be called internally
+ * by the BloomBoard AI Assistant.
+ */
+flowerRouter.post(
+  "/recommendations",
+  getRecommendations
+);
+
+/*
  * PUBLIC
  * Computer Vision Image Search
- *
- * Body -> form-data
- * image -> File
- *
- * Example:
- * POST /api/v1/flowers/image-search
  */
 flowerRouter.post(
   "/image-search",
-  flowerUpload.single("image"),
+  flowerUpload.single(
+    "image"
+  ),
   imageSearch
 );
 
 /*
  * SELLER
- * Get seller's own listings
+ * Get own listings
  */
 flowerRouter.get(
   "/seller/mine",
@@ -102,14 +129,16 @@ flowerRouter.get(
 
 /*
  * SELLER
- * Create flower/bouquet listing
- * Supports up to 5 images
+ * Create listing
  */
 flowerRouter.post(
   "/",
   authenticate,
   authorize("seller"),
-  flowerUpload.array("images", 5),
+  flowerUpload.array(
+    "images",
+    5
+  ),
   parseFlowerFormData,
   createFlowerValidation,
   validateFlowerRequest,
@@ -142,7 +171,7 @@ flowerRouter.delete(
 
 /*
  * PUBLIC
- * Get one flower/bouquet listing
+ * Get one listing
  *
  * Keep this last.
  */

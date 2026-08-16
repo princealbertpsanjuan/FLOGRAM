@@ -92,3 +92,17 @@ export const flowerUpload = multer({
     fileSize: 5 * 1024 * 1024,
   },
 });
+
+/*
+ * BLOOMBOARD POST IMAGES
+ * uploads/bloomboard/
+ */
+export const bloomboardUpload = multer({
+  storage: createStorage([
+    "bloomboard",
+  ]),
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+});

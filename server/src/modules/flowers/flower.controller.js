@@ -3,6 +3,7 @@ import {
   deactivateFlower,
   getFlowerById,
   getPublicFlowers,
+  getRecommendedFlowers,
   getSellerFlowers,
   searchFlowersByImage,
   updateFlower,
@@ -162,27 +163,73 @@ export const getPublic = async (
   }
 };
 
+export const getRecommendations = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const preferences = {
+      occasion: req.body.occasion,
+      minBudget: req.body.minBudget,
+      maxBudget: req.body.maxBudget,
+      flowerTypes:
+        req.body.flowerTypes || [],
+      colors:
+        req.body.colors || [],
+    };
+
+    const limit =
+      req.body.limit || 5;
+
+    const flowers =
+      await getRecommendedFlowers(
+        preferences,
+        limit
+      );
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Recommended flower listings retrieved successfully.",
+      data: {
+        count:
+          flowers.length,
+        preferences,
+        flowers,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const imageSearch = async (
   req,
   res,
   next
 ) => {
   try {
-    const limit = req.query.limit || 10;
+    const limit =
+      req.query.limit || 10;
 
-    const result = await searchFlowersByImage(
-      req.file,
-      limit
-    );
+    const result =
+      await searchFlowersByImage(
+        req.file,
+        limit
+      );
 
     res.status(200).json({
       success: true,
       message:
         "Similar flower listings retrieved successfully.",
       data: {
-        model: result.model,
-        count: result.results.length,
-        flowers: result.results,
+        model:
+          result.model,
+        count:
+          result.results.length,
+        flowers:
+          result.results,
       },
     });
   } catch (error) {
