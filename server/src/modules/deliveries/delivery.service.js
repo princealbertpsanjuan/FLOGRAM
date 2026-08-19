@@ -115,9 +115,51 @@ const getRiderProfileByUser =
   };
 
 /*
+ * Validate that a rider may
+ * participate in delivery requests.
+ */
+const validateEligibleRider =
+  (
+    rider
+  ) => {
+    if (
+      rider.verificationStatus !==
+      "approved"
+    ) {
+      const error =
+        new Error(
+          "Only approved riders can access delivery requests."
+        );
+
+      error.statusCode =
+        403;
+
+      throw error;
+    }
+
+    if (
+      rider.isActive !==
+      true
+    ) {
+      const error =
+        new Error(
+          "This rider account is not active."
+        );
+
+      error.statusCode =
+        403;
+
+      throw error;
+    }
+  };
+
+/*
  * =========================================================
  * SELLER
  * GET AVAILABLE RIDERS
+ *
+ * Kept as an optional administrative/
+ * fallback feature.
  * =========================================================
  */
 export const getAvailableRiders =
@@ -145,24 +187,24 @@ export const getAvailableRiders =
 /*
  * =========================================================
  * SELLER
- * ASSIGN RIDER TO ORDER
+ * CREATE AVAILABLE DELIVERY REQUEST
  * =========================================================
  *
- * Seller may only assign a rider when:
+ * Normal FLOGRAM flow:
  *
- * - order belongs to seller
- * - fulfillmentType is delivery
- * - order is ready_for_delivery
- * - no delivery already exists
- * - rider is approved
- * - rider is active
- * - rider is available
+ * ready_for_delivery
+ *      ↓
+ * available delivery request
+ *      ↓
+ * visible to approved riders
+ *
+ * No rider is selected here.
+ * =========================================================
  */
-export const assignRiderToOrder =
+export const createDeliveryRequest =
   async (
     orderId,
-    sellerId,
-    riderId
+    sellerId
   ) => {
     const florist =
       await getSellerFlorist(
@@ -199,7 +241,7 @@ export const assignRiderToOrder =
     ) {
       const error =
         new Error(
-          "Only delivery orders can be assigned to riders."
+          "Only delivery orders can create delivery requests."
         );
 
       error.statusCode =
@@ -214,7 +256,28 @@ export const assignRiderToOrder =
     ) {
       const error =
         new Error(
-          "Only orders that are ready for delivery can be assigned to riders."
+          "Only orders that are ready for delivery can create a delivery request."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * PayMongo orders must already
+     * be paid before delivery.
+     */
+    if (
+      order.paymentMethod ===
+        "paymongo" &&
+      order.paymentStatus !==
+        "paid"
+    ) {
+      const error =
+        new Error(
+          "This PayMongo order cannot be sent for delivery until payment is confirmed."
         );
 
       error.statusCode =
@@ -237,98 +300,13 @@ export const assignRiderToOrder =
     if (
       existingDelivery
     ) {
-      const error =
-        new Error(
-          "An active delivery already exists for this order."
-        );
-
-      error.statusCode =
-        409;
-
-      throw error;
-    }
-
-    const rider =
-      await Rider.findById(
-        riderId
+      /*
+       * Return existing request instead
+       * of creating a duplicate.
+       */
+      return populateDelivery(
+        existingDelivery._id
       );
-
-    if (!rider) {
-      const error =
-        new Error(
-          "Rider profile was not found."
-        );
-
-      error.statusCode =
-        404;
-
-      throw error;
-    }
-
-    if (
-      rider.verificationStatus !==
-      "approved"
-    ) {
-      const error =
-        new Error(
-          "Only approved riders can be assigned to deliveries."
-        );
-
-      error.statusCode =
-        403;
-
-      throw error;
-    }
-
-    if (
-      rider.isActive !==
-      true
-    ) {
-      const error =
-        new Error(
-          "This rider account is not active."
-        );
-
-      error.statusCode =
-        400;
-
-      throw error;
-    }
-
-    if (
-      rider.isAvailable !==
-      true
-    ) {
-      const error =
-        new Error(
-          "This rider is currently unavailable."
-        );
-
-      error.statusCode =
-        409;
-
-      throw error;
-    }
-
-    const riderUser =
-      await User.findById(
-        rider.owner
-      );
-
-    if (
-      !riderUser ||
-      riderUser.role !==
-        "rider"
-    ) {
-      const error =
-        new Error(
-          "The assigned rider account is invalid."
-        );
-
-      error.statusCode =
-        400;
-
-      throw error;
     }
 
     const deliveryAddress =
@@ -388,6 +366,9 @@ export const assignRiderToOrder =
       throw error;
     }
 
+    const now =
+      new Date();
+
     const delivery =
       await Delivery.create({
         order:
@@ -402,11 +383,14 @@ export const assignRiderToOrder =
         florist:
           order.florist,
 
+        /*
+         * No rider yet.
+         */
         rider:
-          rider._id,
+          null,
 
         riderUser:
-          rider.owner,
+          null,
 
         pickupAddress: {
           street:
@@ -455,22 +439,101 @@ export const assignRiderToOrder =
           order.recipientPhoneNumber,
 
         status:
-          "assigned",
+          "available",
+
+        availableAt:
+          now,
 
         assignedAt:
-          new Date(),
-      });
+          null,
 
-    /*
-     * Do not make rider unavailable yet.
-     *
-     * Rider becomes unavailable only
-     * after accepting the assignment.
-     */
+        acceptedAt:
+          null,
+      });
 
     return populateDelivery(
       delivery._id
     );
+  };
+
+/*
+ * =========================================================
+ * RIDER
+ * GET AVAILABLE DELIVERY REQUESTS
+ * =========================================================
+ */
+export const getAvailableDeliveryRequests =
+  async (
+    riderUserId
+  ) => {
+    const rider =
+      await getRiderProfileByUser(
+        riderUserId
+      );
+
+    validateEligibleRider(
+      rider
+    );
+
+    if (
+      rider.isAvailable !==
+      true
+    ) {
+      const error =
+        new Error(
+          "You must be available to view delivery requests."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * A rider with an active delivery
+     * should not receive another request.
+     */
+    const activeDelivery =
+      await Delivery.findOne({
+        rider:
+          rider._id,
+
+        status: {
+          $in: [
+            "accepted",
+            "picked_up",
+            "out_for_delivery",
+          ],
+        },
+      });
+
+    if (activeDelivery) {
+      return [];
+    }
+
+    return Delivery.find({
+      status:
+        "available",
+
+      rider:
+        null,
+
+      riderUser:
+        null,
+    })
+      .populate(
+        "florist",
+        "shopName address contactNumber shopLogo"
+      )
+      .populate(
+        "order",
+        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate"
+      )
+      .sort({
+        availableAt:
+          1,
+      });
   };
 
 /*
@@ -520,7 +583,7 @@ export const getSellerDeliveries =
       })
       .populate(
         "order",
-        "productName totalAmount orderStatus fulfillmentType"
+        "productName totalAmount orderStatus fulfillmentType paymentMethod paymentStatus"
       )
       .sort({
         createdAt:
@@ -531,7 +594,7 @@ export const getSellerDeliveries =
 /*
  * =========================================================
  * RIDER
- * GET MY DELIVERY ASSIGNMENTS
+ * GET MY ACCEPTED / ACTIVE / OLD DELIVERIES
  * =========================================================
  */
 export const getRiderDeliveries =
@@ -543,6 +606,10 @@ export const getRiderDeliveries =
       await getRiderProfileByUser(
         riderUserId
       );
+
+    validateEligibleRider(
+      rider
+    );
 
     const query = {
       rider:
@@ -569,7 +636,7 @@ export const getRiderDeliveries =
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate"
+        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate paymentMethod paymentStatus"
       )
       .sort({
         createdAt:
@@ -607,7 +674,7 @@ export const getCustomerDeliveries =
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus"
+        "productName inspirationImage totalAmount orderStatus paymentMethod paymentStatus"
       )
       .sort({
         createdAt:
@@ -660,6 +727,9 @@ export const getDeliveryById =
       throw error;
     }
 
+    /*
+     * CUSTOMER
+     */
     if (
       user.role ===
       "customer"
@@ -668,7 +738,9 @@ export const getDeliveryById =
         String(
           delivery.customer._id
         ) !==
-        String(userId)
+        String(
+          userId
+        )
       ) {
         const error =
           new Error(
@@ -684,6 +756,9 @@ export const getDeliveryById =
       return delivery;
     }
 
+    /*
+     * SELLER
+     */
     if (
       user.role ===
       "seller"
@@ -692,7 +767,9 @@ export const getDeliveryById =
         String(
           delivery.seller._id
         ) !==
-        String(userId)
+        String(
+          userId
+        )
       ) {
         const error =
           new Error(
@@ -708,15 +785,41 @@ export const getDeliveryById =
       return delivery;
     }
 
+    /*
+     * RIDER
+     *
+     * Available requests may be viewed
+     * by approved active riders before
+     * they accept.
+     */
     if (
       user.role ===
       "rider"
     ) {
+      const rider =
+        await getRiderProfileByUser(
+          userId
+        );
+
+      validateEligibleRider(
+        rider
+      );
+
+      if (
+        delivery.status ===
+          "available" &&
+        !delivery.rider
+      ) {
+        return delivery;
+      }
+
       if (
         String(
           delivery.riderUser
         ) !==
-        String(userId)
+        String(
+          userId
+        )
       ) {
         const error =
           new Error(
@@ -746,7 +849,19 @@ export const getDeliveryById =
 /*
  * =========================================================
  * RIDER
- * ACCEPT DELIVERY ASSIGNMENT
+ * ACCEPT AVAILABLE DELIVERY
+ * =========================================================
+ *
+ * IMPORTANT:
+ *
+ * The delivery itself is claimed using
+ * findOneAndUpdate with:
+ *
+ * status = available
+ * rider = null
+ *
+ * so only ONE rider can successfully
+ * claim the request.
  * =========================================================
  */
 export const acceptDeliveryAssignment =
@@ -759,98 +874,66 @@ export const acceptDeliveryAssignment =
         riderUserId
       );
 
-    if (
-      rider.verificationStatus !==
-      "approved"
-    ) {
-      const error =
-        new Error(
-          "Only approved riders can accept delivery assignments."
-        );
+    validateEligibleRider(
+      rider
+    );
 
-      error.statusCode =
-        403;
+    /*
+     * Atomically reserve this rider.
+     *
+     * This prevents the same rider from
+     * accepting multiple requests at
+     * nearly the same time.
+     */
+    const reservedRider =
+      await Rider.findOneAndUpdate(
+        {
+          _id:
+            rider._id,
 
-      throw error;
-    }
+          verificationStatus:
+            "approved",
 
-    if (
-      !rider.isActive
-    ) {
-      const error =
-        new Error(
-          "This rider account is not active."
-        );
+          isActive:
+            true,
 
-      error.statusCode =
-        403;
+          isAvailable:
+            true,
+        },
 
-      throw error;
-    }
+        {
+          $set: {
+            isAvailable:
+              false,
+          },
+        },
 
-    if (
-      !rider.isAvailable
-    ) {
+        {
+          new:
+            true,
+        }
+      );
+
+    if (!reservedRider) {
       const error =
         new Error(
           "You must be available before accepting a delivery."
         );
 
       error.statusCode =
-        400;
-
-      throw error;
-    }
-
-    const delivery =
-      await Delivery.findOne({
-        _id:
-          deliveryId,
-
-        rider:
-          rider._id,
-      });
-
-    if (!delivery) {
-      const error =
-        new Error(
-          "Delivery assignment was not found or does not belong to this rider."
-        );
-
-      error.statusCode =
-        404;
-
-      throw error;
-    }
-
-    if (
-      delivery.status !==
-      "assigned"
-    ) {
-      const error =
-        new Error(
-          "Only newly assigned deliveries can be accepted."
-        );
-
-      error.statusCode =
-        400;
+        409;
 
       throw error;
     }
 
     /*
-     * A rider should not already have
-     * another active accepted delivery.
+     * Double-check no previous active
+     * delivery exists.
      */
     const activeDelivery =
       await Delivery.findOne({
         rider:
           rider._id,
-
-        _id: {
-          $ne:
-            delivery._id,
-        },
 
         status: {
           $in: [
@@ -862,6 +945,14 @@ export const acceptDeliveryAssignment =
       });
 
     if (activeDelivery) {
+      await Rider.findByIdAndUpdate(
+        rider._id,
+        {
+          isAvailable:
+            false,
+        }
+      );
+
       const error =
         new Error(
           "You already have an active delivery."
@@ -873,20 +964,82 @@ export const acceptDeliveryAssignment =
       throw error;
     }
 
-    delivery.status =
-      "accepted";
-
-    delivery.acceptedAt =
+    const now =
       new Date();
 
     /*
-     * Rider is now busy.
+     * Atomic claim.
+     *
+     * If another rider already claimed
+     * it, this returns null.
      */
-    rider.isAvailable =
-      false;
+    const delivery =
+      await Delivery.findOneAndUpdate(
+        {
+          _id:
+            deliveryId,
 
-    await rider.save();
-    await delivery.save();
+          status:
+            "available",
+
+          rider:
+            null,
+
+          riderUser:
+            null,
+        },
+
+        {
+          $set: {
+            rider:
+              rider._id,
+
+            riderUser:
+              riderUserId,
+
+            status:
+              "accepted",
+
+            assignedAt:
+              now,
+
+            acceptedAt:
+              now,
+          },
+        },
+
+        {
+          new:
+            true,
+
+          runValidators:
+            true,
+        }
+      );
+
+    if (!delivery) {
+      /*
+       * Rider failed to claim the
+       * request, so release them again.
+       */
+      await Rider.findByIdAndUpdate(
+        rider._id,
+        {
+          isAvailable:
+            true,
+        }
+      );
+
+      const error =
+        new Error(
+          "This delivery is no longer available. Another rider may have already accepted it."
+        );
+
+      error.statusCode =
+        409;
+
+      throw error;
+    }
 
     return populateDelivery(
       delivery._id
@@ -917,6 +1070,9 @@ export const markDeliveryPickedUp =
 
         rider:
           rider._id,
+
+        riderUser:
+          riderUserId,
       });
 
     if (!delivery) {
@@ -995,6 +1151,9 @@ export const startOutForDelivery =
 
         rider:
           rider._id,
+
+        riderUser:
+          riderUserId,
       });
 
     if (!delivery) {
@@ -1056,11 +1215,14 @@ export const startOutForDelivery =
       throw error;
     }
 
+    const now =
+      new Date();
+
     delivery.status =
       "out_for_delivery";
 
     delivery.outForDeliveryAt =
-      new Date();
+      now;
 
     if (
       riderNotes !==
@@ -1109,6 +1271,9 @@ export const markDeliveryDelivered =
 
         rider:
           rider._id,
+
+        riderUser:
+          riderUserId,
       });
 
     if (!delivery) {
@@ -1177,7 +1342,7 @@ export const markDeliveryDelivered =
     }
 
     /*
-     * Synchronize order.
+     * Synchronize Order.
      */
     order.orderStatus =
       "delivered";
@@ -1186,13 +1351,11 @@ export const markDeliveryDelivered =
       now;
 
     /*
-     * Cash on delivery can be marked
-     * paid when the rider confirms
-     * successful delivery.
+     * COD is paid when successful
+     * delivery occurs.
      *
-     * Online/GCash payment should
-     * remain controlled by payment
-     * integration later.
+     * PayMongo payment remains managed
+     * by the PayMongo webhook.
      */
     if (
       order.paymentMethod ===
@@ -1200,10 +1363,13 @@ export const markDeliveryDelivered =
     ) {
       order.paymentStatus =
         "paid";
+
+      order.paidAt =
+        now;
     }
 
     /*
-     * Rider becomes available again.
+     * Rider is available again.
      */
     rider.isAvailable =
       true;
@@ -1256,7 +1422,7 @@ export const cancelDelivery =
 
     if (
       ![
-        "assigned",
+        "available",
         "accepted",
       ].includes(
         delivery.status
@@ -1273,10 +1439,15 @@ export const cancelDelivery =
       throw error;
     }
 
-    const rider =
-      await Rider.findById(
-        delivery.rider
-      );
+    let rider =
+      null;
+
+    if (delivery.rider) {
+      rider =
+        await Rider.findById(
+          delivery.rider
+        );
+    }
 
     delivery.status =
       "cancelled";
@@ -1287,8 +1458,8 @@ export const cancelDelivery =
     await delivery.save();
 
     /*
-     * If rider had already accepted,
-     * release the rider again.
+     * Release rider if the request
+     * had already been accepted.
      */
     if (
       rider &&
@@ -1303,9 +1474,10 @@ export const cancelDelivery =
     }
 
     /*
-     * The order remains
-     * ready_for_delivery so the seller
-     * can assign another rider.
+     * Order remains ready_for_delivery.
+     *
+     * Seller/system may create another
+     * available delivery request.
      */
     return populateDelivery(
       delivery._id

@@ -4,6 +4,7 @@ import {
 
 import {
   cancel,
+  complete,
   create,
   getForSeller,
   getMine,
@@ -25,8 +26,10 @@ const orderRouter =
   Router();
 
 /*
+ * =========================================================
  * CUSTOMER
  * Get own orders.
+ * =========================================================
  */
 orderRouter.get(
   "/mine",
@@ -36,8 +39,10 @@ orderRouter.get(
 );
 
 /*
+ * =========================================================
  * SELLER
  * Get shop orders.
+ * =========================================================
  */
 orderRouter.get(
   "/seller/mine",
@@ -47,8 +52,10 @@ orderRouter.get(
 );
 
 /*
+ * =========================================================
  * CUSTOMER
  * Create order.
+ * =========================================================
  */
 orderRouter.post(
   "/",
@@ -60,8 +67,10 @@ orderRouter.post(
 );
 
 /*
+ * =========================================================
  * SELLER
  * Update fulfillment status.
+ * =========================================================
  */
 orderRouter.patch(
   "/:orderId/status",
@@ -73,8 +82,10 @@ orderRouter.patch(
 );
 
 /*
+ * =========================================================
  * CUSTOMER
  * Cancel own order.
+ * =========================================================
  */
 orderRouter.patch(
   "/:orderId/cancel",
@@ -86,10 +97,25 @@ orderRouter.patch(
 );
 
 /*
+ * =========================================================
+ * CUSTOMER
+ * Confirm receipt / complete delivered order.
+ * =========================================================
+ */
+orderRouter.patch(
+  "/:orderId/complete",
+  authenticate,
+  authorize("customer"),
+  complete
+);
+
+/*
+ * =========================================================
  * CUSTOMER / SELLER
  * Get one order.
  *
  * Keep this route last.
+ * =========================================================
  */
 orderRouter.get(
   "/:orderId",

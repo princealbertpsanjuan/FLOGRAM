@@ -53,6 +53,16 @@ const deliverySchema =
           true,
       },
 
+      /*
+       * Rider is intentionally nullable.
+       *
+       * A delivery request is first
+       * created as "available".
+       *
+       * The first eligible rider who
+       * accepts it becomes the assigned
+       * rider.
+       */
       rider: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -60,8 +70,8 @@ const deliverySchema =
         ref:
           "Rider",
 
-        required:
-          true,
+        default:
+          null,
 
         index:
           true,
@@ -74,8 +84,8 @@ const deliverySchema =
         ref:
           "User",
 
-        required:
-          true,
+        default:
+          null,
 
         index:
           true,
@@ -228,12 +238,35 @@ const deliverySchema =
           true,
       },
 
+      /*
+       * =====================================================
+       * DELIVERY LIFECYCLE
+       * =====================================================
+       *
+       * available
+       *   = visible to eligible riders
+       *
+       * accepted
+       *   = claimed by one rider
+       *
+       * picked_up
+       *   = bouquet collected
+       *
+       * out_for_delivery
+       *   = rider travelling to customer
+       *
+       * delivered
+       *   = completed delivery
+       *
+       * cancelled
+       *   = delivery request cancelled
+       */
       status: {
         type:
           String,
 
         enum: [
-          "assigned",
+          "available",
           "accepted",
           "picked_up",
           "out_for_delivery",
@@ -242,18 +275,38 @@ const deliverySchema =
         ],
 
         default:
-          "assigned",
+          "available",
 
         index:
           true,
       },
 
-      assignedAt: {
+      /*
+       * When the delivery request became
+       * visible to riders.
+       */
+      availableAt: {
         type:
           Date,
 
         default:
           Date.now,
+      },
+
+      /*
+       * Kept for compatibility with the
+       * previous seller-assignment flow.
+       *
+       * For self-accepted requests this
+       * can be set at the same time as
+       * acceptedAt.
+       */
+      assignedAt: {
+        type:
+          Date,
+
+        default:
+          null,
       },
 
       acceptedAt: {
@@ -319,6 +372,9 @@ const deliverySchema =
     }
   );
 
+/*
+ * Rider delivery history / active work.
+ */
 deliverySchema.index({
   rider:
     1,
@@ -330,8 +386,40 @@ deliverySchema.index({
     -1,
 });
 
+/*
+ * Customer delivery history.
+ */
 deliverySchema.index({
   customer:
+    1,
+
+  createdAt:
+    -1,
+});
+
+/*
+ * Available delivery requests.
+ *
+ * Useful when riders request:
+ *
+ * GET /deliveries/available
+ */
+deliverySchema.index({
+  status:
+    1,
+
+  createdAt:
+    1,
+});
+
+/*
+ * Seller / florist delivery requests.
+ */
+deliverySchema.index({
+  florist:
+    1,
+
+  status:
     1,
 
   createdAt:

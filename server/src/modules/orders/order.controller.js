@@ -1,5 +1,6 @@
 import {
   cancelCustomerOrder,
+  completeCustomerOrder,
   createOrder,
   getCustomerOrders,
   getOrderById,
@@ -47,6 +48,9 @@ export const getMine = async (
         {
           status:
             req.query.status,
+
+          paymentStatus:
+            req.query.paymentStatus,
         }
       );
 
@@ -82,6 +86,9 @@ export const getForSeller =
           {
             status:
               req.query.status,
+
+            paymentStatus:
+              req.query.paymentStatus,
           }
         );
 
@@ -182,6 +189,40 @@ export const cancel = async (
 
       message:
         "Order cancelled successfully.",
+
+      data: {
+        order,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * COMPLETE DELIVERED ORDER
+ * =========================================================
+ */
+export const complete = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const order =
+      await completeCustomerOrder(
+        req.params.orderId,
+        req.user.userId
+      );
+
+    res.status(200).json({
+      success:
+        true,
+
+      message:
+        "Order completed successfully.",
 
       data: {
         order,

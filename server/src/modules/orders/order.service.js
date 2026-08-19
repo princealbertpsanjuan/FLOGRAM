@@ -6,6 +6,12 @@ import Florist from "../florists/florist.model.js";
 
 import CustomBouquetRequest from "../bloomboard/customBouquet/customBouquetRequest.model.js";
 
+/*
+ * =========================================================
+ * HELPERS
+ * =========================================================
+ */
+
 const normalizeArray = (
   value
 ) => {
@@ -14,12 +20,32 @@ const normalizeArray = (
     : [];
 };
 
+/*
+ * Validate delivery/pickup information.
+ */
 const validateDeliveryDetails = (
   orderData
 ) => {
   const fulfillmentType =
     orderData.fulfillmentType ||
     "delivery";
+
+  if (
+    ![
+      "delivery",
+      "pickup",
+    ].includes(
+      fulfillmentType
+    )
+  ) {
+    const error = new Error(
+      "Fulfillment type must be delivery or pickup."
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
 
   if (
     fulfillmentType ===
@@ -53,8 +79,7 @@ const validateDeliveryDetails = (
           "Complete delivery address is required for delivery orders."
         );
 
-      error.statusCode =
-        400;
+      error.statusCode = 400;
 
       throw error;
     }
@@ -64,8 +89,125 @@ const validateDeliveryDetails = (
 };
 
 /*
+ * Normalize and validate payment method.
+ *
+ * Supported:
+ *
+ * delivery:
+ * - cash_on_delivery
+ * - paymongo
+ *
+ * pickup:
+ * - cash_on_pickup
+ * - paymongo
+ */
+const validatePaymentMethod = (
+  paymentMethod,
+  fulfillmentType
+) => {
+  if (
+    paymentMethod ===
+      undefined ||
+    paymentMethod ===
+      null ||
+    paymentMethod === ""
+  ) {
+    return null;
+  }
+
+  const normalized =
+    String(
+      paymentMethod
+    ).trim();
+
+  const allowedMethods = [
+    "cash_on_delivery",
+    "cash_on_pickup",
+    "paymongo",
+  ];
+
+  if (
+    !allowedMethods.includes(
+      normalized
+    )
+  ) {
+    const error = new Error(
+      "Payment method is invalid."
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+  if (
+    normalized ===
+      "cash_on_delivery" &&
+    fulfillmentType !==
+      "delivery"
+  ) {
+    const error = new Error(
+      "Cash on delivery can only be used for delivery orders."
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+  if (
+    normalized ===
+      "cash_on_pickup" &&
+    fulfillmentType !==
+      "pickup"
+  ) {
+    const error = new Error(
+      "Cash on pickup can only be used for pickup orders."
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+  return normalized;
+};
+
+/*
+ * Populate complete order information.
+ */
+const populateOrder = (
+  orderId
+) => {
+  return Order.findById(
+    orderId
+  )
+    .populate(
+      "customer",
+      "firstName lastName email phoneNumber profileImage"
+    )
+    .populate(
+      "seller",
+      "firstName lastName email phoneNumber"
+    )
+    .populate(
+      "florist",
+      "shopName address contactNumber businessEmail shopLogo"
+    )
+    .populate(
+      "flower",
+      "name images price"
+    )
+    .populate(
+      "customBouquetRequest"
+    );
+};
+
+/*
+ * =========================================================
  * CUSTOMER
  * CREATE ORDER
+ * =========================================================
  */
 export const createOrder =
   async (
@@ -96,9 +238,34 @@ export const createOrder =
     const sourceType =
       orderData.sourceType;
 
+    if (
+      ![
+        "flower_listing",
+        "custom_bouquet",
+      ].includes(
+        sourceType
+      )
+    ) {
+      const error =
+        new Error(
+          "Invalid order source type."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
     const fulfillmentType =
       validateDeliveryDetails(
         orderData
+      );
+
+    const paymentMethod =
+      validatePaymentMethod(
+        orderData.paymentMethod,
+        fulfillmentType
       );
 
     const quantity =
@@ -118,6 +285,7 @@ export const createOrder =
       null;
 
     let productName;
+
     let productDescription =
       null;
 
@@ -145,9 +313,9 @@ export const createOrder =
       [];
 
     /*
-     * =====================================
+     * =====================================================
      * NORMAL FLOWER LISTING
-     * =====================================
+     * =====================================================
      */
     if (
       sourceType ===
@@ -224,9 +392,9 @@ export const createOrder =
     }
 
     /*
-     * =====================================
+     * =====================================================
      * CUSTOM AI BOUQUET
-     * =====================================
+     * =====================================================
      */
     else if (
       sourceType ===
@@ -271,6 +439,10 @@ export const createOrder =
         throw error;
       }
 
+      /*
+       * Customer must first accept
+       * florist quotation.
+       */
       if (
         customBouquetRequest
           .status !==
@@ -287,6 +459,10 @@ export const createOrder =
         throw error;
       }
 
+      /*
+       * Price always comes from
+       * seller quotation.
+       */
       if (
         customBouquetRequest
           .quotedPrice ===
@@ -307,8 +483,9 @@ export const createOrder =
       }
 
       /*
-       * Prevent duplicate orders for
-       * the same custom bouquet request.
+       * Prevent duplicate active
+       * orders for the same custom
+       * bouquet request.
        */
       const existingOrder =
         await Order.findOne({
@@ -377,22 +554,6 @@ export const createOrder =
         customBouquetRequest
           .quotedPrice;
 
-      /*
-       * Quantity already formed part
-       * of the seller/customer custom
-       * quotation, so keep that request
-       * quantity as the order quantity.
-       */
-      if (
-        customBouquetRequest
-          .quantity
-      ) {
-        /*
-         * Replace quantity selected
-         * above.
-         */
-      }
-
       occasion =
         customBouquetRequest
           .occasion;
@@ -424,21 +585,14 @@ export const createOrder =
           customBouquetRequest
             .specialInstructions
         );
-    } else {
-      const error =
-        new Error(
-          "Invalid order source type."
-        );
-
-      error.statusCode =
-        400;
-
-      throw error;
     }
 
     /*
-     * For custom bouquets, use the
-     * quantity agreed in the request.
+     * Custom bouquet quantity comes
+     * from the accepted quotation.
+     *
+     * Normal listing quantity comes
+     * from the customer's order.
      */
     const finalQuantity =
       sourceType ===
@@ -452,17 +606,22 @@ export const createOrder =
           )
         : quantity;
 
+    /*
+     * Calculate price entirely on
+     * backend.
+     */
     const subtotal =
-      Number(unitPrice) *
+      Number(
+        unitPrice
+      ) *
       finalQuantity;
 
     /*
-     * Delivery pricing will be
-     * connected to your delivery
-     * module later.
+     * Delivery fee integration will
+     * be added separately.
      *
-     * Do not trust a client-submitted
-     * delivery fee.
+     * Never trust client-submitted
+     * delivery fees.
      */
     const deliveryFee =
       0;
@@ -501,6 +660,20 @@ export const createOrder =
         throw error;
       }
     }
+
+    /*
+     * PayMongo orders begin unpaid.
+     *
+     * Payment Module will later create
+     * the checkout session and move:
+     *
+     * unpaid -> pending -> paid
+     */
+    const paymentProvider =
+      paymentMethod ===
+      "paymongo"
+        ? "paymongo"
+        : null;
 
     const order =
       await Order.create({
@@ -578,45 +751,63 @@ export const createOrder =
 
         specialInstructions,
 
-        paymentMethod:
-          orderData
-            .paymentMethod ||
+        /*
+         * PAYMENT
+         */
+        paymentMethod,
+
+        paymentProvider,
+
+        paymentChannel:
           null,
 
         paymentStatus:
           "unpaid",
 
+        paymongoCheckoutSessionId:
+          null,
+
+        paymongoPaymentIntentId:
+          null,
+
+        paymongoPaymentId:
+          null,
+
+        paymentCheckoutUrl:
+          null,
+
+        paymentInitiatedAt:
+          null,
+
+        paidAt:
+          null,
+
+        paymentFailedAt:
+          null,
+
+        refundedAt:
+          null,
+
+        lastPaymentEventId:
+          null,
+
+        /*
+         * ORDER
+         */
         orderStatus:
           "pending",
       });
 
-    return Order.findById(
+    return populateOrder(
       order._id
-    )
-      .populate(
-        "customer",
-        "firstName lastName email phoneNumber profileImage"
-      )
-      .populate(
-        "seller",
-        "firstName lastName email phoneNumber"
-      )
-      .populate(
-        "florist",
-        "shopName address contactNumber businessEmail shopLogo"
-      )
-      .populate(
-        "flower",
-        "name images price"
-      )
-      .populate(
-        "customBouquetRequest"
-      );
+    );
   };
 
 /*
+ * =========================================================
  * CUSTOMER
  * GET OWN ORDERS
+ * =========================================================
  */
 export const getCustomerOrders =
   async (
@@ -635,7 +826,16 @@ export const getCustomerOrders =
         filters.status;
     }
 
-    return Order.find(query)
+    if (
+      filters.paymentStatus
+    ) {
+      query.paymentStatus =
+        filters.paymentStatus;
+    }
+
+    return Order.find(
+      query
+    )
       .populate(
         "florist",
         "shopName address shopLogo"
@@ -647,8 +847,10 @@ export const getCustomerOrders =
   };
 
 /*
+ * =========================================================
  * SELLER
  * GET SHOP ORDERS
+ * =========================================================
  */
 export const getSellerOrders =
   async (
@@ -706,7 +908,16 @@ export const getSellerOrders =
         filters.status;
     }
 
-    return Order.find(query)
+    if (
+      filters.paymentStatus
+    ) {
+      query.paymentStatus =
+        filters.paymentStatus;
+    }
+
+    return Order.find(
+      query
+    )
       .populate(
         "customer",
         "firstName lastName email phoneNumber profileImage"
@@ -722,8 +933,10 @@ export const getSellerOrders =
   };
 
 /*
+ * =========================================================
  * CUSTOMER / SELLER
  * GET ONE ORDER
+ * =========================================================
  */
 export const getOrderById =
   async (
@@ -748,28 +961,9 @@ export const getOrderById =
     }
 
     const order =
-      await Order.findById(
+      await populateOrder(
         orderId
-      )
-        .populate(
-          "customer",
-          "firstName lastName email phoneNumber profileImage"
-        )
-        .populate(
-          "seller",
-          "firstName lastName email phoneNumber"
-        )
-        .populate(
-          "florist",
-          "shopName owner address contactNumber businessEmail shopLogo"
-        )
-        .populate(
-          "flower",
-          "name images price"
-        )
-        .populate(
-          "customBouquetRequest"
-        );
+      );
 
     if (!order) {
       const error =
@@ -783,6 +977,9 @@ export const getOrderById =
       throw error;
     }
 
+    /*
+     * CUSTOMER
+     */
     if (
       user.role ===
       "customer"
@@ -791,7 +988,9 @@ export const getOrderById =
         String(
           order.customer._id
         ) !==
-        String(userId)
+        String(
+          userId
+        )
       ) {
         const error =
           new Error(
@@ -807,6 +1006,9 @@ export const getOrderById =
       return order;
     }
 
+    /*
+     * SELLER
+     */
     if (
       user.role ===
       "seller"
@@ -815,7 +1017,9 @@ export const getOrderById =
         String(
           order.seller._id
         ) !==
-        String(userId)
+        String(
+          userId
+        )
       ) {
         const error =
           new Error(
@@ -843,8 +1047,10 @@ export const getOrderById =
   };
 
 /*
+ * =========================================================
  * SELLER
  * UPDATE ORDER STATUS
+ * =========================================================
  */
 export const updateSellerOrderStatus =
   async (
@@ -870,6 +1076,34 @@ export const updateSellerOrderStatus =
 
       error.statusCode =
         404;
+
+      throw error;
+    }
+
+    /*
+     * PayMongo orders should not be
+     * confirmed until payment has
+     * actually been verified.
+     *
+     * The Payment Module/webhook will
+     * be responsible for setting
+     * paymentStatus = paid.
+     */
+    if (
+      status ===
+        "confirmed" &&
+      order.paymentMethod ===
+        "paymongo" &&
+      order.paymentStatus !==
+        "paid"
+    ) {
+      const error =
+        new Error(
+          "This PayMongo order cannot be confirmed until payment is completed."
+        );
+
+      error.statusCode =
+        400;
 
       throw error;
     }
@@ -962,8 +1196,10 @@ export const updateSellerOrderStatus =
   };
 
 /*
+ * =========================================================
  * CUSTOMER
  * CANCEL ORDER
+ * =========================================================
  */
 export const cancelCustomerOrder =
   async (
@@ -1011,6 +1247,30 @@ export const cancelCustomerOrder =
       throw error;
     }
 
+    /*
+     * Do not automatically refund
+     * paid PayMongo transactions here.
+     *
+     * A proper PayMongo refund flow
+     * will be implemented separately.
+     */
+    if (
+      order.paymentMethod ===
+        "paymongo" &&
+      order.paymentStatus ===
+        "paid"
+    ) {
+      const error =
+        new Error(
+          "A paid PayMongo order cannot be cancelled through the standard cancellation endpoint. A refund must be processed."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
     order.orderStatus =
       "cancelled";
 
@@ -1027,4 +1287,93 @@ export const cancelCustomerOrder =
     await order.save();
 
     return order;
+  };
+
+  /*
+ * =========================================================
+ * CUSTOMER
+ * COMPLETE DELIVERED ORDER
+ * =========================================================
+ */
+export const completeCustomerOrder =
+  async (
+    orderId,
+    customerId
+  ) => {
+    const order =
+      await Order.findOne({
+        _id:
+          orderId,
+
+        customer:
+          customerId,
+      });
+
+    if (!order) {
+      const error =
+        new Error(
+          "Order was not found or does not belong to this customer."
+        );
+
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    /*
+     * Only delivered orders can be
+     * completed by the customer.
+     */
+    if (
+      order.orderStatus !==
+      "delivered"
+    ) {
+      const error =
+        new Error(
+          "Only delivered orders can be completed."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * Payment must already be confirmed.
+     *
+     * PayMongo:
+     * webhook sets paymentStatus = paid.
+     *
+     * COD:
+     * delivery flow sets paymentStatus
+     * to paid after successful delivery.
+     */
+    if (
+      order.paymentStatus !==
+      "paid"
+    ) {
+      const error =
+        new Error(
+          "The order cannot be completed until payment has been confirmed."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    order.orderStatus =
+      "completed";
+
+    order.completedAt =
+      new Date();
+
+    await order.save();
+
+    return populateOrder(
+      order._id
+    );
   };

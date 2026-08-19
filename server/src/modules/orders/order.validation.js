@@ -3,6 +3,12 @@ import {
   validationResult,
 } from "express-validator";
 
+/*
+ * =========================================================
+ * CUSTOMER
+ * CREATE ORDER
+ * =========================================================
+ */
 export const createOrderValidation = [
   body("sourceType")
     .notEmpty()
@@ -19,8 +25,7 @@ export const createOrderValidation = [
 
   body("flowerId")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .isMongoId()
     .withMessage(
@@ -29,8 +34,7 @@ export const createOrderValidation = [
 
   body("customBouquetRequestId")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .isMongoId()
     .withMessage(
@@ -40,8 +44,7 @@ export const createOrderValidation = [
   body("quantity")
     .optional()
     .isInt({
-      min:
-        1,
+      min: 1,
     })
     .withMessage(
       "Quantity must be at least 1."
@@ -57,15 +60,105 @@ export const createOrderValidation = [
       "Fulfillment type must be delivery or pickup."
     ),
 
-  body("recipientName")
+  /*
+   * DELIVERY ADDRESS
+   *
+   * Detailed requirement checks are
+   * still handled by order.service.js
+   * because they depend on
+   * fulfillmentType.
+   */
+  body("deliveryAddress")
     .optional({
-      nullable:
-        true,
+      nullable: true,
+    })
+    .isObject()
+    .withMessage(
+      "Delivery address must be an object."
+    ),
+
+  body("deliveryAddress.street")
+    .optional({
+      nullable: true,
     })
     .trim()
     .isLength({
-      max:
-        150,
+      max: 200,
+    })
+    .withMessage(
+      "Street cannot exceed 200 characters."
+    ),
+
+  body("deliveryAddress.barangay")
+    .optional({
+      nullable: true,
+    })
+    .trim()
+    .isLength({
+      max: 150,
+    })
+    .withMessage(
+      "Barangay cannot exceed 150 characters."
+    ),
+
+  body("deliveryAddress.city")
+    .optional({
+      nullable: true,
+    })
+    .trim()
+    .isLength({
+      max: 150,
+    })
+    .withMessage(
+      "City cannot exceed 150 characters."
+    ),
+
+  body("deliveryAddress.province")
+    .optional({
+      nullable: true,
+    })
+    .trim()
+    .isLength({
+      max: 150,
+    })
+    .withMessage(
+      "Province cannot exceed 150 characters."
+    ),
+
+  body("deliveryAddress.postalCode")
+    .optional({
+      nullable: true,
+    })
+    .trim()
+    .isLength({
+      max: 20,
+    })
+    .withMessage(
+      "Postal code cannot exceed 20 characters."
+    ),
+
+  body("deliveryAddress.landmark")
+    .optional({
+      nullable: true,
+    })
+    .trim()
+    .isLength({
+      max: 300,
+    })
+    .withMessage(
+      "Landmark cannot exceed 300 characters."
+    ),
+
+  /*
+   * RECIPIENT
+   */
+  body("recipientName")
+    .optional({
+      nullable: true,
+    })
+    .trim()
+    .isLength({
+      max: 150,
     })
     .withMessage(
       "Recipient name cannot exceed 150 characters."
@@ -73,8 +166,7 @@ export const createOrderValidation = [
 
   body("recipientPhoneNumber")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .trim()
     .matches(
@@ -86,8 +178,7 @@ export const createOrderValidation = [
 
   body("requestedDeliveryDate")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .isISO8601()
     .withMessage(
@@ -96,34 +187,46 @@ export const createOrderValidation = [
 
   body("customerNotes")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .trim()
     .isLength({
-      max:
-        2000,
+      max: 2000,
     })
     .withMessage(
       "Customer notes cannot exceed 2000 characters."
     ),
 
+  /*
+   * PAYMENT
+   *
+   * PayMongo is the provider.
+   *
+   * GCash/card/QR Ph/etc. will be
+   * handled later as PayMongo payment
+   * channels rather than separate
+   * FLOGRAM payment methods.
+   */
   body("paymentMethod")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .isIn([
       "cash_on_delivery",
       "cash_on_pickup",
-      "gcash",
-      "online",
+      "paymongo",
     ])
     .withMessage(
-      "Payment method is invalid."
+      "Payment method must be cash_on_delivery, cash_on_pickup, or paymongo."
     ),
 ];
 
+/*
+ * =========================================================
+ * SELLER
+ * UPDATE ORDER STATUS
+ * =========================================================
+ */
 export const sellerOrderStatusValidation = [
   body("status")
     .notEmpty()
@@ -142,35 +245,42 @@ export const sellerOrderStatusValidation = [
 
   body("sellerNotes")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .trim()
     .isLength({
-      max:
-        2000,
+      max: 2000,
     })
     .withMessage(
       "Seller notes cannot exceed 2000 characters."
     ),
 ];
 
+/*
+ * =========================================================
+ * CUSTOMER
+ * CANCEL ORDER
+ * =========================================================
+ */
 export const cancelOrderValidation = [
   body("reason")
     .optional({
-      nullable:
-        true,
+      nullable: true,
     })
     .trim()
     .isLength({
-      max:
-        1000,
+      max: 1000,
     })
     .withMessage(
       "Cancellation reason cannot exceed 1000 characters."
     ),
 ];
 
+/*
+ * =========================================================
+ * VALIDATION RESPONSE
+ * =========================================================
+ */
 export const validateOrderRequest = (
   req,
   res,
@@ -184,9 +294,8 @@ export const validateOrderRequest = (
     return;
   }
 
-  res.status(422).json({
-    success:
-      false,
+  return res.status(422).json({
+    success: false,
 
     message:
       "Validation failed.",

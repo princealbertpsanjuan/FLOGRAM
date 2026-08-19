@@ -4,24 +4,10 @@ import {
 } from "express-validator";
 
 /*
- * SELLER
- * Assign rider to order.
- */
-export const assignRiderValidation = [
-  body("riderId")
-    .notEmpty()
-    .withMessage(
-      "Rider ID is required."
-    )
-    .isMongoId()
-    .withMessage(
-      "Rider ID is invalid."
-    ),
-];
-
-/*
+ * =========================================================
  * RIDER
- * Optional notes when updating delivery.
+ * OPTIONAL NOTES WHEN UPDATING DELIVERY
+ * =========================================================
  */
 export const riderDeliveryNotesValidation = [
   body("riderNotes")
@@ -38,6 +24,10 @@ export const riderDeliveryNotesValidation = [
 ];
 
 /*
+ * =========================================================
+ * VALIDATION RESPONSE
+ * =========================================================
+ *
  * Convert express-validator results
  * into a consistent API response.
  */
@@ -54,15 +44,18 @@ export const validateDeliveryRequest = (
     return;
   }
 
-  res.status(422).json({
+  return res.status(422).json({
     success: false,
+
     message:
       "Validation failed.",
+
     errors:
       errors.array().map(
         (error) => ({
           field:
             error.path,
+
           message:
             error.msg,
         })

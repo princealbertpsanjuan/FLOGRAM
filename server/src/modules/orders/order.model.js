@@ -90,12 +90,10 @@ const orderSchema =
       },
 
       /*
-       * Snapshot values.
+       * Product snapshot.
        *
-       * These are intentionally stored
-       * in the order so later edits to
-       * a flower listing do not change
-       * old orders.
+       * Old orders should not change
+       * when a seller edits a listing.
        */
       productName: {
         type:
@@ -195,8 +193,8 @@ const orderSchema =
       },
 
       /*
-       * delivery = rider/delivery flow
-       * pickup   = customer collects it
+       * delivery = rider delivery
+       * pickup = customer pickup
        */
       fulfillmentType: {
         type:
@@ -328,7 +326,7 @@ const orderSchema =
 
       /*
        * Bouquet details copied from
-       * custom request when applicable.
+       * custom bouquet request.
        */
       occasion: {
         type:
@@ -385,7 +383,9 @@ const orderSchema =
       },
 
       /*
+       * =====================================================
        * ORDER LIFECYCLE
+       * =====================================================
        */
       orderStatus: {
         type:
@@ -411,11 +411,13 @@ const orderSchema =
       },
 
       /*
+       * =====================================================
        * PAYMENT
+       * =====================================================
        *
-       * Payment integration can be
-       * attached later without changing
-       * the main order structure.
+       * cash_on_delivery
+       * cash_on_pickup
+       * paymongo
        */
       paymentMethod: {
         type:
@@ -424,8 +426,7 @@ const orderSchema =
         enum: [
           "cash_on_delivery",
           "cash_on_pickup",
-          "gcash",
-          "online",
+          "paymongo",
           null,
         ],
 
@@ -452,6 +453,169 @@ const orderSchema =
           true,
       },
 
+      /*
+       * External payment provider.
+       *
+       * Kept separate from paymentMethod
+       * so payment channels such as GCash
+       * can still belong to PayMongo.
+       */
+      paymentProvider: {
+        type:
+          String,
+
+        enum: [
+          "paymongo",
+          null,
+        ],
+
+        default:
+          null,
+      },
+
+      /*
+       * Actual payment channel used.
+       *
+       * Examples:
+       * gcash
+       * card
+       * maya
+       * qrph
+       *
+       * This value may be supplied later
+       * by PayMongo/webhook information.
+       */
+      paymentChannel: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
+      },
+
+      /*
+       * PayMongo Checkout Session ID.
+       */
+      paymongoCheckoutSessionId: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
+
+        index:
+          true,
+      },
+
+      /*
+       * PayMongo Payment Intent ID.
+       */
+      paymongoPaymentIntentId: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
+      },
+
+      /*
+       * Final PayMongo Payment ID.
+       */
+      paymongoPaymentId: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
+
+        index:
+          true,
+      },
+
+      /*
+       * PayMongo hosted checkout URL.
+       */
+      paymentCheckoutUrl: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
+      },
+
+      /*
+       * Payment lifecycle timestamps.
+       */
+      paymentInitiatedAt: {
+        type:
+          Date,
+
+        default:
+          null,
+      },
+
+      paidAt: {
+        type:
+          Date,
+
+        default:
+          null,
+      },
+
+      paymentFailedAt: {
+        type:
+          Date,
+
+        default:
+          null,
+      },
+
+      refundedAt: {
+        type:
+          Date,
+
+        default:
+          null,
+      },
+
+      /*
+       * Last PayMongo webhook/event ID
+       * processed for this order.
+       *
+       * Useful for audit/debugging and
+       * duplicate webhook protection.
+       */
+      lastPaymentEventId: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
+      },
+
+      /*
+       * =====================================================
+       * SELLER / ORDER TIMESTAMPS
+       * =====================================================
+       */
       sellerNotes: {
         type:
           String,
@@ -537,6 +701,9 @@ const orderSchema =
     }
   );
 
+/*
+ * Customer order history.
+ */
 orderSchema.index({
   customer:
     1,
@@ -545,6 +712,9 @@ orderSchema.index({
     -1,
 });
 
+/*
+ * Seller shop order management.
+ */
 orderSchema.index({
   florist:
     1,
@@ -556,8 +726,25 @@ orderSchema.index({
     -1,
 });
 
+/*
+ * Seller order history.
+ */
 orderSchema.index({
   seller:
+    1,
+
+  createdAt:
+    -1,
+});
+
+/*
+ * Payment lookup.
+ */
+orderSchema.index({
+  paymentProvider:
+    1,
+
+  paymentStatus:
     1,
 
   createdAt:

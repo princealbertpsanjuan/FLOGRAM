@@ -1,8 +1,8 @@
 import {
   acceptDeliveryAssignment,
-  assignRiderToOrder,
   cancelDelivery,
-  getAvailableRiders,
+  createDeliveryRequest,
+  getAvailableDeliveryRequests,
   getCustomerDeliveries,
   getDeliveryById,
   getRiderDeliveries,
@@ -13,54 +13,34 @@ import {
 } from "./delivery.service.js";
 
 /*
+ * =========================================================
  * SELLER
- * Get approved, active, available riders.
+ * CREATE DELIVERY REQUEST
+ * =========================================================
+ *
+ * Seller does NOT choose a rider.
+ *
+ * The order must already be:
+ * ready_for_delivery
  */
-export const getAvailable = async (
-  req,
-  res,
-  next
-) => {
-  try {
-    const riders =
-      await getAvailableRiders();
-
-    res.status(200).json({
-      success: true,
-      message:
-        "Available riders retrieved successfully.",
-      data: {
-        count:
-          riders.length,
-        riders,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/*
- * SELLER
- * Assign a rider to a ready-for-delivery order.
- */
-export const assignRider = async (
+export const createRequest = async (
   req,
   res,
   next
 ) => {
   try {
     const delivery =
-      await assignRiderToOrder(
+      await createDeliveryRequest(
         req.params.orderId,
-        req.user.userId,
-        req.body.riderId
+        req.user.userId
       );
 
     res.status(201).json({
       success: true,
+
       message:
-        "Rider assigned to delivery successfully.",
+        "Delivery request created successfully.",
+
       data: {
         delivery,
       },
@@ -71,11 +51,53 @@ export const assignRider = async (
 };
 
 /*
+ * =========================================================
+ * RIDER
+ * GET AVAILABLE DELIVERY REQUESTS
+ * =========================================================
+ *
+ * Only approved, active and available
+ * riders can view available requests.
+ */
+export const getAvailableRequests =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const deliveries =
+        await getAvailableDeliveryRequests(
+          req.user.userId
+        );
+
+      res.status(200).json({
+        success: true,
+
+        message:
+          "Available delivery requests retrieved successfully.",
+
+        data: {
+          count:
+            deliveries.length,
+
+          deliveries,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
  * SELLER
- * Get seller's florist deliveries.
+ * GET SELLER DELIVERIES
+ * =========================================================
  *
  * Optional:
- * ?status=assigned
+ *
+ * ?status=available
  * ?status=accepted
  * ?status=picked_up
  * ?status=out_for_delivery
@@ -99,11 +121,14 @@ export const getForSeller = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Seller deliveries retrieved successfully.",
+
       data: {
         count:
           deliveries.length,
+
         deliveries,
       },
     });
@@ -113,8 +138,18 @@ export const getForSeller = async (
 };
 
 /*
+ * =========================================================
  * RIDER
- * Get rider's own delivery assignments.
+ * GET RIDER'S OWN DELIVERIES
+ * =========================================================
+ *
+ * Optional:
+ *
+ * ?status=accepted
+ * ?status=picked_up
+ * ?status=out_for_delivery
+ * ?status=delivered
+ * ?status=cancelled
  */
 export const getForRider = async (
   req,
@@ -133,11 +168,14 @@ export const getForRider = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Rider deliveries retrieved successfully.",
+
       data: {
         count:
           deliveries.length,
+
         deliveries,
       },
     });
@@ -147,8 +185,10 @@ export const getForRider = async (
 };
 
 /*
+ * =========================================================
  * CUSTOMER
- * Get customer's own deliveries.
+ * GET CUSTOMER'S OWN DELIVERIES
+ * =========================================================
  */
 export const getMine = async (
   req,
@@ -163,11 +203,14 @@ export const getMine = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Customer deliveries retrieved successfully.",
+
       data: {
         count:
           deliveries.length,
+
         deliveries,
       },
     });
@@ -177,11 +220,13 @@ export const getMine = async (
 };
 
 /*
+ * =========================================================
  * CUSTOMER / SELLER / RIDER
- * Get one delivery.
+ * GET ONE DELIVERY
+ * =========================================================
  *
  * Access control is handled
- * in the service layer.
+ * inside the service layer.
  */
 export const getOne = async (
   req,
@@ -197,8 +242,10 @@ export const getOne = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Delivery retrieved successfully.",
+
       data: {
         delivery,
       },
@@ -209,8 +256,13 @@ export const getOne = async (
 };
 
 /*
+ * =========================================================
  * RIDER
- * Accept assigned delivery.
+ * ACCEPT AVAILABLE DELIVERY REQUEST
+ * =========================================================
+ *
+ * First eligible rider to successfully
+ * claim the request gets the delivery.
  */
 export const acceptAssignment =
   async (
@@ -227,8 +279,10 @@ export const acceptAssignment =
 
       res.status(200).json({
         success: true,
+
         message:
-          "Delivery assignment accepted successfully.",
+          "Delivery request accepted successfully.",
+
         data: {
           delivery,
         },
@@ -239,9 +293,10 @@ export const acceptAssignment =
   };
 
 /*
+ * =========================================================
  * RIDER
- * Mark bouquet as picked up
- * from florist.
+ * MARK BOUQUET AS PICKED UP
+ * =========================================================
  */
 export const pickedUp = async (
   req,
@@ -258,8 +313,10 @@ export const pickedUp = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Bouquet marked as picked up successfully.",
+
       data: {
         delivery,
       },
@@ -270,8 +327,16 @@ export const pickedUp = async (
 };
 
 /*
+ * =========================================================
  * RIDER
- * Start delivery trip.
+ * START DELIVERY
+ * =========================================================
+ *
+ * Delivery:
+ * picked_up -> out_for_delivery
+ *
+ * Order:
+ * ready_for_delivery -> out_for_delivery
  */
 export const startDelivery = async (
   req,
@@ -288,8 +353,10 @@ export const startDelivery = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Delivery started successfully.",
+
       data: {
         delivery,
       },
@@ -300,13 +367,17 @@ export const startDelivery = async (
 };
 
 /*
+ * =========================================================
  * RIDER
- * Mark delivery as successfully delivered.
+ * MARK DELIVERY AS DELIVERED
+ * =========================================================
  *
- * The service will also:
- * - update the Order to delivered
- * - mark COD orders as paid
- * - make the rider available again
+ * Service also:
+ *
+ * - Order -> delivered
+ * - COD -> paid
+ * - PayMongo remains webhook-controlled
+ * - Rider -> available
  */
 export const delivered = async (
   req,
@@ -323,8 +394,10 @@ export const delivered = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Delivery completed successfully.",
+
       data: {
         delivery,
       },
@@ -335,11 +408,14 @@ export const delivered = async (
 };
 
 /*
+ * =========================================================
  * SELLER
- * Cancel delivery before pickup.
+ * CANCEL AVAILABLE / ACCEPTED DELIVERY
+ * =========================================================
  *
  * The order remains ready_for_delivery
- * so another rider can be assigned.
+ * so another delivery request may be
+ * created.
  */
 export const cancel = async (
   req,
@@ -355,8 +431,10 @@ export const cancel = async (
 
     res.status(200).json({
       success: true,
+
       message:
         "Delivery cancelled successfully.",
+
       data: {
         delivery,
       },

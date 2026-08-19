@@ -13,6 +13,8 @@ import aiAssistantRouter from "../modules/bloomboard/ai/aiAssistant.routes.js";
 import customBouquetRequestRouter from "../modules/bloomboard/customBouquet/customBouquetRequest.routes.js";
 import orderRouter from "../modules/orders/order.routes.js";
 import deliveryRouter from "../modules/deliveries/delivery.routes.js";
+import paymentRouter from "../modules/payments/payment.routes.js";
+
 
 const apiRouter = Router();
 
@@ -106,6 +108,11 @@ apiRouter.use(
 apiRouter.use(
   "/deliveries",
   deliveryRouter
+);
+
+apiRouter.use(
+  "/payments",
+  paymentRouter
 );
 
 export default apiRouter;

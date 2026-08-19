@@ -23,42 +23,117 @@ app.use(
 );
 
 app.use(morgan("dev"));
-app.use(express.json({ limit: "10mb" }));
+
+/*
+ * =========================================================
+ * JSON BODY PARSER
+ * =========================================================
+ *
+ * IMPORTANT FOR PAYMONGO:
+ *
+ * PayMongo webhook signatures must be
+ * verified against the ORIGINAL raw
+ * request body.
+ *
+ * The verify callback runs before
+ * express.json() converts the request
+ * into a JavaScript object.
+ */
+app.use(
+  express.json({
+    limit: "10mb",
+
+    verify: (
+      req,
+      res,
+      buffer
+    ) => {
+      /*
+       * Only preserve raw bytes for
+       * the PayMongo webhook endpoint.
+       */
+      if (
+        req.originalUrl ===
+        "/api/v1/payments/webhook/paymongo"
+      ) {
+        req.rawBody =
+          Buffer.from(
+            buffer
+          );
+      }
+    },
+  })
+);
+
 app.use(
   express.urlencoded({
     extended: true,
     limit: "10mb",
   })
 );
-app.use(cookieParser());
+
+app.use(
+  cookieParser()
+);
 
 /*
- * Serve uploaded files
+ * =========================================================
+ * SERVE UPLOADED FILES
+ * =========================================================
  *
  * Example:
+ *
  * uploads/flowers/example.jpg
  *
- * becomes accessible at:
+ * becomes:
+ *
  * http://localhost:5000/uploads/flowers/example.jpg
  */
 app.use(
   "/uploads",
   express.static(
-    path.join(process.cwd(), "uploads")
+    path.join(
+      process.cwd(),
+      "uploads"
+    )
   )
 );
 
-app.get("/", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Welcome to the FLOGRAM API.",
-  });
-});
+/*
+ * ROOT
+ */
+app.get(
+  "/",
+  (
+    req,
+    res
+  ) => {
+    res.status(200).json({
+      success: true,
+      message:
+        "Welcome to the FLOGRAM API.",
+    });
+  }
+);
 
-app.use("/api/v1", apiRouter);
+/*
+ * API
+ */
+app.use(
+  "/api/v1",
+  apiRouter
+);
 
-// These must remain after all valid routes.
-app.use(notFound);
-app.use(errorHandler);
+/*
+ * These must stay after
+ * all valid routes.
+ */
+app.use(
+  notFound
+);
+
+app.use(
+  errorHandler
+);
 
 export default app;

@@ -4,10 +4,10 @@ import {
 
 import {
   acceptAssignment,
-  assignRider,
   cancel,
+  createRequest,
   delivered,
-  getAvailable,
+  getAvailableRequests,
   getForRider,
   getForSeller,
   getMine,
@@ -17,7 +17,6 @@ import {
 } from "./delivery.controller.js";
 
 import {
-  assignRiderValidation,
   riderDeliveryNotesValidation,
   validateDeliveryRequest,
 } from "./delivery.validation.js";
@@ -31,23 +30,10 @@ const deliveryRouter =
 /*
  * =========================================================
  * SELLER
- * Get approved + active + available riders
- * =========================================================
- */
-deliveryRouter.get(
-  "/available-riders",
-  authenticate,
-  authorize("seller"),
-  getAvailable
-);
-
-/*
- * =========================================================
- * SELLER
  * Get florist deliveries
  *
  * Optional:
- * ?status=assigned
+ * ?status=available
  * ?status=accepted
  * ?status=picked_up
  * ?status=out_for_delivery
@@ -65,10 +51,26 @@ deliveryRouter.get(
 /*
  * =========================================================
  * RIDER
- * Get rider's own delivery assignments
+ * Get available delivery requests
+ *
+ * Only approved + active + available
+ * riders can access this.
+ * =========================================================
+ */
+deliveryRouter.get(
+  "/available",
+  authenticate,
+  authorize("rider"),
+  getAvailableRequests
+);
+
+/*
+ * =========================================================
+ * RIDER
+ * Get rider's own accepted/current/
+ * previous deliveries
  *
  * Optional:
- * ?status=assigned
  * ?status=accepted
  * ?status=picked_up
  * ?status=out_for_delivery
@@ -99,27 +101,34 @@ deliveryRouter.get(
 /*
  * =========================================================
  * SELLER
- * Assign rider to an order
+ * Create available delivery request
+ *
+ * The seller does NOT choose a rider.
+ *
+ * Order must already be:
+ * ready_for_delivery
+ *
+ * POST
+ * /api/v1/deliveries/orders/:orderId/request
  *
  * Body:
- * {
- *   "riderId": "..."
- * }
+ * none
  * =========================================================
  */
 deliveryRouter.post(
-  "/orders/:orderId/assign",
+  "/orders/:orderId/request",
   authenticate,
   authorize("seller"),
-  assignRiderValidation,
-  validateDeliveryRequest,
-  assignRider
+  createRequest
 );
 
 /*
  * =========================================================
  * RIDER
- * Accept assigned delivery
+ * Accept available delivery request
+ *
+ * First eligible rider who successfully
+ * accepts gets the delivery.
  * =========================================================
  */
 deliveryRouter.patch(
@@ -150,10 +159,14 @@ deliveryRouter.patch(
  * Start delivery
  *
  * Delivery:
- * picked_up -> out_for_delivery
+ * picked_up
+ *     ↓
+ * out_for_delivery
  *
  * Order:
- * ready_for_delivery -> out_for_delivery
+ * ready_for_delivery
+ *     ↓
+ * out_for_delivery
  * =========================================================
  */
 deliveryRouter.patch(
@@ -171,9 +184,18 @@ deliveryRouter.patch(
  * Mark delivery as delivered
  *
  * Also:
- * - Order -> delivered
- * - COD -> paid
- * - Rider -> available
+ *
+ * Order -> delivered
+ *
+ * COD:
+ * paymentStatus -> paid
+ *
+ * PayMongo:
+ * payment status remains controlled
+ * by PayMongo webhook
+ *
+ * Rider:
+ * isAvailable -> true
  * =========================================================
  */
 deliveryRouter.patch(
@@ -188,10 +210,10 @@ deliveryRouter.patch(
 /*
  * =========================================================
  * SELLER
- * Cancel assigned/accepted delivery
+ * Cancel available/accepted delivery
  *
- * Order remains ready_for_delivery
- * so another rider can be assigned.
+ * Order stays ready_for_delivery so
+ * another delivery request may be made.
  * =========================================================
  */
 deliveryRouter.patch(
@@ -206,7 +228,7 @@ deliveryRouter.patch(
  * CUSTOMER / SELLER / RIDER
  * Get one delivery
  *
- * Keep this last.
+ * Keep this route last.
  * =========================================================
  */
 deliveryRouter.get(
