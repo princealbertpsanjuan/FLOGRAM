@@ -5,6 +5,10 @@ import Rider from "../riders/rider.model.js";
 import User from "../auth/auth.model.js";
 import Florist from "../florists/florist.model.js";
 
+import {
+  calculateDeliveryRoute,
+} from "../../services/routing.service.js";
+
 /*
  * =========================================================
  * HELPERS
@@ -27,13 +31,15 @@ const populateDelivery = (
     )
     .populate(
       "florist",
-      "shopName address contactNumber businessEmail shopLogo"
+      "shopName address location contactNumber businessEmail shopLogo"
     )
     .populate({
-      path: "rider",
+      path:
+        "rider",
 
       populate: {
-        path: "owner",
+        path:
+          "owner",
 
         select:
           "firstName lastName email phoneNumber role verificationStatus",
@@ -115,8 +121,7 @@ const getRiderProfileByUser =
   };
 
 /*
- * Validate that a rider may
- * participate in delivery requests.
+ * Validate rider account.
  */
 const validateEligibleRider =
   (
@@ -152,14 +157,299 @@ const validateEligibleRider =
       throw error;
     }
   };
+/*
+ * =========================================================
+ * COORDINATE HELPERS
+ * =========================================================
+ */
+
+const normalizeCoordinate = (
+  latitude,
+  longitude,
+  label
+) => {
+  const lat =
+    Number(
+      latitude
+    );
+
+  const lng =
+    Number(
+      longitude
+    );
+
+  if (
+    !Number.isFinite(
+      lat
+    ) ||
+    !Number.isFinite(
+      lng
+    )
+  ) {
+    const error =
+      new Error(
+        `${label} coordinates are invalid.`
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  if (
+    lat < -90 ||
+    lat > 90
+  ) {
+    const error =
+      new Error(
+        `${label} latitude must be between -90 and 90.`
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  if (
+    lng < -180 ||
+    lng > 180
+  ) {
+    const error =
+      new Error(
+        `${label} longitude must be between -180 and 180.`
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  return {
+    latitude:
+      lat,
+
+    longitude:
+      lng,
+  };
+};
+
+
+/*
+ * =========================================================
+ * NAVIGATION HELPER
+ * =========================================================
+ *
+ * accepted
+ *   rider -> florist
+ *
+ * picked_up / out_for_delivery
+ *   rider -> customer
+ *
+ * IMPORTANT:
+ *
+ * New delivery documents store:
+ *
+ * delivery.pickupLocation
+ * delivery.deliveryLocation
+ *
+ * Older delivery documents may not
+ * contain these fields yet.
+ *
+ * Therefore we fall back to the
+ * associated Order coordinates when
+ * necessary.
+ * =========================================================
+ */
+const calculateRiderNavigation =
+  async (
+    delivery,
+    riderLatitude,
+    riderLongitude
+  ) => {
+    let destinationType;
+
+    let destination;
+
+    /*
+     * =====================================================
+     * RIDER -> FLORIST
+     * =====================================================
+     *
+     * Once the rider accepts the
+     * delivery, navigation should lead
+     * to the florist pickup location.
+     */
+    if (
+      delivery.status ===
+      "accepted"
+    ) {
+      destinationType =
+        "pickup";
+
+      const pickupLatitude =
+        delivery
+          .pickupLocation
+          ?.latitude ??
+        delivery
+          .order
+          ?.pickupLocation
+          ?.latitude;
+
+      const pickupLongitude =
+        delivery
+          .pickupLocation
+          ?.longitude ??
+        delivery
+          .order
+          ?.pickupLocation
+          ?.longitude;
+
+      destination =
+        normalizeCoordinate(
+          pickupLatitude,
+          pickupLongitude,
+          "Pickup"
+        );
+    }
+
+    /*
+     * =====================================================
+     * RIDER -> CUSTOMER
+     * =====================================================
+     *
+     * After bouquet pickup, navigation
+     * switches to the customer's
+     * delivery location.
+     */
+    else if (
+      [
+        "picked_up",
+        "out_for_delivery",
+      ].includes(
+        delivery.status
+      )
+    ) {
+      destinationType =
+        "delivery";
+
+      const deliveryLatitude =
+        delivery
+          .deliveryLocation
+          ?.latitude ??
+        delivery
+          .order
+          ?.deliveryLocation
+          ?.latitude;
+
+      const deliveryLongitude =
+        delivery
+          .deliveryLocation
+          ?.longitude ??
+        delivery
+          .order
+          ?.deliveryLocation
+          ?.longitude;
+
+      destination =
+        normalizeCoordinate(
+          deliveryLatitude,
+          deliveryLongitude,
+          "Delivery"
+        );
+    }
+
+    /*
+     * =====================================================
+     * INVALID NAVIGATION STATE
+     * =====================================================
+     */
+    else {
+      const error =
+        new Error(
+          "Navigation is not available for the current delivery status."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * =====================================================
+     * CALCULATE ROUTE
+     * =====================================================
+     *
+     * Current rider GPS:
+     *     ↓
+     * Destination
+     *
+     * accepted:
+     * destination = florist
+     *
+     * picked_up / out_for_delivery:
+     * destination = customer
+     */
+    const route =
+      await calculateDeliveryRoute({
+        pickupLatitude:
+          riderLatitude,
+
+        pickupLongitude:
+          riderLongitude,
+
+        deliveryLatitude:
+          destination.latitude,
+
+        deliveryLongitude:
+          destination.longitude,
+      });
+
+    /*
+     * =====================================================
+     * ETA
+     * =====================================================
+     */
+    const now =
+      new Date();
+
+    const estimatedArrivalAt =
+      new Date(
+        now.getTime() +
+          route.durationSeconds *
+            1000
+      );
+
+    return {
+      destinationType,
+
+      distanceMeters:
+        route.distanceMeters,
+
+      durationSeconds:
+        route.durationSeconds,
+
+      estimatedArrivalAt,
+
+      updatedAt:
+        now,
+
+      /*
+       * GeoJSON route used later by
+       * the frontend map.
+       */
+      geometry:
+        route.geometry,
+    };
+  };
 
 /*
  * =========================================================
  * SELLER
  * GET AVAILABLE RIDERS
- *
- * Kept as an optional administrative/
- * fallback feature.
  * =========================================================
  */
 export const getAvailableRiders =
@@ -187,18 +477,7 @@ export const getAvailableRiders =
 /*
  * =========================================================
  * SELLER
- * CREATE AVAILABLE DELIVERY REQUEST
- * =========================================================
- *
- * Normal FLOGRAM flow:
- *
- * ready_for_delivery
- *      ↓
- * available delivery request
- *      ↓
- * visible to approved riders
- *
- * No rider is selected here.
+ * CREATE DELIVERY REQUEST
  * =========================================================
  */
 export const createDeliveryRequest =
@@ -267,7 +546,7 @@ export const createDeliveryRequest =
 
     /*
      * PayMongo orders must already
-     * be paid before delivery.
+     * be paid.
      */
     if (
       order.paymentMethod ===
@@ -286,6 +565,10 @@ export const createDeliveryRequest =
       throw error;
     }
 
+    /*
+     * Prevent duplicate active
+     * delivery requests.
+     */
     const existingDelivery =
       await Delivery.findOne({
         order:
@@ -300,14 +583,16 @@ export const createDeliveryRequest =
     if (
       existingDelivery
     ) {
-      /*
-       * Return existing request instead
-       * of creating a duplicate.
-       */
       return populateDelivery(
         existingDelivery._id
       );
     }
+
+    /*
+     * =====================================================
+     * ADDRESS VALIDATION
+     * =====================================================
+     */
 
     const deliveryAddress =
       order.deliveryAddress ||
@@ -353,7 +638,8 @@ export const createDeliveryRequest =
 
     if (
       !order.recipientName ||
-      !order.recipientPhoneNumber
+      !order
+        .recipientPhoneNumber
     ) {
       const error =
         new Error(
@@ -366,8 +652,54 @@ export const createDeliveryRequest =
       throw error;
     }
 
-    const now =
-      new Date();
+    /*
+     * =====================================================
+     * LOCATION SNAPSHOTS
+     * =====================================================
+     */
+
+    const pickupLocation =
+      normalizeCoordinate(
+        order
+          ?.pickupLocation
+          ?.latitude,
+
+        order
+          ?.pickupLocation
+          ?.longitude,
+
+        "Pickup"
+      );
+
+    const deliveryLocation =
+      normalizeCoordinate(
+        order
+          ?.deliveryLocation
+          ?.latitude,
+
+        order
+          ?.deliveryLocation
+          ?.longitude,
+
+        "Delivery"
+      );
+
+    /*
+     * =====================================================
+     * RIDER AVAILABILITY
+     * =====================================================
+     */
+
+    const availableAt =
+      getDeliveryAvailableAt(
+        order
+      );
+
+    /*
+     * =====================================================
+     * CREATE DELIVERY
+     * =====================================================
+     */
 
     const delivery =
       await Delivery.create({
@@ -383,9 +715,6 @@ export const createDeliveryRequest =
         florist:
           order.florist,
 
-        /*
-         * No rider yet.
-         */
         rider:
           null,
 
@@ -406,7 +735,8 @@ export const createDeliveryRequest =
             pickupAddress.province,
 
           postalCode:
-            pickupAddress.postalCode ||
+            pickupAddress
+              .postalCode ||
             "",
         },
 
@@ -424,30 +754,97 @@ export const createDeliveryRequest =
             deliveryAddress.province,
 
           postalCode:
-            deliveryAddress.postalCode ||
+            deliveryAddress
+              .postalCode ||
             "",
 
           landmark:
-            deliveryAddress.landmark ||
+            deliveryAddress
+              .landmark ||
             "",
+        },
+
+        /*
+         * Geographic snapshots.
+         */
+        pickupLocation: {
+          latitude:
+            pickupLocation.latitude,
+
+          longitude:
+            pickupLocation.longitude,
+        },
+
+        deliveryLocation: {
+          latitude:
+            deliveryLocation.latitude,
+
+          longitude:
+            deliveryLocation.longitude,
+        },
+
+        /*
+         * Rider has not accepted yet.
+         */
+        riderLocation: {
+          latitude:
+            null,
+
+          longitude:
+            null,
+
+          accuracy:
+            null,
+
+          updatedAt:
+            null,
+        },
+
+        navigation: {
+          destinationType:
+            null,
+
+          distanceMeters:
+            null,
+
+          durationSeconds:
+            null,
+
+          estimatedArrivalAt:
+            null,
+
+          updatedAt:
+            null,
         },
 
         recipientName:
           order.recipientName,
 
         recipientPhoneNumber:
-          order.recipientPhoneNumber,
+          order
+            .recipientPhoneNumber,
 
         status:
           "available",
 
-        availableAt:
-          now,
+        availableAt,
 
         assignedAt:
           null,
 
         acceptedAt:
+          null,
+
+        pickedUpAt:
+          null,
+
+        outForDeliveryAt:
+          null,
+
+        deliveredAt:
+          null,
+
+        cancelledAt:
           null,
       });
 
@@ -490,10 +887,6 @@ export const getAvailableDeliveryRequests =
       throw error;
     }
 
-    /*
-     * A rider with an active delivery
-     * should not receive another request.
-     */
     const activeDelivery =
       await Delivery.findOne({
         rider:
@@ -508,13 +901,23 @@ export const getAvailableDeliveryRequests =
         },
       });
 
-    if (activeDelivery) {
+    if (
+      activeDelivery
+    ) {
       return [];
     }
+
+    const now =
+      new Date();
 
     return Delivery.find({
       status:
         "available",
+
+      availableAt: {
+        $lte:
+          now,
+      },
 
       rider:
         null,
@@ -524,11 +927,11 @@ export const getAvailableDeliveryRequests =
     })
       .populate(
         "florist",
-        "shopName address contactNumber shopLogo"
+        "shopName address location contactNumber shopLogo"
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate"
+        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd"
       )
       .sort({
         availableAt:
@@ -572,10 +975,12 @@ export const getSellerDeliveries =
         "firstName lastName phoneNumber"
       )
       .populate({
-        path: "rider",
+        path:
+          "rider",
 
         populate: {
-          path: "owner",
+          path:
+            "owner",
 
           select:
             "firstName lastName phoneNumber",
@@ -583,7 +988,7 @@ export const getSellerDeliveries =
       })
       .populate(
         "order",
-        "productName totalAmount orderStatus fulfillmentType paymentMethod paymentStatus"
+        "productName totalAmount orderStatus fulfillmentType paymentMethod paymentStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd"
       )
       .sort({
         createdAt:
@@ -594,7 +999,7 @@ export const getSellerDeliveries =
 /*
  * =========================================================
  * RIDER
- * GET MY ACCEPTED / ACTIVE / OLD DELIVERIES
+ * GET MY DELIVERIES
  * =========================================================
  */
 export const getRiderDeliveries =
@@ -632,11 +1037,11 @@ export const getRiderDeliveries =
       )
       .populate(
         "florist",
-        "shopName address contactNumber"
+        "shopName address location contactNumber"
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate paymentMethod paymentStatus"
+        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd paymentMethod paymentStatus"
       )
       .sort({
         createdAt:
@@ -659,10 +1064,12 @@ export const getCustomerDeliveries =
         customerId,
     })
       .populate({
-        path: "rider",
+        path:
+          "rider",
 
         populate: {
-          path: "owner",
+          path:
+            "owner",
 
           select:
             "firstName lastName phoneNumber",
@@ -670,11 +1077,11 @@ export const getCustomerDeliveries =
       })
       .populate(
         "florist",
-        "shopName address contactNumber"
+        "shopName address location contactNumber"
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus paymentMethod paymentStatus"
+        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd paymentMethod paymentStatus"
       )
       .sort({
         createdAt:
@@ -736,7 +1143,9 @@ export const getDeliveryById =
     ) {
       if (
         String(
-          delivery.customer._id
+          delivery
+            .customer
+            ._id
         ) !==
         String(
           userId
@@ -765,7 +1174,9 @@ export const getDeliveryById =
     ) {
       if (
         String(
-          delivery.seller._id
+          delivery
+            .seller
+            ._id
         ) !==
         String(
           userId
@@ -787,10 +1198,6 @@ export const getDeliveryById =
 
     /*
      * RIDER
-     *
-     * Available requests may be viewed
-     * by approved active riders before
-     * they accept.
      */
     if (
       user.role ===
@@ -805,14 +1212,43 @@ export const getDeliveryById =
         rider
       );
 
+      /*
+       * Marketplace request.
+       */
       if (
         delivery.status ===
           "available" &&
         !delivery.rider
       ) {
-        return delivery;
+        const availableAt =
+          delivery.availableAt
+            ? new Date(
+                delivery.availableAt
+              )
+            : null;
+
+        if (
+          availableAt &&
+          availableAt <=
+            new Date()
+        ) {
+          return delivery;
+        }
+
+        const error =
+          new Error(
+            "This scheduled delivery request is not available to riders yet."
+          );
+
+        error.statusCode =
+          403;
+
+        throw error;
       }
 
+      /*
+       * Assigned delivery.
+       */
       if (
         String(
           delivery.riderUser
@@ -848,20 +1284,29 @@ export const getDeliveryById =
 
 /*
  * =========================================================
- * RIDER
- * ACCEPT AVAILABLE DELIVERY
+ * DELIVERY TRACKING
+ * CUSTOMER / SELLER / ASSIGNED RIDER
  * =========================================================
- *
- * IMPORTANT:
- *
- * The delivery itself is claimed using
- * findOneAndUpdate with:
- *
- * status = available
- * rider = null
- *
- * so only ONE rider can successfully
- * claim the request.
+ */
+export const getDeliveryTracking =
+  async (
+    deliveryId,
+    userId
+  ) => {
+    /*
+     * getDeliveryById already performs
+     * access control.
+     */
+    return getDeliveryById(
+      deliveryId,
+      userId
+    );
+  };
+
+/*
+ * =========================================================
+ * RIDER
+ * ACCEPT DELIVERY
  * =========================================================
  */
 export const acceptDeliveryAssignment =
@@ -879,11 +1324,7 @@ export const acceptDeliveryAssignment =
     );
 
     /*
-     * Atomically reserve this rider.
-     *
-     * This prevents the same rider from
-     * accepting multiple requests at
-     * nearly the same time.
+     * Reserve rider.
      */
     const reservedRider =
       await Rider.findOneAndUpdate(
@@ -914,7 +1355,9 @@ export const acceptDeliveryAssignment =
         }
       );
 
-    if (!reservedRider) {
+    if (
+      !reservedRider
+    ) {
       const error =
         new Error(
           "You must be available before accepting a delivery."
@@ -926,10 +1369,6 @@ export const acceptDeliveryAssignment =
       throw error;
     }
 
-    /*
-     * Double-check no previous active
-     * delivery exists.
-     */
     const activeDelivery =
       await Delivery.findOne({
         rider:
@@ -944,7 +1383,9 @@ export const acceptDeliveryAssignment =
         },
       });
 
-    if (activeDelivery) {
+    if (
+      activeDelivery
+    ) {
       await Rider.findByIdAndUpdate(
         rider._id,
         {
@@ -967,12 +1408,6 @@ export const acceptDeliveryAssignment =
     const now =
       new Date();
 
-    /*
-     * Atomic claim.
-     *
-     * If another rider already claimed
-     * it, this returns null.
-     */
     const delivery =
       await Delivery.findOneAndUpdate(
         {
@@ -981,6 +1416,11 @@ export const acceptDeliveryAssignment =
 
           status:
             "available",
+
+          availableAt: {
+            $lte:
+              now,
+          },
 
           rider:
             null,
@@ -1005,6 +1445,25 @@ export const acceptDeliveryAssignment =
 
             acceptedAt:
               now,
+
+            /*
+             * Rider must first travel
+             * toward the florist.
+             */
+            "navigation.destinationType":
+              "pickup",
+
+            "navigation.distanceMeters":
+              null,
+
+            "navigation.durationSeconds":
+              null,
+
+            "navigation.estimatedArrivalAt":
+              null,
+
+            "navigation.updatedAt":
+              null,
           },
         },
 
@@ -1017,11 +1476,9 @@ export const acceptDeliveryAssignment =
         }
       );
 
-    if (!delivery) {
-      /*
-       * Rider failed to claim the
-       * request, so release them again.
-       */
+    if (
+      !delivery
+    ) {
       await Rider.findByIdAndUpdate(
         rider._id,
         {
@@ -1032,7 +1489,7 @@ export const acceptDeliveryAssignment =
 
       const error =
         new Error(
-          "This delivery is no longer available. Another rider may have already accepted it."
+          "This delivery is not available yet or another rider may have already accepted it."
         );
 
       error.statusCode =
@@ -1044,6 +1501,449 @@ export const acceptDeliveryAssignment =
     return populateDelivery(
       delivery._id
     );
+  };
+
+/*
+ * =========================================================
+ * RIDER
+ * UPDATE LIVE LOCATION
+ * =========================================================
+ *
+ * Rider phone will eventually call this
+ * periodically.
+ *
+ * Example payload:
+ *
+ * {
+ *   latitude: 13.625,
+ *   longitude: 123.195,
+ *   accuracy: 8.5
+ * }
+ * =========================================================
+ */
+export const updateRiderLocation =
+  async (
+    deliveryId,
+    riderUserId,
+    locationData
+  ) => {
+    const rider =
+      await getRiderProfileByUser(
+        riderUserId
+      );
+
+    validateEligibleRider(
+      rider
+    );
+
+const delivery =
+  await Delivery.findOne({
+    _id:
+      deliveryId,
+
+    rider:
+      rider._id,
+
+    riderUser:
+      riderUserId,
+  }).populate(
+    "order"
+  );
+
+    if (!delivery) {
+      const error =
+        new Error(
+          "Delivery was not found or does not belong to this rider."
+        );
+
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    /*
+ * =========================================================
+ * BACKWARD COMPATIBILITY
+ * =========================================================
+ *
+ * Older Delivery documents were created
+ * before pickupLocation and
+ * deliveryLocation became required.
+ *
+ * If those snapshots are missing,
+ * copy them from the associated Order
+ * before saving the delivery.
+ */
+if (
+  (
+    delivery.pickupLocation?.latitude ===
+      null ||
+    delivery.pickupLocation?.latitude ===
+      undefined ||
+    delivery.pickupLocation?.longitude ===
+      null ||
+    delivery.pickupLocation?.longitude ===
+      undefined
+  ) &&
+  delivery.order?.pickupLocation
+) {
+  const pickupLocation =
+    normalizeCoordinate(
+      delivery.order
+        .pickupLocation
+        .latitude,
+
+      delivery.order
+        .pickupLocation
+        .longitude,
+
+      "Pickup"
+    );
+
+  delivery.pickupLocation = {
+    latitude:
+      pickupLocation.latitude,
+
+    longitude:
+      pickupLocation.longitude,
+  };
+}
+
+if (
+  (
+    delivery.deliveryLocation?.latitude ===
+      null ||
+    delivery.deliveryLocation?.latitude ===
+      undefined ||
+    delivery.deliveryLocation?.longitude ===
+      null ||
+    delivery.deliveryLocation?.longitude ===
+      undefined
+  ) &&
+  delivery.order?.deliveryLocation
+) {
+  const deliveryLocation =
+    normalizeCoordinate(
+      delivery.order
+        .deliveryLocation
+        .latitude,
+
+      delivery.order
+        .deliveryLocation
+        .longitude,
+
+      "Delivery"
+    );
+
+  delivery.deliveryLocation = {
+    latitude:
+      deliveryLocation.latitude,
+
+    longitude:
+      deliveryLocation.longitude,
+  };
+}
+
+    /*
+     * Only active delivery states
+     * should receive GPS updates.
+     */
+    if (
+      ![
+        "accepted",
+        "picked_up",
+        "out_for_delivery",
+      ].includes(
+        delivery.status
+      )
+    ) {
+      const error =
+        new Error(
+          "Rider location can only be updated for an active delivery."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    const riderLocation =
+      normalizeCoordinate(
+        locationData
+          ?.latitude,
+
+        locationData
+          ?.longitude,
+
+        "Rider"
+      );
+
+    let accuracy =
+      null;
+
+    if (
+      locationData?.accuracy !==
+        undefined &&
+      locationData?.accuracy !==
+        null
+    ) {
+      accuracy =
+        Number(
+          locationData.accuracy
+        );
+
+      if (
+        !Number.isFinite(
+          accuracy
+        ) ||
+        accuracy < 0
+      ) {
+        const error =
+          new Error(
+            "Rider location accuracy is invalid."
+          );
+
+        error.statusCode =
+          400;
+
+        throw error;
+      }
+    }
+
+    /*
+     * Calculate current navigation:
+     *
+     * accepted:
+     * rider -> florist
+     *
+     * picked_up/out_for_delivery:
+     * rider -> customer
+     */
+    const navigation =
+      await calculateRiderNavigation(
+        delivery,
+        riderLocation.latitude,
+        riderLocation.longitude
+      );
+
+    const now =
+      new Date();
+
+    delivery.riderLocation = {
+      latitude:
+        riderLocation.latitude,
+
+      longitude:
+        riderLocation.longitude,
+
+      accuracy,
+
+      updatedAt:
+        now,
+    };
+
+    delivery.navigation = {
+      destinationType:
+        navigation.destinationType,
+
+      distanceMeters:
+        navigation.distanceMeters,
+
+      durationSeconds:
+        navigation.durationSeconds,
+
+      estimatedArrivalAt:
+        navigation
+          .estimatedArrivalAt,
+
+      updatedAt:
+        now,
+    };
+
+    await delivery.save();
+
+    /*
+     * Return route geometry separately.
+     *
+     * We do not permanently store the
+     * whole GeoJSON route in MongoDB.
+     */
+    return {
+      delivery:
+        await populateDelivery(
+          delivery._id
+        ),
+
+      route: {
+        destinationType:
+          navigation.destinationType,
+
+        distanceMeters:
+          navigation.distanceMeters,
+
+        durationSeconds:
+          navigation.durationSeconds,
+
+        estimatedArrivalAt:
+          navigation
+            .estimatedArrivalAt,
+
+        geometry:
+          navigation.geometry,
+      },
+    };
+  };
+
+/*
+ * =========================================================
+ * RIDER
+ * GET CURRENT NAVIGATION
+ * =========================================================
+ */
+export const getRiderNavigation =
+  async (
+    deliveryId,
+    riderUserId
+  ) => {
+    const rider =
+      await getRiderProfileByUser(
+        riderUserId
+      );
+
+    validateEligibleRider(
+      rider
+    );
+
+const delivery =
+  await Delivery.findOne({
+    _id:
+      deliveryId,
+
+    rider:
+      rider._id,
+
+    riderUser:
+      riderUserId,
+  }).populate(
+    "order"
+  );
+    if (!delivery) {
+      const error =
+        new Error(
+          "Delivery was not found or does not belong to this rider."
+        );
+
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    if (
+      ![
+        "accepted",
+        "picked_up",
+        "out_for_delivery",
+      ].includes(
+        delivery.status
+      )
+    ) {
+      const error =
+        new Error(
+          "Navigation is not available for this delivery."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    const riderLatitude =
+      delivery
+        ?.riderLocation
+        ?.latitude;
+
+    const riderLongitude =
+      delivery
+        ?.riderLocation
+        ?.longitude;
+
+    if (
+      riderLatitude ===
+        null ||
+      riderLatitude ===
+        undefined ||
+      riderLongitude ===
+        null ||
+      riderLongitude ===
+        undefined
+    ) {
+      const error =
+        new Error(
+          "The rider's current location has not been received yet."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    const navigation =
+      await calculateRiderNavigation(
+        delivery,
+        riderLatitude,
+        riderLongitude
+      );
+
+    const now =
+      new Date();
+
+    delivery.navigation = {
+      destinationType:
+        navigation.destinationType,
+
+      distanceMeters:
+        navigation.distanceMeters,
+
+      durationSeconds:
+        navigation.durationSeconds,
+
+      estimatedArrivalAt:
+        navigation
+          .estimatedArrivalAt,
+
+      updatedAt:
+        now,
+    };
+
+    await delivery.save();
+
+    return {
+      deliveryId:
+        delivery._id,
+
+      status:
+        delivery.status,
+
+      riderLocation:
+        delivery.riderLocation,
+
+      pickupLocation:
+        delivery.pickupLocation,
+
+      deliveryLocation:
+        delivery.deliveryLocation,
+
+      navigation:
+        delivery.navigation,
+
+      geometry:
+        navigation.geometry,
+    };
   };
 
 /*
@@ -1062,6 +1962,10 @@ export const markDeliveryPickedUp =
       await getRiderProfileByUser(
         riderUserId
       );
+
+    validateEligibleRider(
+      rider
+    );
 
     const delivery =
       await Delivery.findOne({
@@ -1102,11 +2006,43 @@ export const markDeliveryPickedUp =
       throw error;
     }
 
+    const now =
+      new Date();
+
     delivery.status =
       "picked_up";
 
     delivery.pickedUpAt =
-      new Date();
+      now;
+
+    /*
+     * Switch navigation from:
+     *
+     * rider -> florist
+     *
+     * to:
+     *
+     * rider -> customer
+     *
+     * Actual route will be recalculated
+     * on the next GPS update.
+     */
+    delivery.navigation = {
+      destinationType:
+        "delivery",
+
+      distanceMeters:
+        null,
+
+      durationSeconds:
+        null,
+
+      estimatedArrivalAt:
+        null,
+
+      updatedAt:
+        now,
+    };
 
     if (
       riderNotes !==
@@ -1143,6 +2079,10 @@ export const startOutForDelivery =
       await getRiderProfileByUser(
         riderUserId
       );
+
+    validateEligibleRider(
+      rider
+    );
 
     const delivery =
       await Delivery.findOne({
@@ -1224,6 +2164,14 @@ export const startOutForDelivery =
     delivery.outForDeliveryAt =
       now;
 
+    /*
+     * Keep destination pointed toward
+     * customer.
+     */
+    delivery.navigation
+      .destinationType =
+      "delivery";
+
     if (
       riderNotes !==
         undefined &&
@@ -1240,6 +2188,7 @@ export const startOutForDelivery =
       "out_for_delivery";
 
     await delivery.save();
+
     await order.save();
 
     return populateDelivery(
@@ -1263,6 +2212,10 @@ export const markDeliveryDelivered =
       await getRiderProfileByUser(
         riderUserId
       );
+
+    validateEligibleRider(
+      rider
+    );
 
     const delivery =
       await Delivery.findOne({
@@ -1329,6 +2282,26 @@ export const markDeliveryDelivered =
     delivery.deliveredAt =
       now;
 
+    /*
+     * Final navigation state.
+     */
+    delivery.navigation = {
+      destinationType:
+        "delivery",
+
+      distanceMeters:
+        0,
+
+      durationSeconds:
+        0,
+
+      estimatedArrivalAt:
+        now,
+
+      updatedAt:
+        now,
+    };
+
     if (
       riderNotes !==
         undefined &&
@@ -1341,9 +2314,6 @@ export const markDeliveryDelivered =
         ).trim();
     }
 
-    /*
-     * Synchronize Order.
-     */
     order.orderStatus =
       "delivered";
 
@@ -1351,11 +2321,7 @@ export const markDeliveryDelivered =
       now;
 
     /*
-     * COD is paid when successful
-     * delivery occurs.
-     *
-     * PayMongo payment remains managed
-     * by the PayMongo webhook.
+     * COD becomes paid when delivered.
      */
     if (
       order.paymentMethod ===
@@ -1369,13 +2335,15 @@ export const markDeliveryDelivered =
     }
 
     /*
-     * Rider is available again.
+     * Rider becomes available again.
      */
     rider.isAvailable =
       true;
 
     await delivery.save();
+
     await order.save();
+
     await rider.save();
 
     return populateDelivery(
@@ -1386,7 +2354,7 @@ export const markDeliveryDelivered =
 /*
  * =========================================================
  * SELLER
- * CANCEL DELIVERY BEFORE PICKUP
+ * CANCEL DELIVERY
  * =========================================================
  */
 export const cancelDelivery =
@@ -1442,29 +2410,48 @@ export const cancelDelivery =
     let rider =
       null;
 
-    if (delivery.rider) {
+    if (
+      delivery.rider
+    ) {
       rider =
         await Rider.findById(
           delivery.rider
         );
     }
 
+    const now =
+      new Date();
+
     delivery.status =
       "cancelled";
 
     delivery.cancelledAt =
-      new Date();
+      now;
+
+    delivery.navigation = {
+      destinationType:
+        null,
+
+      distanceMeters:
+        null,
+
+      durationSeconds:
+        null,
+
+      estimatedArrivalAt:
+        null,
+
+      updatedAt:
+        now,
+    };
 
     await delivery.save();
 
-    /*
-     * Release rider if the request
-     * had already been accepted.
-     */
     if (
       rider &&
       rider.isActive &&
-      rider.verificationStatus ===
+      rider
+        .verificationStatus ===
         "approved"
     ) {
       rider.isAvailable =
@@ -1473,12 +2460,6 @@ export const cancelDelivery =
       await rider.save();
     }
 
-    /*
-     * Order remains ready_for_delivery.
-     *
-     * Seller/system may create another
-     * available delivery request.
-     */
     return populateDelivery(
       delivery._id
     );

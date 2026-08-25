@@ -91,9 +91,6 @@ const orderSchema =
 
       /*
        * Product snapshot.
-       *
-       * Old orders should not change
-       * when a seller edits a listing.
        */
       productName: {
         type:
@@ -170,27 +167,40 @@ const orderSchema =
           0,
       },
 
-      deliveryFee: {
-        type:
-          Number,
+/*
+ * Calculated by backend based on
+ * route distance.
+ */
+deliveryFee: {
+  type: Number,
 
-        default:
-          0,
+  default: 0,
 
-        min:
-          0,
-      },
+  min: 0,
+},
 
-      totalAmount: {
-        type:
-          Number,
+/*
+ * Additional fee charged for
+ * scheduled / pre-order purchases.
+ *
+ * Normal order = 0
+ * Pre-order = calculated by backend
+ */
+preOrderFee: {
+  type: Number,
 
-        required:
-          true,
+  default: 0,
 
-        min:
-          0,
-      },
+  min: 0,
+},
+
+totalAmount: {
+  type: Number,
+
+  required: true,
+
+  min: 0,
+},
 
       /*
        * delivery = rider delivery
@@ -209,6 +219,11 @@ const orderSchema =
           "delivery",
       },
 
+      /*
+       * =====================================================
+       * DELIVERY ADDRESS
+       * =====================================================
+       */
       deliveryAddress: {
         street: {
           type:
@@ -277,6 +292,109 @@ const orderSchema =
         },
       },
 
+      /*
+       * =====================================================
+       * CUSTOMER DELIVERY LOCATION
+       * =====================================================
+       *
+       * Exact map point selected by
+       * customer.
+       */
+      deliveryLocation: {
+        latitude: {
+          type:
+            Number,
+
+          min:
+            -90,
+
+          max:
+            90,
+
+          default:
+            null,
+        },
+
+        longitude: {
+          type:
+            Number,
+
+          min:
+            -180,
+
+          max:
+            180,
+
+          default:
+            null,
+        },
+      },
+
+      /*
+       * =====================================================
+       * FLORIST PICKUP LOCATION SNAPSHOT
+       * =====================================================
+       *
+       * Copied from florist location
+       * when the order is created.
+       */
+      pickupLocation: {
+        latitude: {
+          type:
+            Number,
+
+          min:
+            -90,
+
+          max:
+            90,
+
+          default:
+            null,
+        },
+
+        longitude: {
+          type:
+            Number,
+
+          min:
+            -180,
+
+          max:
+            180,
+
+          default:
+            null,
+        },
+      },
+
+      /*
+       * =====================================================
+       * ROUTE SNAPSHOT
+       * =====================================================
+       */
+      deliveryDistanceMeters: {
+        type:
+          Number,
+
+        min:
+          0,
+
+        default:
+          null,
+      },
+
+      deliveryDurationSeconds: {
+        type:
+          Number,
+
+        min:
+          0,
+
+        default:
+          null,
+      },
+
       recipientName: {
         type:
           String,
@@ -302,12 +420,47 @@ const orderSchema =
           true,
       },
 
+      /*
+       * =====================================================
+       * PRE-ORDER / SCHEDULED DELIVERY
+       * =====================================================
+       */
       requestedDeliveryDate: {
         type:
           Date,
 
         default:
           null,
+      },
+
+      isPreOrder: {
+        type:
+          Boolean,
+
+        default:
+          false,
+      },
+
+      requestedDeliveryTimeStart: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
+      },
+
+      requestedDeliveryTimeEnd: {
+        type:
+          String,
+
+        default:
+          null,
+
+        trim:
+          true,
       },
 
       customerNotes: {
@@ -414,10 +567,6 @@ const orderSchema =
        * =====================================================
        * PAYMENT
        * =====================================================
-       *
-       * cash_on_delivery
-       * cash_on_pickup
-       * paymongo
        */
       paymentMethod: {
         type:
@@ -453,13 +602,6 @@ const orderSchema =
           true,
       },
 
-      /*
-       * External payment provider.
-       *
-       * Kept separate from paymentMethod
-       * so payment channels such as GCash
-       * can still belong to PayMongo.
-       */
       paymentProvider: {
         type:
           String,
@@ -473,18 +615,6 @@ const orderSchema =
           null,
       },
 
-      /*
-       * Actual payment channel used.
-       *
-       * Examples:
-       * gcash
-       * card
-       * maya
-       * qrph
-       *
-       * This value may be supplied later
-       * by PayMongo/webhook information.
-       */
       paymentChannel: {
         type:
           String,
@@ -496,9 +626,6 @@ const orderSchema =
           true,
       },
 
-      /*
-       * PayMongo Checkout Session ID.
-       */
       paymongoCheckoutSessionId: {
         type:
           String,
@@ -513,9 +640,6 @@ const orderSchema =
           true,
       },
 
-      /*
-       * PayMongo Payment Intent ID.
-       */
       paymongoPaymentIntentId: {
         type:
           String,
@@ -527,9 +651,6 @@ const orderSchema =
           true,
       },
 
-      /*
-       * Final PayMongo Payment ID.
-       */
       paymongoPaymentId: {
         type:
           String,
@@ -544,9 +665,6 @@ const orderSchema =
           true,
       },
 
-      /*
-       * PayMongo hosted checkout URL.
-       */
       paymentCheckoutUrl: {
         type:
           String,
@@ -558,9 +676,6 @@ const orderSchema =
           true,
       },
 
-      /*
-       * Payment lifecycle timestamps.
-       */
       paymentInitiatedAt: {
         type:
           Date,
@@ -593,13 +708,6 @@ const orderSchema =
           null,
       },
 
-      /*
-       * Last PayMongo webhook/event ID
-       * processed for this order.
-       *
-       * Useful for audit/debugging and
-       * duplicate webhook protection.
-       */
       lastPaymentEventId: {
         type:
           String,
@@ -749,6 +857,20 @@ orderSchema.index({
 
   createdAt:
     -1,
+});
+
+/*
+ * Scheduled / pre-order lookup.
+ */
+orderSchema.index({
+  isPreOrder:
+    1,
+
+  requestedDeliveryDate:
+    1,
+
+  orderStatus:
+    1,
 });
 
 const Order =

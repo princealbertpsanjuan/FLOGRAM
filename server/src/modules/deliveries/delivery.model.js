@@ -3,6 +3,12 @@ import mongoose from "mongoose";
 const deliverySchema =
   new mongoose.Schema(
     {
+      /*
+       * =====================================================
+       * RELATIONSHIPS
+       * =====================================================
+       */
+
       order: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -56,12 +62,9 @@ const deliverySchema =
       /*
        * Rider is intentionally nullable.
        *
-       * A delivery request is first
-       * created as "available".
-       *
+       * Delivery starts as available.
        * The first eligible rider who
-       * accepts it becomes the assigned
-       * rider.
+       * accepts becomes the assigned rider.
        */
       rider: {
         type:
@@ -90,6 +93,12 @@ const deliverySchema =
         index:
           true,
       },
+
+      /*
+       * =====================================================
+       * PICKUP ADDRESS
+       * =====================================================
+       */
 
       pickupAddress: {
         street: {
@@ -147,6 +156,12 @@ const deliverySchema =
             true,
         },
       },
+
+      /*
+       * =====================================================
+       * DELIVERY ADDRESS
+       * =====================================================
+       */
 
       deliveryAddress: {
         street: {
@@ -216,6 +231,237 @@ const deliverySchema =
         },
       },
 
+      /*
+       * =====================================================
+       * DELIVERY TRACKING LOCATIONS
+       * =====================================================
+       *
+       * pickupLocation
+       *   = florist/shop coordinates
+       *
+       * deliveryLocation
+       *   = customer coordinates
+       *
+       * riderLocation
+       *   = rider's latest GPS position
+       *
+       * These coordinates will be used
+       * for:
+       *
+       * - Rider navigation
+       * - OpenRouteService routing
+       * - Customer live tracking
+       * - Seller delivery monitoring
+       * =====================================================
+       */
+
+      pickupLocation: {
+        latitude: {
+          type:
+            Number,
+
+          required:
+            true,
+
+          min:
+            -90,
+
+          max:
+            90,
+        },
+
+        longitude: {
+          type:
+            Number,
+
+          required:
+            true,
+
+          min:
+            -180,
+
+          max:
+            180,
+        },
+      },
+
+      deliveryLocation: {
+        latitude: {
+          type:
+            Number,
+
+          required:
+            true,
+
+          min:
+            -90,
+
+          max:
+            90,
+        },
+
+        longitude: {
+          type:
+            Number,
+
+          required:
+            true,
+
+          min:
+            -180,
+
+          max:
+            180,
+        },
+      },
+
+      /*
+       * =====================================================
+       * RIDER LIVE LOCATION
+       * =====================================================
+       *
+       * Updated by the assigned rider's
+       * device during an active delivery.
+       *
+       * We only keep the latest location
+       * here instead of storing an
+       * unlimited GPS history.
+       * =====================================================
+       */
+
+      riderLocation: {
+        latitude: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            -90,
+
+          max:
+            90,
+        },
+
+        longitude: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            -180,
+
+          max:
+            180,
+        },
+
+        /*
+         * GPS accuracy in meters.
+         */
+        accuracy: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            0,
+        },
+
+        /*
+         * Last GPS update received from
+         * the rider application.
+         */
+        updatedAt: {
+          type:
+            Date,
+
+          default:
+            null,
+        },
+      },
+
+      /*
+       * =====================================================
+       * CURRENT NAVIGATION INFORMATION
+       * =====================================================
+       *
+       * accepted:
+       * rider -> florist
+       *
+       * picked_up / out_for_delivery:
+       * rider -> customer
+       *
+       * Route geometry itself does not
+       * need to be permanently stored.
+       * It can be generated through the
+       * routing service when requested.
+       * =====================================================
+       */
+
+      navigation: {
+        destinationType: {
+          type:
+            String,
+
+          enum: [
+            "pickup",
+            "delivery",
+          ],
+
+          default:
+            null,
+        },
+
+        distanceMeters: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            0,
+        },
+
+        durationSeconds: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            0,
+        },
+
+        estimatedArrivalAt: {
+          type:
+            Date,
+
+          default:
+            null,
+        },
+
+        updatedAt: {
+          type:
+            Date,
+
+          default:
+            null,
+        },
+      },
+
+      /*
+       * =====================================================
+       * RECIPIENT
+       * =====================================================
+       */
+
       recipientName: {
         type:
           String,
@@ -260,7 +506,9 @@ const deliverySchema =
        *
        * cancelled
        *   = delivery request cancelled
+       * =====================================================
        */
+
       status: {
         type:
           String,
@@ -282,23 +530,49 @@ const deliverySchema =
       },
 
       /*
-       * When the delivery request became
-       * visible to riders.
+       * =====================================================
+       * SCHEDULED RIDER AVAILABILITY
+       * =====================================================
+       *
+       * For normal orders this can be
+       * the time the delivery request
+       * was created.
+       *
+       * For pre-orders this may be a
+       * future time calculated from the
+       * requested delivery schedule.
+       *
+       * Example:
+       *
+       * Delivery = 4:00 PM
+       * Rider lead = 60 minutes
+       * availableAt = 3:00 PM
+       * =====================================================
        */
+
       availableAt: {
         type:
           Date,
 
         default:
           Date.now,
+
+        index:
+          true,
       },
+
+      /*
+       * =====================================================
+       * DELIVERY TIMESTAMPS
+       * =====================================================
+       */
 
       /*
        * Kept for compatibility with the
        * previous seller-assignment flow.
        *
-       * For self-accepted requests this
-       * can be set at the same time as
+       * For rider self-assignment this
+       * can be set together with
        * acceptedAt.
        */
       assignedAt: {
@@ -349,6 +623,12 @@ const deliverySchema =
           null,
       },
 
+      /*
+       * =====================================================
+       * RIDER NOTES
+       * =====================================================
+       */
+
       riderNotes: {
         type:
           String,
@@ -371,6 +651,12 @@ const deliverySchema =
         false,
     }
   );
+
+/*
+ * =========================================================
+ * INDEXES
+ * =========================================================
+ */
 
 /*
  * Rider delivery history / active work.
@@ -398,14 +684,18 @@ deliverySchema.index({
 });
 
 /*
- * Available delivery requests.
+ * Available delivery marketplace.
  *
- * Useful when riders request:
- *
- * GET /deliveries/available
+ * availableAt is included because
+ * scheduled deliveries should only
+ * appear once their availability
+ * time has been reached.
  */
 deliverySchema.index({
   status:
+    1,
+
+  availableAt:
     1,
 
   createdAt:
@@ -417,6 +707,23 @@ deliverySchema.index({
  */
 deliverySchema.index({
   florist:
+    1,
+
+  status:
+    1,
+
+  createdAt:
+    -1,
+});
+
+/*
+ * Rider user lookup.
+ *
+ * Useful when checking deliveries
+ * through the authenticated User ID.
+ */
+deliverySchema.index({
+  riderUser:
     1,
 
   status:

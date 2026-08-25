@@ -48,7 +48,8 @@ export const createOrderValidation = [
     })
     .withMessage(
       "Quantity must be at least 1."
-    ),
+    )
+    .toInt(),
 
   body("fulfillmentType")
     .optional()
@@ -61,12 +62,13 @@ export const createOrderValidation = [
     ),
 
   /*
+   * =======================================================
    * DELIVERY ADDRESS
+   * =======================================================
    *
-   * Detailed requirement checks are
-   * still handled by order.service.js
-   * because they depend on
-   * fulfillmentType.
+   * Required delivery-address checks
+   * that depend on fulfillmentType
+   * are still handled in service.
    */
   body("deliveryAddress")
     .optional({
@@ -150,7 +152,49 @@ export const createOrderValidation = [
     ),
 
   /*
+   * =======================================================
+   * CUSTOMER DELIVERY MAP LOCATION
+   * =======================================================
+   */
+  body("deliveryLocation")
+    .optional({
+      nullable: true,
+    })
+    .isObject()
+    .withMessage(
+      "Delivery location must be an object."
+    ),
+
+  body("deliveryLocation.latitude")
+    .optional({
+      nullable: true,
+    })
+    .isFloat({
+      min: -90,
+      max: 90,
+    })
+    .withMessage(
+      "Delivery latitude must be between -90 and 90."
+    )
+    .toFloat(),
+
+  body("deliveryLocation.longitude")
+    .optional({
+      nullable: true,
+    })
+    .isFloat({
+      min: -180,
+      max: 180,
+    })
+    .withMessage(
+      "Delivery longitude must be between -180 and 180."
+    )
+    .toFloat(),
+
+  /*
+   * =======================================================
    * RECIPIENT
+   * =======================================================
    */
   body("recipientName")
     .optional({
@@ -176,6 +220,19 @@ export const createOrderValidation = [
       "Enter a valid Philippine phone number."
     ),
 
+  /*
+   * =======================================================
+   * PRE-ORDER / SCHEDULED DELIVERY
+   * =======================================================
+   */
+  body("isPreOrder")
+    .optional()
+    .isBoolean()
+    .withMessage(
+      "isPreOrder must be true or false."
+    )
+    .toBoolean(),
+
   body("requestedDeliveryDate")
     .optional({
       nullable: true,
@@ -183,8 +240,36 @@ export const createOrderValidation = [
     .isISO8601()
     .withMessage(
       "Requested delivery date is invalid."
+    )
+    .toDate(),
+
+  body("requestedDeliveryTimeStart")
+    .optional({
+      nullable: true,
+    })
+    .matches(
+      /^([01]\d|2[0-3]):[0-5]\d$/
+    )
+    .withMessage(
+      "Requested delivery start time must use HH:MM format."
     ),
 
+  body("requestedDeliveryTimeEnd")
+    .optional({
+      nullable: true,
+    })
+    .matches(
+      /^([01]\d|2[0-3]):[0-5]\d$/
+    )
+    .withMessage(
+      "Requested delivery end time must use HH:MM format."
+    ),
+
+  /*
+   * =======================================================
+   * CUSTOMER NOTES
+   * =======================================================
+   */
   body("customerNotes")
     .optional({
       nullable: true,
@@ -198,14 +283,14 @@ export const createOrderValidation = [
     ),
 
   /*
+   * =======================================================
    * PAYMENT
+   * =======================================================
    *
-   * PayMongo is the provider.
+   * PayMongo is the payment provider.
    *
-   * GCash/card/QR Ph/etc. will be
-   * handled later as PayMongo payment
-   * channels rather than separate
-   * FLOGRAM payment methods.
+   * GCash, card and QRPh are payment
+   * channels selected inside PayMongo.
    */
   body("paymentMethod")
     .optional({
@@ -219,6 +304,199 @@ export const createOrderValidation = [
     .withMessage(
       "Payment method must be cash_on_delivery, cash_on_pickup, or paymongo."
     ),
+
+  /*
+   * =======================================================
+   * CROSS-FIELD VALIDATION
+   * =======================================================
+   */
+
+  /*
+   * Delivery coordinates must be
+   * supplied together.
+   */
+  body().custom((value) => {
+    const location =
+      value.deliveryLocation;
+
+    if (!location) {
+      return true;
+    }
+
+    const hasLatitude =
+      location.latitude !==
+        undefined &&
+      location.latitude !==
+        null;
+
+    const hasLongitude =
+      location.longitude !==
+        undefined &&
+      location.longitude !==
+        null;
+
+    if (
+      hasLatitude !==
+      hasLongitude
+    ) {
+      throw new Error(
+        "Delivery latitude and longitude must be provided together."
+      );
+    }
+
+    return true;
+  }),
+
+  /*
+   * Delivery orders must contain a
+   * map location.
+   *
+   * Pickup orders don't need it.
+   */
+  body().custom((value) => {
+    const fulfillmentType =
+      value.fulfillmentType ||
+      "delivery";
+
+    if (
+      fulfillmentType !==
+      "delivery"
+    ) {
+      return true;
+    }
+
+    const latitude =
+      value.deliveryLocation
+        ?.latitude;
+
+    const longitude =
+      value.deliveryLocation
+        ?.longitude;
+
+    if (
+      latitude === undefined ||
+      latitude === null ||
+      longitude === undefined ||
+      longitude === null
+    ) {
+      throw new Error(
+        "Delivery location coordinates are required for delivery orders."
+      );
+    }
+
+    return true;
+  }),
+
+  /*
+   * Pre-orders must contain a future
+   * delivery date.
+   */
+  body().custom((value) => {
+    if (
+      value.isPreOrder !==
+      true
+    ) {
+      return true;
+    }
+
+    if (
+      !value.requestedDeliveryDate
+    ) {
+      throw new Error(
+        "Requested delivery date is required for pre-orders."
+      );
+    }
+
+    const requestedDate =
+      new Date(
+        value.requestedDeliveryDate
+      );
+
+    if (
+      Number.isNaN(
+        requestedDate.getTime()
+      )
+    ) {
+      throw new Error(
+        "Requested delivery date is invalid."
+      );
+    }
+
+    if (
+      requestedDate <=
+      new Date()
+    ) {
+      throw new Error(
+        "Pre-order delivery date must be in the future."
+      );
+    }
+
+    return true;
+  }),
+
+  /*
+   * If a delivery window is used,
+   * both start and end times are
+   * required.
+   */
+  body().custom((value) => {
+    const start =
+      value
+        .requestedDeliveryTimeStart;
+
+    const end =
+      value
+        .requestedDeliveryTimeEnd;
+
+    if (
+      !start &&
+      !end
+    ) {
+      return true;
+    }
+
+    if (
+      !start ||
+      !end
+    ) {
+      throw new Error(
+        "Both delivery start time and delivery end time are required."
+      );
+    }
+
+    return true;
+  }),
+
+  /*
+   * Delivery end time must be later
+   * than delivery start time.
+   */
+  body().custom((value) => {
+    const start =
+      value
+        .requestedDeliveryTimeStart;
+
+    const end =
+      value
+        .requestedDeliveryTimeEnd;
+
+    if (
+      !start ||
+      !end
+    ) {
+      return true;
+    }
+
+    if (
+      end <= start
+    ) {
+      throw new Error(
+        "Delivery end time must be later than delivery start time."
+      );
+    }
+
+    return true;
+  }),
 ];
 
 /*
@@ -304,7 +582,8 @@ export const validateOrderRequest = (
       errors.array().map(
         (error) => ({
           field:
-            error.path,
+            error.path ||
+            "request",
 
           message:
             error.msg,

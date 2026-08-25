@@ -11,47 +11,97 @@ export const createFloristProfile = async (
   userId,
   profileData
 ) => {
-  const user = await User.findById(userId);
+  const user =
+    await User.findById(userId);
 
   if (!user) {
-    const error = new Error(
-      "User account was not found."
-    );
+    const error =
+      new Error(
+        "User account was not found."
+      );
+
     error.statusCode = 404;
+
     throw error;
   }
 
-  if (user.role !== "seller") {
-    const error = new Error(
-      "Only seller accounts can create florist profiles."
-    );
+  if (
+    user.role !==
+    "seller"
+  ) {
+    const error =
+      new Error(
+        "Only seller accounts can create florist profiles."
+      );
+
     error.statusCode = 403;
+
     throw error;
   }
 
-  const existingProfile = await Florist.findOne({
-    owner: userId,
-  });
+  const existingProfile =
+    await Florist.findOne({
+      owner:
+        userId,
+    });
 
-  if (existingProfile) {
-    const error = new Error(
-      "A florist profile already exists for this account."
-    );
+  if (
+    existingProfile
+  ) {
+    const error =
+      new Error(
+        "A florist profile already exists for this account."
+      );
+
     error.statusCode = 409;
+
     throw error;
   }
 
-  const florist = await Florist.create({
-    owner: userId,
-    shopName: profileData.shopName,
-    description: profileData.description,
-    address: profileData.address,
-    contactNumber: profileData.contactNumber,
-    businessEmail: profileData.businessEmail,
-    verificationStatus: "pending",
-  });
+  const florist =
+    await Florist.create({
+      owner:
+        userId,
 
-  user.verificationStatus = "pending";
+      shopName:
+        profileData.shopName,
+
+      description:
+        profileData.description,
+
+      address:
+        profileData.address,
+
+      /*
+       * Optional map coordinates.
+       */
+      location: {
+        latitude:
+          profileData
+            ?.location
+            ?.latitude ??
+          null,
+
+        longitude:
+          profileData
+            ?.location
+            ?.longitude ??
+          null,
+      },
+
+      contactNumber:
+        profileData.contactNumber,
+
+      businessEmail:
+        profileData.businessEmail,
+
+      verificationStatus:
+        "pending",
+    });
+
+  user.verificationStatus =
+    "pending";
+
   await user.save();
 
   return florist;
@@ -61,334 +111,549 @@ export const createFloristProfile = async (
  * SELLER
  * Get own florist profile
  */
-export const getMyFloristProfile = async (
-  userId
-) => {
-  const florist = await Florist.findOne({
-    owner: userId,
-  }).populate(
-    "owner",
-    "firstName lastName email phoneNumber role verificationStatus"
-  );
+export const getMyFloristProfile =
+  async (
+    userId
+  ) => {
+    const florist =
+      await Florist.findOne({
+        owner:
+          userId,
+      }).populate(
+        "owner",
+        "firstName lastName email phoneNumber role verificationStatus"
+      );
 
-  if (!florist) {
-    const error = new Error(
-      "Florist profile was not found."
-    );
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!florist) {
+      const error =
+        new Error(
+          "Florist profile was not found."
+        );
 
-  return florist;
-};
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    return florist;
+  };
 
 /*
  * SELLER
  * Update own florist profile
  */
-export const updateFloristProfile = async (
-  userId,
-  profileData
-) => {
-  const florist = await Florist.findOne({
-    owner: userId,
-  });
+export const updateFloristProfile =
+  async (
+    userId,
+    profileData
+  ) => {
+    const florist =
+      await Florist.findOne({
+        owner:
+          userId,
+      });
 
-  if (!florist) {
-    const error = new Error(
-      "Florist profile was not found."
-    );
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!florist) {
+      const error =
+        new Error(
+          "Florist profile was not found."
+        );
 
-  const allowedFields = [
-    "shopName",
-    "description",
-    "contactNumber",
-    "businessEmail",
-  ];
+      error.statusCode =
+        404;
 
-  allowedFields.forEach((field) => {
-    if (profileData[field] !== undefined) {
-      florist[field] = profileData[field];
+      throw error;
     }
-  });
 
-  if (profileData.address) {
-    florist.address = {
-      ...florist.address.toObject(),
-      ...profileData.address,
-    };
-  }
+    const allowedFields = [
+      "shopName",
+      "description",
+      "contactNumber",
+      "businessEmail",
+    ];
 
-  await florist.save();
+    allowedFields.forEach(
+      (field) => {
+        if (
+          profileData[field] !==
+          undefined
+        ) {
+          florist[field] =
+            profileData[field];
+        }
+      }
+    );
 
-  return florist;
-};
+    /*
+     * Update address without removing
+     * fields that were not submitted.
+     */
+    if (
+      profileData.address
+    ) {
+      florist.address = {
+        ...florist.address.toObject(),
+
+        ...profileData.address,
+      };
+    }
+
+    /*
+     * =====================================================
+     * SHOP MAP LOCATION
+     * =====================================================
+     *
+     * latitude and longitude must be
+     * provided together.
+     */
+    if (
+      profileData.location
+    ) {
+      const latitude =
+        profileData
+          .location
+          .latitude;
+
+      const longitude =
+        profileData
+          .location
+          .longitude;
+
+      const hasLatitude =
+        latitude !==
+          undefined &&
+        latitude !==
+          null;
+
+      const hasLongitude =
+        longitude !==
+          undefined &&
+        longitude !==
+          null;
+
+      if (
+        hasLatitude !==
+        hasLongitude
+      ) {
+        const error =
+          new Error(
+            "Shop latitude and longitude must be provided together."
+          );
+
+        error.statusCode =
+          400;
+
+        throw error;
+      }
+
+      if (
+        hasLatitude &&
+        hasLongitude
+      ) {
+        florist.location = {
+          latitude:
+            Number(
+              latitude
+            ),
+
+          longitude:
+            Number(
+              longitude
+            ),
+        };
+      }
+    }
+
+    await florist.save();
+
+    return florist;
+  };
 
 /*
  * ADMIN
  * Get pending florists
  */
-export const getPendingFlorists = async () => {
-  return Florist.find({
-    verificationStatus: "pending",
-  })
-    .populate(
-      "owner",
-      "firstName lastName email phoneNumber role verificationStatus"
-    )
-    .sort({
-      createdAt: 1,
-    });
-};
+export const getPendingFlorists =
+  async () => {
+    return Florist.find({
+      verificationStatus:
+        "pending",
+    })
+      .populate(
+        "owner",
+        "firstName lastName email phoneNumber role verificationStatus"
+      )
+      .sort({
+        createdAt:
+          1,
+      });
+  };
 
 /*
  * ADMIN
  * Get florist by ID
  */
-export const getFloristById = async (
-  floristId
-) => {
-  const florist = await Florist.findById(
+export const getFloristById =
+  async (
     floristId
-  )
-    .populate(
-      "owner",
-      "firstName lastName email phoneNumber role verificationStatus"
-    )
-    .populate(
-      "verifiedBy",
-      "firstName lastName email"
-    );
+  ) => {
+    const florist =
+      await Florist.findById(
+        floristId
+      )
+        .populate(
+          "owner",
+          "firstName lastName email phoneNumber role verificationStatus"
+        )
+        .populate(
+          "verifiedBy",
+          "firstName lastName email"
+        );
 
-  if (!florist) {
-    const error = new Error(
-      "Florist profile was not found."
-    );
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!florist) {
+      const error =
+        new Error(
+          "Florist profile was not found."
+        );
 
-  return florist;
-};
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    return florist;
+  };
 
 /*
  * ADMIN
  * Approve florist
  */
-export const approveFlorist = async (
-  floristId,
-  adminId
-) => {
-  const florist = await Florist.findById(
-    floristId
-  );
+export const approveFlorist =
+  async (
+    floristId,
+    adminId
+  ) => {
+    const florist =
+      await Florist.findById(
+        floristId
+      );
 
-  if (!florist) {
-    const error = new Error(
-      "Florist profile was not found."
-    );
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!florist) {
+      const error =
+        new Error(
+          "Florist profile was not found."
+        );
 
-  const verification =
-    await Verification.findOne({
-      user: florist.owner,
-      role: "seller",
-    });
+      error.statusCode =
+        404;
 
-  if (!verification) {
-    const error = new Error(
-      "Seller verification documents were not found."
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (verification.status !== "pending") {
-    const error = new Error(
-      `This seller verification is already ${verification.status}.`
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const reviewedAt = new Date();
-
-  florist.verificationStatus = "approved";
-  florist.verificationRemarks = "";
-  florist.verifiedAt = reviewedAt;
-  florist.verifiedBy = adminId;
-
-  await florist.save();
-
-  await User.findByIdAndUpdate(
-    florist.owner,
-    {
-      verificationStatus: "approved",
-    },
-    {
-      runValidators: true,
+      throw error;
     }
-  );
 
-  verification.status = "approved";
-  verification.remarks = "";
-  verification.reviewedBy = adminId;
-  verification.reviewedAt = reviewedAt;
+    const verification =
+      await Verification.findOne({
+        user:
+          florist.owner,
 
-  await verification.save();
+        role:
+          "seller",
+      });
 
-  return florist;
-};
+    if (!verification) {
+      const error =
+        new Error(
+          "Seller verification documents were not found."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    if (
+      verification.status !==
+      "pending"
+    ) {
+      const error =
+        new Error(
+          `This seller verification is already ${verification.status}.`
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    const reviewedAt =
+      new Date();
+
+    florist.verificationStatus =
+      "approved";
+
+    florist.verificationRemarks =
+      "";
+
+    florist.verifiedAt =
+      reviewedAt;
+
+    florist.verifiedBy =
+      adminId;
+
+    await florist.save();
+
+    await User.findByIdAndUpdate(
+      florist.owner,
+
+      {
+        verificationStatus:
+          "approved",
+      },
+
+      {
+        runValidators:
+          true,
+      }
+    );
+
+    verification.status =
+      "approved";
+
+    verification.remarks =
+      "";
+
+    verification.reviewedBy =
+      adminId;
+
+    verification.reviewedAt =
+      reviewedAt;
+
+    await verification.save();
+
+    return florist;
+  };
 
 /*
  * ADMIN
  * Reject florist
  */
-export const rejectFlorist = async (
-  floristId,
-  adminId,
-  remarks
-) => {
-  const florist = await Florist.findById(
-    floristId
-  );
+export const rejectFlorist =
+  async (
+    floristId,
+    adminId,
+    remarks
+  ) => {
+    const florist =
+      await Florist.findById(
+        floristId
+      );
 
-  if (!florist) {
-    const error = new Error(
-      "Florist profile was not found."
-    );
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!florist) {
+      const error =
+        new Error(
+          "Florist profile was not found."
+        );
 
-  const verification =
-    await Verification.findOne({
-      user: florist.owner,
-      role: "seller",
-    });
+      error.statusCode =
+        404;
 
-  if (!verification) {
-    const error = new Error(
-      "Seller verification documents were not found."
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (verification.status !== "pending") {
-    const error = new Error(
-      `This seller verification is already ${verification.status}.`
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const reviewedAt = new Date();
-
-  florist.verificationStatus = "rejected";
-  florist.verificationRemarks = remarks;
-  florist.verifiedAt = reviewedAt;
-  florist.verifiedBy = adminId;
-  florist.isActive = false;
-
-  await florist.save();
-
-  await User.findByIdAndUpdate(
-    florist.owner,
-    {
-      verificationStatus: "rejected",
-    },
-    {
-      runValidators: true,
+      throw error;
     }
-  );
 
-  verification.status = "rejected";
-  verification.remarks = remarks;
-  verification.reviewedBy = adminId;
-  verification.reviewedAt = reviewedAt;
+    const verification =
+      await Verification.findOne({
+        user:
+          florist.owner,
 
-  await verification.save();
+        role:
+          "seller",
+      });
 
-  return florist;
-};
+    if (!verification) {
+      const error =
+        new Error(
+          "Seller verification documents were not found."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    if (
+      verification.status !==
+      "pending"
+    ) {
+      const error =
+        new Error(
+          `This seller verification is already ${verification.status}.`
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    const reviewedAt =
+      new Date();
+
+    florist.verificationStatus =
+      "rejected";
+
+    florist.verificationRemarks =
+      remarks;
+
+    florist.verifiedAt =
+      reviewedAt;
+
+    florist.verifiedBy =
+      adminId;
+
+    florist.isActive =
+      false;
+
+    await florist.save();
+
+    await User.findByIdAndUpdate(
+      florist.owner,
+
+      {
+        verificationStatus:
+          "rejected",
+      },
+
+      {
+        runValidators:
+          true,
+      }
+    );
+
+    verification.status =
+      "rejected";
+
+    verification.remarks =
+      remarks;
+
+    verification.reviewedBy =
+      adminId;
+
+    verification.reviewedAt =
+      reviewedAt;
+
+    await verification.save();
+
+    return florist;
+  };
 
 /*
  * PUBLIC
  * Get all approved and active florist shops
  */
-export const getPublicFlorists = async () => {
-  return Florist.find({
-    verificationStatus: "approved",
-    isActive: true,
-  })
-    .populate(
-      "owner",
-      "firstName lastName"
-    )
-    .sort({
-      createdAt: -1,
-    });
-};
+export const getPublicFlorists =
+  async () => {
+    return Florist.find({
+      verificationStatus:
+        "approved",
+
+      isActive:
+        true,
+    })
+      .populate(
+        "owner",
+        "firstName lastName"
+      )
+      .sort({
+        createdAt:
+          -1,
+      });
+  };
 
 /*
  * PUBLIC
  * Get one approved and active florist shop
  */
-export const getPublicFloristById = async (
-  floristId
-) => {
-  const florist = await Florist.findOne({
-    _id: floristId,
-    verificationStatus: "approved",
-    isActive: true,
-  }).populate(
-    "owner",
-    "firstName lastName"
-  );
+export const getPublicFloristById =
+  async (
+    floristId
+  ) => {
+    const florist =
+      await Florist.findOne({
+        _id:
+          floristId,
 
-  if (!florist) {
-    const error = new Error(
-      "Florist shop was not found."
-    );
-    error.statusCode = 404;
-    throw error;
-  }
+        verificationStatus:
+          "approved",
 
-  return florist;
-};
+        isActive:
+          true,
+      }).populate(
+        "owner",
+        "firstName lastName"
+      );
+
+    if (!florist) {
+      const error =
+        new Error(
+          "Florist shop was not found."
+        );
+
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    return florist;
+  };
 
 /*
  * PUBLIC
  * Get available bouquets from a florist shop
  */
-export const getPublicFloristFlowers = async (
-  floristId
-) => {
-  const florist = await Florist.findOne({
-    _id: floristId,
-    verificationStatus: "approved",
-    isActive: true,
-  });
+export const getPublicFloristFlowers =
+  async (
+    floristId
+  ) => {
+    const florist =
+      await Florist.findOne({
+        _id:
+          floristId,
 
-  if (!florist) {
-    const error = new Error(
-      "Florist shop was not found."
-    );
-    error.statusCode = 404;
-    throw error;
-  }
+        verificationStatus:
+          "approved",
 
-  return Flower.find({
-    florist: floristId,
-    isActive: true,
-    isAvailable: true,
-  }).sort({
-    createdAt: -1,
-  });
-};
+        isActive:
+          true,
+      });
+
+    if (!florist) {
+      const error =
+        new Error(
+          "Florist shop was not found."
+        );
+
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    return Flower.find({
+      florist:
+        floristId,
+
+      isActive:
+        true,
+
+      isAvailable:
+        true,
+    }).sort({
+      createdAt:
+        -1,
+    });
+  };

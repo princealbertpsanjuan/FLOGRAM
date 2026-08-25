@@ -195,7 +195,9 @@ export const createPayMongoCheckoutSession =
       );
 
     /*
-     * Create checkout line items.
+     * =====================================================
+     * CHECKOUT LINE ITEMS
+     * =====================================================
      */
     const lineItems = [
       {
@@ -233,8 +235,12 @@ export const createPayMongoCheckoutSession =
     ];
 
     /*
-     * Include delivery fee once
-     * delivery pricing is enabled.
+     * =====================================================
+     * DELIVERY FEE
+     * =====================================================
+     *
+     * Include the server-calculated
+     * distance-based delivery fee.
      */
     if (
       Number(
@@ -259,6 +265,112 @@ export const createPayMongoCheckoutSession =
         quantity:
           1,
       });
+    }
+
+    /*
+     * =====================================================
+     * PRE-ORDER FEE
+     * =====================================================
+     *
+     * Scheduled orders receive an
+     * additional pre-order fee.
+     *
+     * Example:
+     *
+     * Product        ₱1,299
+     * Delivery          ₱74
+     * Pre-order         ₱50
+     * ----------------------
+     * Total          ₱1,423
+     */
+    if (
+      order.isPreOrder &&
+      Number(
+        order.preOrderFee
+      ) > 0
+    ) {
+      lineItems.push({
+        name:
+          "Pre-order Fee",
+
+        description:
+          "FLOGRAM scheduled order fee",
+
+        amount:
+          pesosToCentavos(
+            order.preOrderFee
+          ),
+
+        currency:
+          "PHP",
+
+        quantity:
+          1,
+      });
+    }
+
+    /*
+     * =====================================================
+     * SAFETY CHECK
+     * =====================================================
+     *
+     * Make sure PayMongo line items add up
+     * to the same total stored in the order.
+     *
+     * This protects us from accidentally
+     * forgetting a fee in the future.
+     */
+    const checkoutTotalCentavos =
+      lineItems.reduce(
+        (
+          total,
+          item
+        ) =>
+          total +
+          Number(
+            item.amount
+          ) *
+            Number(
+              item.quantity ||
+              1
+            ),
+        0
+      );
+
+    const expectedTotalCentavos =
+      pesosToCentavos(
+        order.totalAmount
+      );
+
+    if (
+      checkoutTotalCentavos !==
+      expectedTotalCentavos
+    ) {
+      console.error(
+        "PayMongo checkout total mismatch:",
+        {
+          orderId:
+            String(
+              order._id
+            ),
+
+          expectedTotalCentavos,
+
+          checkoutTotalCentavos,
+
+          lineItems,
+        }
+      );
+
+      const error =
+        new Error(
+          "Checkout amount does not match the order total."
+        );
+
+      error.statusCode =
+        500;
+
+      throw error;
     }
 
     /*
@@ -324,6 +436,29 @@ export const createPayMongoCheckoutSession =
 
         sourceType:
           order.sourceType,
+
+        isPreOrder:
+          Boolean(
+            order.isPreOrder
+          ),
+
+        deliveryFee:
+          String(
+            order.deliveryFee ||
+            0
+          ),
+
+        preOrderFee:
+          String(
+            order.preOrderFee ||
+            0
+          ),
+
+        totalAmount:
+          String(
+            order.totalAmount ||
+            0
+          ),
       },
 
       send_email_receipt:
@@ -346,7 +481,9 @@ export const createPayMongoCheckoutSession =
     }
 
     /*
-     * Create Hosted Checkout session.
+     * =====================================================
+     * CREATE HOSTED CHECKOUT SESSION
+     * =====================================================
      */
     const response =
       await fetch(

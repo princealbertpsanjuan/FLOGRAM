@@ -5,11 +5,14 @@ import {
   getAvailableDeliveryRequests,
   getCustomerDeliveries,
   getDeliveryById,
+  getDeliveryTracking,
   getRiderDeliveries,
+  getRiderNavigation,
   getSellerDeliveries,
   markDeliveryDelivered,
   markDeliveryPickedUp,
   startOutForDelivery,
+  updateRiderLocation,
 } from "./delivery.service.js";
 
 /*
@@ -257,6 +260,53 @@ export const getOne = async (
 
 /*
  * =========================================================
+ * DELIVERY TRACKING
+ * CUSTOMER / SELLER / ASSIGNED RIDER
+ * =========================================================
+ *
+ * Returns the current delivery information
+ * including:
+ *
+ * - delivery status
+ * - rider information
+ * - rider location
+ * - pickup location
+ * - customer delivery location
+ * - navigation information
+ * - estimated arrival
+ *
+ * Access control is handled by the
+ * service layer.
+ */
+export const getTracking = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const delivery =
+      await getDeliveryTracking(
+        req.params.deliveryId,
+        req.user.userId
+      );
+
+    res.status(200).json({
+      success: true,
+
+      message:
+        "Delivery tracking retrieved successfully.",
+
+      data: {
+        delivery,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * =========================================================
  * RIDER
  * ACCEPT AVAILABLE DELIVERY REQUEST
  * =========================================================
@@ -291,6 +341,119 @@ export const acceptAssignment =
       next(error);
     }
   };
+
+/*
+ * =========================================================
+ * RIDER
+ * UPDATE LIVE LOCATION
+ * =========================================================
+ *
+ * PATCH
+ * /api/v1/deliveries/:deliveryId/location
+ *
+ * Example:
+ *
+ * {
+ *   "latitude": 13.625,
+ *   "longitude": 123.195,
+ *   "accuracy": 8.5
+ * }
+ *
+ * The service will also calculate:
+ *
+ * accepted:
+ * rider -> florist
+ *
+ * picked_up / out_for_delivery:
+ * rider -> customer
+ *
+ * using OpenRouteService.
+ */
+export const updateLocation = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const result =
+      await updateRiderLocation(
+        req.params.deliveryId,
+        req.user.userId,
+        {
+          latitude:
+            req.body.latitude,
+
+          longitude:
+            req.body.longitude,
+
+          accuracy:
+            req.body.accuracy,
+        }
+      );
+
+    res.status(200).json({
+      success: true,
+
+      message:
+        "Rider location updated successfully.",
+
+      data: {
+        delivery:
+          result.delivery,
+
+        route:
+          result.route,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * =========================================================
+ * RIDER
+ * GET CURRENT NAVIGATION
+ * =========================================================
+ *
+ * GET
+ * /api/v1/deliveries/:deliveryId/navigation
+ *
+ * accepted:
+ * rider -> florist
+ *
+ * picked_up:
+ * rider -> customer
+ *
+ * out_for_delivery:
+ * rider -> customer
+ */
+export const getNavigation = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const navigation =
+      await getRiderNavigation(
+        req.params.deliveryId,
+        req.user.userId
+      );
+
+    res.status(200).json({
+      success: true,
+
+      message:
+        "Rider navigation retrieved successfully.",
+
+      data: {
+        navigation,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 /*
  * =========================================================

@@ -55,6 +55,37 @@ const floristSchema = new mongoose.Schema(
       },
     },
 
+    /*
+     * =====================================================
+     * SHOP LOCATION
+     * =====================================================
+     *
+     * Coordinates used for:
+     *
+     * - Route calculation
+     * - Delivery distance
+     * - Delivery fee
+     * - Rider navigation
+     *
+     * Not required yet so existing florist
+     * records remain compatible.
+     */
+    location: {
+      latitude: {
+        type: Number,
+        min: -90,
+        max: 90,
+        default: null,
+      },
+
+      longitude: {
+        type: Number,
+        min: -180,
+        max: 180,
+        default: null,
+      },
+    },
+
     contactNumber: {
       type: String,
       required: true,
@@ -75,7 +106,11 @@ const floristSchema = new mongoose.Schema(
 
     verificationStatus: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: [
+        "pending",
+        "approved",
+        "rejected",
+      ],
       default: "pending",
     },
 
@@ -107,6 +142,9 @@ const floristSchema = new mongoose.Schema(
   }
 );
 
-const Florist = mongoose.model("Florist", floristSchema);
+const Florist = mongoose.model(
+  "Florist",
+  floristSchema
+);
 
 export default Florist;

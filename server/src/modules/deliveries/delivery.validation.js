@@ -25,6 +25,68 @@ export const riderDeliveryNotesValidation = [
 
 /*
  * =========================================================
+ * RIDER
+ * UPDATE LIVE LOCATION
+ * =========================================================
+ *
+ * Example body:
+ *
+ * {
+ *   "latitude": 13.625,
+ *   "longitude": 123.195,
+ *   "accuracy": 8.5
+ * }
+ */
+export const riderLocationValidation = [
+  body("latitude")
+    .notEmpty()
+    .withMessage(
+      "Rider latitude is required."
+    )
+    .isFloat({
+      min: -90,
+      max: 90,
+    })
+    .withMessage(
+      "Rider latitude must be between -90 and 90."
+    )
+    .toFloat(),
+
+  body("longitude")
+    .notEmpty()
+    .withMessage(
+      "Rider longitude is required."
+    )
+    .isFloat({
+      min: -180,
+      max: 180,
+    })
+    .withMessage(
+      "Rider longitude must be between -180 and 180."
+    )
+    .toFloat(),
+
+  /*
+   * GPS accuracy in meters.
+   *
+   * Optional because some devices may
+   * not provide it.
+   */
+  body("accuracy")
+    .optional({
+      nullable: true,
+    })
+    .isFloat({
+      min: 0,
+    })
+    .withMessage(
+      "Rider location accuracy must be zero or greater."
+    )
+    .toFloat(),
+];
+
+/*
+ * =========================================================
  * VALIDATION RESPONSE
  * =========================================================
  *
