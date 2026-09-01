@@ -66,6 +66,7 @@ const deliverySchema =
        * The first eligible rider who
        * accepts becomes the assigned rider.
        */
+
       rider: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -361,6 +362,7 @@ const deliverySchema =
         /*
          * GPS accuracy in meters.
          */
+
         accuracy: {
           type:
             Number,
@@ -376,6 +378,7 @@ const deliverySchema =
          * Last GPS update received from
          * the rider application.
          */
+
         updatedAt: {
           type:
             Date,
@@ -486,6 +489,99 @@ const deliverySchema =
 
       /*
        * =====================================================
+       * PROOF OF DELIVERY
+       * =====================================================
+       *
+       * A rider must successfully upload
+       * a proof photo before the delivery
+       * can be marked as delivered.
+       *
+       * imageUrl
+       *   = URL/path of uploaded proof photo
+       *
+       * uploadedAt
+       *   = time backend confirmed upload
+       *
+       * latitude / longitude
+       *   = rider GPS coordinates associated
+       *     with the proof upload
+       *
+       * accuracy
+       *   = GPS accuracy in meters
+       *
+       * IMPORTANT:
+       *
+       * Taking a photo on the mobile app
+       * is not enough.
+       *
+       * Mark as Delivered should only become
+       * available after imageUrl has been
+       * successfully stored by the backend.
+       * =====================================================
+       */
+
+      proofOfDelivery: {
+        imageUrl: {
+          type:
+            String,
+
+          default:
+            null,
+
+          trim:
+            true,
+        },
+
+        uploadedAt: {
+          type:
+            Date,
+
+          default:
+            null,
+        },
+
+        latitude: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            -90,
+
+          max:
+            90,
+        },
+
+        longitude: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            -180,
+
+          max:
+            180,
+        },
+
+        accuracy: {
+          type:
+            Number,
+
+          default:
+            null,
+
+          min:
+            0,
+        },
+      },
+
+      /*
+       * =====================================================
        * DELIVERY LIFECYCLE
        * =====================================================
        *
@@ -575,6 +671,7 @@ const deliverySchema =
        * can be set together with
        * acceptedAt.
        */
+
       assignedAt: {
         type:
           Date,
@@ -661,6 +758,7 @@ const deliverySchema =
 /*
  * Rider delivery history / active work.
  */
+
 deliverySchema.index({
   rider:
     1,
@@ -675,6 +773,7 @@ deliverySchema.index({
 /*
  * Customer delivery history.
  */
+
 deliverySchema.index({
   customer:
     1,
@@ -691,6 +790,7 @@ deliverySchema.index({
  * appear once their availability
  * time has been reached.
  */
+
 deliverySchema.index({
   status:
     1,
@@ -705,6 +805,7 @@ deliverySchema.index({
 /*
  * Seller / florist delivery requests.
  */
+
 deliverySchema.index({
   florist:
     1,
@@ -722,6 +823,7 @@ deliverySchema.index({
  * Useful when checking deliveries
  * through the authenticated User ID.
  */
+
 deliverySchema.index({
   riderUser:
     1,
@@ -732,6 +834,12 @@ deliverySchema.index({
   createdAt:
     -1,
 });
+
+/*
+ * =========================================================
+ * MODEL
+ * =========================================================
+ */
 
 const Delivery =
   mongoose.model(

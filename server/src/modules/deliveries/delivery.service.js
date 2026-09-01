@@ -9,6 +9,10 @@ import {
   calculateDeliveryRoute,
 } from "../../services/routing.service.js";
 
+import {
+  createNotification,
+} from "../notifications/notification.service.js";
+
 /*
  * =========================================================
  * HELPERS
@@ -157,6 +161,33 @@ const validateEligibleRider =
       throw error;
     }
   };
+
+const createNotificationSafely =
+  async (
+    notificationData
+  ) => {
+    try {
+      const notification =
+        await createNotification(
+          notificationData
+        );
+
+      console.log(
+        "Notification created:",
+        notification._id
+      );
+
+      return notification;
+    } catch (error) {
+      console.error(
+        "Notification creation failed:",
+        error
+      );
+
+      return null;
+    }
+  };
+  
 /*
  * =========================================================
  * COORDINATE HELPERS
@@ -473,6 +504,73 @@ export const getAvailableRiders =
           -1,
       });
   };
+/*
+ * =========================================================
+ * PRE-ORDER RIDER AVAILABILITY
+ * =========================================================
+ */
+
+const getPreOrderRiderLeadMinutes = () => {
+  const minutes = Number(
+    process.env.PREORDER_RIDER_LEAD_MINUTES ||
+      60
+  );
+
+  if (
+    !Number.isFinite(minutes) ||
+    minutes < 0
+  ) {
+    return 60;
+  }
+
+  return minutes;
+};
+
+const getDeliveryAvailableAt = (
+  order
+) => {
+  const now = new Date();
+
+  if (
+    !order?.isPreOrder ||
+    !order?.requestedDeliveryDate
+  ) {
+    return now;
+  }
+
+  const scheduledDelivery =
+    new Date(
+      order.requestedDeliveryDate
+    );
+
+  if (
+    Number.isNaN(
+      scheduledDelivery.getTime()
+    )
+  ) {
+    return now;
+  }
+
+  const leadMinutes =
+    getPreOrderRiderLeadMinutes();
+
+  const availableAt =
+    new Date(
+      scheduledDelivery.getTime() -
+        leadMinutes *
+          60 *
+          1000
+    );
+
+  if (
+    availableAt <= now
+  ) {
+    return now;
+  }
+
+  return availableAt;
+};
+
 
 /*
  * =========================================================
@@ -1498,9 +1596,37 @@ export const acceptDeliveryAssignment =
       throw error;
     }
 
-    return populateDelivery(
-      delivery._id
-    );
+await createNotificationSafely({
+  recipient:
+    riderUserId,
+
+  role:
+    "rider",
+
+  type:
+    "delivery_accepted",
+
+  title:
+    "Delivery Accepted",
+
+  message:
+    "You successfully accepted a delivery request. Proceed to the florist for pickup.",
+
+  delivery:
+    delivery._id,
+
+  order:
+    delivery.order,
+
+  metadata: {
+    screen:
+      "delivery",
+  },
+});
+
+return populateDelivery(
+  delivery._id
+);
   };
 
 /*
@@ -2056,12 +2182,33 @@ export const markDeliveryPickedUp =
         ).trim();
     }
 
-    await delivery.save();
+await delivery.save();
 
-    return populateDelivery(
-      delivery._id
-    );
-  };
+await createNotificationSafely({
+  recipient: riderUserId,
+
+  role: "rider",
+
+  type: "delivery_picked_up",
+
+  title: "Order Picked Up",
+
+  message:
+    "You have picked up the order from the florist. Proceed to the customer's delivery address.",
+
+  delivery: delivery._id,
+
+  order: delivery.order,
+
+  metadata: {
+    screen: "delivery",
+  },
+});
+
+return populateDelivery(
+  delivery._id
+);
+};
 
 /*
  * =========================================================
@@ -2187,21 +2334,349 @@ export const startOutForDelivery =
     order.orderStatus =
       "out_for_delivery";
 
+await delivery.save();
+
+await order.save();
+
+await createNotificationSafely({
+  recipient: riderUserId,
+
+  role: "rider",
+
+  type: "delivery_out_for_delivery",
+
+  title: "Delivery Started",
+
+  message:
+    "The order is now out for delivery. Proceed to the customer's delivery address.",
+
+  delivery: delivery._id,
+
+  order: order._id,
+
+  metadata: {
+    screen: "delivery",
+  },
+});
+
+return populateDelivery(
+  delivery._id
+);
+  };
+/*
+ * =========================================================
+ * RIDER
+ * SAVE PROOF OF DELIVERY
+ * =========================================================
+ *
+ * IMPORTANT:
+ *
+ * This function is called only AFTER the proof photo
+ * has been successfully uploaded by the controller /
+ * upload middleware.
+ *
+ * The mobile app must NOT enable Mark as Delivered
+ * simply because a local photo was taken.
+ *
+ * It should only enable the button after this function
+ * succeeds and proofOfDelivery.imageUrl is returned
+ * by the backend.
+ * =========================================================
+ */
+
+export const saveProofOfDelivery =
+  async (
+    deliveryId,
+    riderUserId,
+    proofData
+  ) => {
+    const rider =
+      await getRiderProfileByUser(
+        riderUserId
+      );
+
+    validateEligibleRider(
+      rider
+    );
+
+    const delivery =
+      await Delivery.findOne({
+        _id:
+          deliveryId,
+
+        rider:
+          rider._id,
+
+        riderUser:
+          riderUserId,
+      });
+
+    if (!delivery) {
+      const error =
+        new Error(
+          "Delivery was not found or does not belong to this rider."
+        );
+
+      error.statusCode =
+        404;
+
+      throw error;
+    }
+
+    /*
+     * Proof of Delivery is only allowed
+     * while the rider is actively delivering
+     * the order to the customer.
+     */
+    if (
+      delivery.status !==
+      "out_for_delivery"
+    ) {
+      const error =
+        new Error(
+          "Proof of delivery can only be uploaded while the order is out for delivery."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * The controller/upload middleware must
+     * successfully store the image before
+     * calling this service.
+     */
+    const imageUrl =
+      String(
+        proofData
+          ?.imageUrl ||
+          ""
+      ).trim();
+
+    if (!imageUrl) {
+      const error =
+        new Error(
+          "A successfully uploaded proof of delivery image is required."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * =====================================================
+     * PROOF GPS LOCATION
+     * =====================================================
+     *
+     * Prefer coordinates submitted with the
+     * proof upload.
+     *
+     * If they are not supplied, fall back to
+     * the rider's latest known GPS location.
+     * =====================================================
+     */
+
+    const submittedLatitude =
+      proofData?.latitude;
+
+    const submittedLongitude =
+      proofData?.longitude;
+
+    let proofLatitude =
+      null;
+
+    let proofLongitude =
+      null;
+
+    const hasSubmittedCoordinates =
+      submittedLatitude !==
+        undefined &&
+      submittedLatitude !==
+        null &&
+      submittedLongitude !==
+        undefined &&
+      submittedLongitude !==
+        null;
+
+    if (
+      hasSubmittedCoordinates
+    ) {
+      const proofLocation =
+        normalizeCoordinate(
+          submittedLatitude,
+          submittedLongitude,
+          "Proof of delivery"
+        );
+
+      proofLatitude =
+        proofLocation.latitude;
+
+      proofLongitude =
+        proofLocation.longitude;
+    } else {
+      const latestLatitude =
+        delivery
+          ?.riderLocation
+          ?.latitude;
+
+      const latestLongitude =
+        delivery
+          ?.riderLocation
+          ?.longitude;
+
+      const hasLatestLocation =
+        latestLatitude !==
+          undefined &&
+        latestLatitude !==
+          null &&
+        latestLongitude !==
+          undefined &&
+        latestLongitude !==
+          null;
+
+      if (hasLatestLocation) {
+        const proofLocation =
+          normalizeCoordinate(
+            latestLatitude,
+            latestLongitude,
+            "Rider"
+          );
+
+        proofLatitude =
+          proofLocation.latitude;
+
+        proofLongitude =
+          proofLocation.longitude;
+      }
+    }
+
+    /*
+     * GPS accuracy.
+     */
+    let accuracy =
+      null;
+
+    if (
+      proofData?.accuracy !==
+        undefined &&
+      proofData?.accuracy !==
+        null
+    ) {
+      accuracy =
+        Number(
+          proofData.accuracy
+        );
+
+      if (
+        !Number.isFinite(
+          accuracy
+        ) ||
+        accuracy < 0
+      ) {
+        const error =
+          new Error(
+            "Proof of delivery location accuracy is invalid."
+          );
+
+        error.statusCode =
+          400;
+
+        throw error;
+      }
+    } else if (
+      delivery
+        ?.riderLocation
+        ?.accuracy !==
+        undefined &&
+      delivery
+        ?.riderLocation
+        ?.accuracy !==
+        null
+    ) {
+      accuracy =
+        Number(
+          delivery
+            .riderLocation
+            .accuracy
+        );
+
+      if (
+        !Number.isFinite(
+          accuracy
+        ) ||
+        accuracy < 0
+      ) {
+        accuracy =
+          null;
+      }
+    }
+
+    const now =
+      new Date();
+
+    /*
+     * =====================================================
+     * SAVE BACKEND-CONFIRMED PROOF
+     * =====================================================
+     */
+
+    delivery.proofOfDelivery = {
+      imageUrl,
+
+      uploadedAt:
+        now,
+
+      latitude:
+        proofLatitude,
+
+      longitude:
+        proofLongitude,
+
+      accuracy,
+    };
+
     await delivery.save();
 
-    await order.save();
-
+    /*
+     * Return populated delivery.
+     *
+     * The frontend will use:
+     *
+     * delivery.proofOfDelivery.imageUrl
+     *
+     * as the source of truth for enabling
+     * Mark as Delivered.
+     */
     return populateDelivery(
       delivery._id
     );
   };
+
 
 /*
  * =========================================================
  * RIDER
  * MARK DELIVERY AS DELIVERED
  * =========================================================
+ *
+ * SECURITY RULE:
+ *
+ * The rider cannot complete the delivery
+ * unless a Proof of Delivery image has
+ * already been successfully uploaded and
+ * saved in:
+ *
+ * delivery.proofOfDelivery.imageUrl
+ *
+ * This protects the system even if someone
+ * bypasses the disabled mobile button.
+ * =========================================================
  */
+
 export const markDeliveryDelivered =
   async (
     deliveryId,
@@ -2241,6 +2716,10 @@ export const markDeliveryDelivered =
       throw error;
     }
 
+    /*
+     * Delivery must already be travelling
+     * toward the customer.
+     */
     if (
       delivery.status !==
       "out_for_delivery"
@@ -2248,6 +2727,59 @@ export const markDeliveryDelivered =
       const error =
         new Error(
           "Only out-for-delivery orders can be marked as delivered."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * =====================================================
+     * PROOF OF DELIVERY REQUIREMENT
+     * =====================================================
+     *
+     * Taking a local photo is NOT enough.
+     *
+     * The image must have successfully reached
+     * the backend and imageUrl must already be
+     * stored in MongoDB.
+     * =====================================================
+     */
+
+    const proofImageUrl =
+      String(
+        delivery
+          ?.proofOfDelivery
+          ?.imageUrl ||
+          ""
+      ).trim();
+
+    if (!proofImageUrl) {
+      const error =
+        new Error(
+          "Proof of delivery must be successfully uploaded before this delivery can be marked as delivered."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * Make sure the upload itself was
+     * backend-confirmed.
+     */
+    if (
+      !delivery
+        ?.proofOfDelivery
+        ?.uploadedAt
+    ) {
+      const error =
+        new Error(
+          "Proof of delivery upload has not been confirmed yet."
         );
 
       error.statusCode =
@@ -2314,6 +2846,9 @@ export const markDeliveryDelivered =
         ).trim();
     }
 
+    /*
+     * Complete associated order.
+     */
     order.orderStatus =
       "delivered";
 
@@ -2321,7 +2856,8 @@ export const markDeliveryDelivered =
       now;
 
     /*
-     * COD becomes paid when delivered.
+     * COD becomes paid only when
+     * delivery is successfully completed.
      */
     if (
       order.paymentMethod ===
@@ -2335,21 +2871,45 @@ export const markDeliveryDelivered =
     }
 
     /*
-     * Rider becomes available again.
+     * Rider becomes available again
+     * only after successful completion.
      */
     rider.isAvailable =
       true;
 
-    await delivery.save();
+await delivery.save();
 
-    await order.save();
+await order.save();
 
-    await rider.save();
+await rider.save();
 
-    return populateDelivery(
-      delivery._id
-    );
-  };
+await createNotificationSafely({
+  recipient: riderUserId,
+
+  role: "rider",
+
+  type: "delivery_completed",
+
+  title: "Delivery Completed",
+
+  message:
+    "The delivery has been completed successfully.",
+
+  delivery: delivery._id,
+
+  order: order._id,
+
+  metadata: {
+    screen: "delivery",
+  },
+});
+
+return populateDelivery(
+  delivery._id
+);
+
+};
+
 
 /*
  * =========================================================

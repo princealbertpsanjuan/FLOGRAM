@@ -17,6 +17,7 @@ import {
   pickedUp,
   startDelivery,
   updateLocation,
+  uploadProof,
 } from "./delivery.controller.js";
 
 import {
@@ -27,6 +28,10 @@ import {
 
 import authenticate from "../../middleware/authenticate.js";
 import authorize from "../../middleware/authorize.js";
+
+import {
+  deliveryProofUpload,
+} from "../../middleware/upload.js";
 
 const deliveryRouter =
   Router();
@@ -343,6 +348,71 @@ deliveryRouter.patch(
 /*
  * =========================================================
  * RIDER
+ * UPLOAD PROOF OF DELIVERY
+ * =========================================================
+ *
+ * POST
+ * /api/v1/deliveries/:deliveryId/proof
+ *
+ * Content-Type:
+ *
+ * multipart/form-data
+ *
+ * Required file field:
+ *
+ * proofImage
+ *
+ * Optional fields:
+ *
+ * latitude
+ * longitude
+ * accuracy
+ *
+ * RULE:
+ *
+ * Delivery must already be:
+ *
+ * out_for_delivery
+ *
+ * Only the assigned rider can upload
+ * proof for the delivery.
+ *
+ * File validation:
+ *
+ * JPG / JPEG / PNG only
+ * Maximum 5 MB
+ *
+ * The image will be stored under:
+ *
+ * uploads/deliveries/proofs/
+ *
+ * After a successful upload, the backend
+ * stores:
+ *
+ * proofOfDelivery.imageUrl
+ * proofOfDelivery.uploadedAt
+ * proofOfDelivery.latitude
+ * proofOfDelivery.longitude
+ * proofOfDelivery.accuracy
+ *
+ * The mobile app must wait for this
+ * backend response before enabling
+ * Mark as Delivered.
+ * =========================================================
+ */
+deliveryRouter.post(
+  "/:deliveryId/proof",
+  authenticate,
+  authorize("rider"),
+  deliveryProofUpload.single(
+    "proofImage"
+  ),
+  uploadProof
+);
+
+/*
+ * =========================================================
+ * RIDER
  * MARK DELIVERY AS DELIVERED
  * =========================================================
  *
@@ -351,6 +421,16 @@ deliveryRouter.patch(
  * out_for_delivery
  *     ↓
  * delivered
+ *
+ * REQUIREMENT:
+ *
+ * Proof of Delivery must already have
+ * been successfully uploaded.
+ *
+ * Backend checks:
+ *
+ * proofOfDelivery.imageUrl
+ * proofOfDelivery.uploadedAt
  *
  * Also:
  *
@@ -418,6 +498,7 @@ deliveryRouter.patch(
  * /:deliveryId/accept
  * /:deliveryId/pickup
  * /:deliveryId/start
+ * /:deliveryId/proof
  * /:deliveryId/delivered
  * /:deliveryId/cancel
  *

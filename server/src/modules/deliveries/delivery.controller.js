@@ -1,3 +1,5 @@
+import fs from "fs";
+
 import {
   acceptDeliveryAssignment,
   cancelDelivery,
@@ -11,6 +13,7 @@ import {
   getSellerDeliveries,
   markDeliveryDelivered,
   markDeliveryPickedUp,
+  saveProofOfDelivery,
   startOutForDelivery,
   updateRiderLocation,
 } from "./delivery.service.js";
@@ -496,9 +499,11 @@ export const pickedUp = async (
  * =========================================================
  *
  * Delivery:
+ *
  * picked_up -> out_for_delivery
  *
  * Order:
+ *
  * ready_for_delivery -> out_for_delivery
  */
 export const startDelivery = async (
@@ -532,15 +537,213 @@ export const startDelivery = async (
 /*
  * =========================================================
  * RIDER
+ * UPLOAD PROOF OF DELIVERY
+ * =========================================================
+ *
+ * POST
+ * /api/v1/deliveries/:deliveryId/proof
+ *
+ * Content-Type:
+ * multipart/form-data
+ *
+ * File field:
+ *
+ * proofImage
+ *
+ * Optional fields:
+ *
+ * latitude
+ * longitude
+ * accuracy
+ *
+ * IMPORTANT:
+ *
+ * Multer uploads the image first.
+ *
+ * After a successful file upload,
+ * this controller calls
+ * saveProofOfDelivery().
+ *
+ * The service verifies:
+ *
+ * - delivery exists
+ * - rider owns delivery
+ * - rider is approved and active
+ * - status is out_for_delivery
+ *
+ * Only after the service succeeds is
+ * proofOfDelivery.imageUrl stored.
+ *
+ * If service validation fails after
+ * Multer has already written the file,
+ * the uploaded file is deleted to avoid
+ * orphaned files.
+ * =========================================================
+ */
+export const uploadProof = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    /*
+     * =====================================================
+     * VERIFY MULTER FILE
+     * =====================================================
+     */
+    if (!req.file) {
+      const error =
+        new Error(
+          "Proof of delivery image is required."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    /*
+     * =====================================================
+     * CREATE PUBLIC IMAGE PATH
+     * =====================================================
+     *
+     * Do not save:
+     *
+     * http://localhost:5000
+     *
+     * or a local Wi-Fi IP in MongoDB.
+     *
+     * Store a relative URL instead:
+     *
+     * /uploads/deliveries/proofs/file.jpg
+     *
+     * The frontend can combine this with
+     * the backend origin.
+     * =====================================================
+     */
+    const imageUrl =
+      `/uploads/deliveries/proofs/${req.file.filename}`;
+
+    /*
+     * =====================================================
+     * SAVE BACKEND-CONFIRMED PROOF
+     * =====================================================
+     */
+    const delivery =
+      await saveProofOfDelivery(
+        req.params.deliveryId,
+        req.user.userId,
+        {
+          imageUrl,
+
+          latitude:
+            req.body?.latitude,
+
+          longitude:
+            req.body?.longitude,
+
+          accuracy:
+            req.body?.accuracy,
+        }
+      );
+
+    /*
+     * =====================================================
+     * SUCCESS
+     * =====================================================
+     *
+     * The frontend must only consider
+     * the upload successful after this
+     * response is received.
+     *
+     * It can then check:
+     *
+     * delivery.proofOfDelivery.imageUrl
+     *
+     * before enabling Mark as Delivered.
+     * =====================================================
+     */
+    res.status(200).json({
+      success:
+        true,
+
+      message:
+        "Proof of delivery uploaded successfully.",
+
+      data: {
+        delivery,
+      },
+    });
+  } catch (error) {
+    /*
+     * =====================================================
+     * CLEAN UP FAILED UPLOAD
+     * =====================================================
+     *
+     * Multer writes the image before the
+     * service performs its delivery checks.
+     *
+     * Example:
+     *
+     * image saved
+     *      ↓
+     * service sees wrong delivery status
+     *      ↓
+     * request rejected
+     *
+     * We remove the uploaded image so
+     * unused files are not left behind.
+     * =====================================================
+     */
+    if (
+      req.file?.path &&
+      fs.existsSync(
+        req.file.path
+      )
+    ) {
+      try {
+        fs.unlinkSync(
+          req.file.path
+        );
+      } catch (
+        cleanupError
+      ) {
+        console.error(
+          "Unable to remove failed proof of delivery upload:",
+          cleanupError
+        );
+      }
+    }
+
+    next(error);
+  }
+};
+
+/*
+ * =========================================================
+ * RIDER
  * MARK DELIVERY AS DELIVERED
  * =========================================================
  *
  * Service also:
  *
+ * - requires successfully uploaded POD
  * - Order -> delivered
  * - COD -> paid
  * - PayMongo remains webhook-controlled
  * - Rider -> available
+ *
+ * IMPORTANT:
+ *
+ * markDeliveryDelivered() performs the
+ * Proof of Delivery check again.
+ *
+ * Therefore, even if someone bypasses
+ * the disabled mobile button, this
+ * controller cannot complete a delivery
+ * without backend-confirmed proof.
+ * =========================================================
  */
 export const delivered = async (
   req,
