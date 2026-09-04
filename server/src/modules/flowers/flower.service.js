@@ -407,13 +407,16 @@ export const getPublicFlowers =
     }
 
     return Flower.find(query)
-      .populate(
-        "florist",
-        "shopName address"
-      )
-      .sort({
-        createdAt: -1,
-      });
+  .populate(
+    "florist",
+    "shopName address"
+  )
+  .select(
+    "-imageEmbedding -embeddingModel"
+  )
+  .sort({
+    createdAt: -1,
+  });
   };
 
 export const getRecommendedFlowers =

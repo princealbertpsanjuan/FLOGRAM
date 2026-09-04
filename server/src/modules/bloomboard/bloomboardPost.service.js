@@ -1,6 +1,9 @@
 import BloomboardPost from "./bloomboardPost.model.js";
+
 import BloomboardComment from "./bloomboardComment.model.js";
+
 import Florist from "../florists/florist.model.js";
+
 import User from "../auth/auth.model.js";
 
 const normalizePath = (filePath) => {
@@ -43,7 +46,9 @@ export const createBloomboardPost = async (
     const error = new Error(
       "User account was not found."
     );
+
     error.statusCode = 404;
+
     throw error;
   }
 
@@ -56,7 +61,9 @@ export const createBloomboardPost = async (
     const error = new Error(
       "Only customers and sellers can create BloomBoard posts."
     );
+
     error.statusCode = 403;
+
     throw error;
   }
 
@@ -72,7 +79,9 @@ export const createBloomboardPost = async (
       const error = new Error(
         "Florist profile was not found."
       );
+
       error.statusCode = 404;
+
       throw error;
     }
 
@@ -84,7 +93,9 @@ export const createBloomboardPost = async (
       const error = new Error(
         "Only approved and active florists can create BloomBoard posts."
       );
+
       error.statusCode = 403;
+
       throw error;
     }
   }
@@ -101,7 +112,9 @@ export const createBloomboardPost = async (
     const error = new Error(
       "A BloomBoard post must contain a caption or at least one image."
     );
+
     error.statusCode = 400;
+
     throw error;
   }
 
@@ -109,11 +122,15 @@ export const createBloomboardPost = async (
     await BloomboardPost.create({
       author: userId,
       authorRole: user.role,
+
       florist:
         florist?._id || null,
+
       caption:
         postData.caption || "",
+
       images,
+
       postType:
         postData.postType ||
         "general",
@@ -186,6 +203,35 @@ export const getBloomboardFeed = async (
   return addPostCounts(posts);
 };
 
+/*
+ * =========================================================
+ * CURRENT USER'S OWN BLOOMBOARD POSTS
+ * =========================================================
+ */
+
+export const getMyBloomboardPosts =
+  async (userId) => {
+    const posts =
+      await BloomboardPost.find({
+        author: userId,
+        isActive: true,
+      })
+        .populate(
+          "author",
+          "firstName lastName role profileImage"
+        )
+        .populate(
+          "florist",
+          "shopName shopLogo address"
+        )
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
+
+    return addPostCounts(posts);
+  };
+
 export const getBloomboardPostById =
   async (postId) => {
     const post =
@@ -207,7 +253,9 @@ export const getBloomboardPostById =
       const error = new Error(
         "BloomBoard post was not found."
       );
+
       error.statusCode = 404;
+
       throw error;
     }
 
@@ -219,8 +267,10 @@ export const getBloomboardPostById =
 
     return {
       ...post,
+
       likeCount:
         post.likes?.length || 0,
+
       commentCount,
     };
   };
@@ -241,7 +291,9 @@ export const deleteBloomboardPost =
       const error = new Error(
         "BloomBoard post was not found or does not belong to this user."
       );
+
       error.statusCode = 404;
+
       throw error;
     }
 
@@ -277,7 +329,9 @@ export const likeBloomboardPost =
       const error = new Error(
         "BloomBoard post was not found."
       );
+
       error.statusCode = 404;
+
       throw error;
     }
 
@@ -289,12 +343,16 @@ export const likeBloomboardPost =
       );
 
     if (!alreadyLiked) {
-      post.likes.push(userId);
+      post.likes.push(
+        userId
+      );
+
       await post.save();
     }
 
     return {
       liked: true,
+
       likeCount:
         post.likes.length,
     };
@@ -315,7 +373,9 @@ export const unlikeBloomboardPost =
       const error = new Error(
         "BloomBoard post was not found."
       );
+
       error.statusCode = 404;
+
       throw error;
     }
 
@@ -330,6 +390,7 @@ export const unlikeBloomboardPost =
 
     return {
       liked: false,
+
       likeCount:
         post.likes.length,
     };
@@ -350,7 +411,9 @@ export const saveBloomboardPost =
       const error = new Error(
         "BloomBoard post was not found."
       );
+
       error.statusCode = 404;
+
       throw error;
     }
 
@@ -362,7 +425,10 @@ export const saveBloomboardPost =
       );
 
     if (!alreadySaved) {
-      post.saves.push(userId);
+      post.saves.push(
+        userId
+      );
+
       await post.save();
     }
 
@@ -386,7 +452,9 @@ export const unsaveBloomboardPost =
       const error = new Error(
         "BloomBoard post was not found."
       );
+
       error.statusCode = 404;
+
       throw error;
     }
 

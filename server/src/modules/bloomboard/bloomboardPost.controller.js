@@ -3,6 +3,7 @@ import {
   deleteBloomboardPost,
   getBloomboardFeed,
   getBloomboardPostById,
+  getMyBloomboardPosts,
   getMySavedBloomboardPosts,
   likeBloomboardPost,
   saveBloomboardPost,
@@ -62,6 +63,32 @@ export const getFeed = async (
         "BloomBoard feed retrieved successfully.",
       data: {
         count: posts.length,
+        posts,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMyPosts = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const posts =
+      await getMyBloomboardPosts(
+        req.user.userId
+      );
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Your BloomBoard posts retrieved successfully.",
+      data: {
+        count:
+          posts.length,
         posts,
       },
     });

@@ -15,7 +15,10 @@ import customBouquetRequestRouter from "../modules/bloomboard/customBouquet/cust
 import orderRouter from "../modules/orders/order.routes.js";
 import deliveryRouter from "../modules/deliveries/delivery.routes.js";
 import paymentRouter from "../modules/payments/payment.routes.js";
+import cartRouter from "../modules/cart/cart.routes.js";
+import checkoutRouter from "../modules/checkout/checkout.routes.js";
 import notificationRouter from "../modules/notifications/notification.routes.js";
+
 
 const apiRouter = Router();
 
@@ -195,6 +198,16 @@ apiRouter.use(
 apiRouter.use(
   "/notifications",
   notificationRouter
+);
+
+apiRouter.use(
+  "/cart",
+  cartRouter
+);
+
+apiRouter.use(
+  "/checkout",
+  checkoutRouter
 );
 
 export default apiRouter;

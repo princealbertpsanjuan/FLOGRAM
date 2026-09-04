@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   createPost,
   getFeed,
+  getMyPosts,
   getMySavedPosts,
   getPost,
   likePost,
@@ -25,6 +26,7 @@ import {
 } from "./bloomboardPost.validation.js";
 
 import authenticate from "../../middleware/authenticate.js";
+import authorize from "../../middleware/authorize.js";
 
 import {
   bloomboardUpload,
@@ -34,8 +36,10 @@ const bloomboardPostRouter =
   Router();
 
 /*
+ * =========================================================
  * PUBLIC
  * Get BloomBoard social feed
+ * =========================================================
  */
 bloomboardPostRouter.get(
   "/",
@@ -43,10 +47,27 @@ bloomboardPostRouter.get(
 );
 
 /*
+ * =========================================================
+ * CUSTOMER
+ * Get current customer's own BloomBoard posts
+ *
+ * Keep before /:postId
+ * =========================================================
+ */
+bloomboardPostRouter.get(
+  "/mine",
+  authenticate,
+  authorize("customer"),
+  getMyPosts
+);
+
+/*
+ * =========================================================
  * AUTHENTICATED
  * Get current user's saved posts
  *
  * Keep before /:postId
+ * =========================================================
  */
 bloomboardPostRouter.get(
   "/saved/mine",
@@ -55,8 +76,10 @@ bloomboardPostRouter.get(
 );
 
 /*
+ * =========================================================
  * CUSTOMER / SELLER
  * Create BloomBoard post
+ * =========================================================
  */
 bloomboardPostRouter.post(
   "/",
@@ -71,8 +94,10 @@ bloomboardPostRouter.post(
 );
 
 /*
+ * =========================================================
  * AUTHENTICATED
  * Add comment
+ * =========================================================
  */
 bloomboardPostRouter.post(
   "/:postId/comments",
@@ -83,8 +108,10 @@ bloomboardPostRouter.post(
 );
 
 /*
+ * =========================================================
  * PUBLIC
  * Get comments on a post
+ * =========================================================
  */
 bloomboardPostRouter.get(
   "/:postId/comments",
@@ -92,10 +119,12 @@ bloomboardPostRouter.get(
 );
 
 /*
+ * =========================================================
  * AUTHENTICATED
  * Delete own comment
  *
  * Keep before /:postId
+ * =========================================================
  */
 bloomboardPostRouter.delete(
   "/comments/:commentId",
@@ -104,8 +133,10 @@ bloomboardPostRouter.delete(
 );
 
 /*
+ * =========================================================
  * AUTHENTICATED
  * Like post
+ * =========================================================
  */
 bloomboardPostRouter.post(
   "/:postId/like",
@@ -114,8 +145,10 @@ bloomboardPostRouter.post(
 );
 
 /*
+ * =========================================================
  * AUTHENTICATED
  * Unlike post
+ * =========================================================
  */
 bloomboardPostRouter.delete(
   "/:postId/like",
@@ -124,8 +157,10 @@ bloomboardPostRouter.delete(
 );
 
 /*
+ * =========================================================
  * AUTHENTICATED
  * Save post
+ * =========================================================
  */
 bloomboardPostRouter.post(
   "/:postId/save",
@@ -134,8 +169,10 @@ bloomboardPostRouter.post(
 );
 
 /*
+ * =========================================================
  * AUTHENTICATED
  * Unsave post
+ * =========================================================
  */
 bloomboardPostRouter.delete(
   "/:postId/save",
@@ -144,8 +181,10 @@ bloomboardPostRouter.delete(
 );
 
 /*
+ * =========================================================
  * AUTHOR
  * Delete own post
+ * =========================================================
  */
 bloomboardPostRouter.delete(
   "/:postId",
@@ -154,10 +193,12 @@ bloomboardPostRouter.delete(
 );
 
 /*
+ * =========================================================
  * PUBLIC
  * Get one BloomBoard post
  *
  * Keep this last.
+ * =========================================================
  */
 bloomboardPostRouter.get(
   "/:postId",

@@ -1,6 +1,15 @@
 import AiConversation from "./aiConversation.model.js";
 import AiMessage from "./aiMessage.model.js";
-import User from "../../auth/auth.model.js";
+
+import CustomBouquetRequest from "../customBouquet/customBouquetRequest.model.js";
+
+import {
+  createAiConversation,
+} from "./aiConversation.service.js";
+
+export {
+  createAiConversation,
+};
 
 import {
   generateGrokImage,
@@ -15,9 +24,18 @@ import {
   getRecommendedFlowers,
 } from "../../flowers/flower.service.js";
 
-const normalizeStringArray = (
-  value
-) => {
+import {
+  getProposalContextForAi,
+  selectCustomBouquetProposal,
+} from "../customBouquet/customBouquetProposal.service.js";
+
+/*
+ * =========================================================
+ * HELPERS
+ * =========================================================
+ */
+
+const normalizeStringArray = (value) => {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -33,9 +51,7 @@ const normalizeStringArray = (
   ];
 };
 
-const normalizeNumber = (
-  value
-) => {
+const normalizeNumber = (value) => {
   if (
     value === undefined ||
     value === null ||
@@ -52,9 +68,7 @@ const normalizeNumber = (
     : number;
 };
 
-const cleanJsonText = (
-  text
-) => {
+const cleanJsonText = (text) => {
   return String(text || "")
     .trim()
     .replace(
@@ -72,9 +86,7 @@ const cleanJsonText = (
     .trim();
 };
 
-const parseGrokJson = (
-  text
-) => {
+const parseGrokJson = (text) => {
   try {
     return JSON.parse(
       cleanJsonText(text)
@@ -181,6 +193,12 @@ const mergePreferences = (
   };
 };
 
+/*
+ * =========================================================
+ * CONVERSATION HISTORY
+ * =========================================================
+ */
+
 const buildConversationHistory = (
   messages = []
 ) => {
@@ -188,8 +206,7 @@ const buildConversationHistory = (
     .filter(
       (message) =>
         message.role === "user" ||
-        message.role ===
-          "assistant"
+        message.role === "assistant"
     )
     .map((message) => {
       let content =
@@ -215,6 +232,26 @@ const buildConversationHistory = (
           "[FLOGRAM generated a bouquet inspiration image in this message.]";
       }
 
+      if (
+        message.metadata
+          ?.eventType ===
+        "custom_bouquet_proposal_received"
+      ) {
+        content =
+          `${content}\n\n` +
+          "[A real FLOGRAM seller proposal was received.]";
+      }
+
+      if (
+        message.metadata
+          ?.eventType ===
+        "custom_bouquet_proposal_selected"
+      ) {
+        content =
+          `${content}\n\n` +
+          "[The customer selected a real FLOGRAM seller proposal.]";
+      }
+
       return {
         role:
           message.role,
@@ -228,26 +265,337 @@ const buildConversationHistory = (
     );
 };
 
+/*
+ * =========================================================
+ * LINKED CUSTOM BOUQUET REQUEST
+ * =========================================================
+ */
+
+const getLinkedCustomBouquetRequest =
+  async (
+    conversationId,
+    customerId
+  ) => {
+    return CustomBouquetRequest.findOne({
+      aiConversation:
+        conversationId,
+
+      customer:
+        customerId,
+    })
+      .sort({
+        createdAt:
+          -1,
+      })
+      .select(
+        "_id customer aiConversation status selectedProposal florist quotedPrice createdAt"
+      );
+  };
+
+/*
+ * =========================================================
+ * LOAD REAL PROPOSAL CONTEXT
+ * =========================================================
+ */
+
+const loadProposalContext =
+  async (
+    conversationId,
+    customerId
+  ) => {
+    const request =
+      await getLinkedCustomBouquetRequest(
+        conversationId,
+        customerId
+      );
+
+    if (!request) {
+      return {
+        request:
+          null,
+
+        proposalContext:
+          null,
+      };
+    }
+
+    try {
+      const proposalContext =
+        await getProposalContextForAi(
+          request._id,
+          customerId
+        );
+
+      return {
+        request,
+        proposalContext,
+      };
+    } catch (error) {
+      console.error(
+        "Unable to load proposal context:",
+        error.message
+      );
+
+      return {
+        request,
+        proposalContext:
+          null,
+      };
+    }
+  };
+
+/*
+ * =========================================================
+ * PROPOSAL HELPERS
+ * =========================================================
+ */
+
+const getAvailableProposalById = (
+  proposalContext,
+  proposalId
+) => {
+  if (
+    !proposalContext ||
+    !proposalId
+  ) {
+    return null;
+  }
+
+  return (
+    proposalContext
+      .availableProposals
+      ?.find(
+        (proposal) =>
+          String(
+            proposal.proposalId
+          ) ===
+          String(proposalId)
+      ) ||
+    null
+  );
+};
+
+const resolveProposalSelection = (
+  proposalContext,
+  interpretation
+) => {
+  if (
+    !proposalContext ||
+    !Array.isArray(
+      proposalContext.availableProposals
+    )
+  ) {
+    return null;
+  }
+
+  const proposals =
+    proposalContext
+      .availableProposals;
+
+  /*
+   * Exact proposal ID supplied by Grok.
+   */
+
+  if (
+    interpretation.proposalId
+  ) {
+    const byId =
+      proposals.find(
+        (proposal) =>
+          String(
+            proposal.proposalId
+          ) ===
+          String(
+            interpretation
+              .proposalId
+          )
+      );
+
+    if (byId) {
+      return byId;
+    }
+  }
+
+  /*
+   * Proposal number.
+   *
+   * Example:
+   * "proposal 2"
+   */
+
+  const proposalNumber =
+    Number(
+      interpretation
+        .proposalNumber
+    );
+
+  if (
+    Number.isInteger(
+      proposalNumber
+    ) &&
+    proposalNumber > 0
+  ) {
+    const byNumber =
+      proposals.find(
+        (proposal) =>
+          Number(
+            proposal
+              .proposalNumber
+          ) ===
+          proposalNumber
+      );
+
+    if (byNumber) {
+      return byNumber;
+    }
+  }
+
+  /*
+   * Shop name fallback.
+   *
+   * Grok may return the exact
+   * shop name from the supplied context.
+   */
+
+  const selectedShopName =
+    String(
+      interpretation
+        .shopName || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  if (selectedShopName) {
+    const matches =
+      proposals.filter(
+        (proposal) =>
+          String(
+            proposal.shopName ||
+            ""
+          )
+            .trim()
+            .toLowerCase() ===
+          selectedShopName
+      );
+
+    if (
+      matches.length ===
+      1
+    ) {
+      return matches[0];
+    }
+  }
+
+  return null;
+};
+
+const buildProposalPromptContext = (
+  proposalContext
+) => {
+  if (!proposalContext) {
+    return {
+      customBouquetRequestId:
+        null,
+
+      requestStatus:
+        null,
+
+      selectedProposalId:
+        null,
+
+      canSelectProposal:
+        false,
+
+      availableProposals:
+        [],
+    };
+  }
+
+  return {
+    customBouquetRequestId:
+      proposalContext
+        .customBouquetRequestId,
+
+    requestStatus:
+      proposalContext
+        .requestStatus,
+
+    selectedProposalId:
+      proposalContext
+        .selectedProposalId,
+
+    canSelectProposal:
+      proposalContext
+        .canSelectProposal,
+
+    availableProposals:
+      (
+        proposalContext
+          .availableProposals ||
+        []
+      ).map(
+        (proposal) => ({
+          proposalId:
+            proposal.proposalId,
+
+          proposalNumber:
+            proposal.proposalNumber,
+
+          floristId:
+            proposal.floristId,
+
+          shopName:
+            proposal.shopName,
+
+          quotedPrice:
+            proposal.quotedPrice,
+
+          sellerResponse:
+            proposal.sellerResponse,
+
+          status:
+            proposal.status,
+        })
+      ),
+  };
+};
+
+/*
+ * =========================================================
+ * INTENT INTERPRETER
+ * =========================================================
+ */
+
 const interpretCustomerMessage =
   async (
     trimmedContent,
     conversationMessages,
-    currentPreferences
+    currentPreferences,
+    proposalContext = null
   ) => {
     const history =
       buildConversationHistory(
         conversationMessages
       );
 
+    const proposalPromptContext =
+      buildProposalPromptContext(
+        proposalContext
+      );
+
     const result =
       await generateGrokResponse([
         {
-          role: "system",
+          role:
+            "system",
 
           content: `
 You are the intent and bouquet-preference interpreter for the FLOGRAM BloomBoard AI Bouquet Assistant.
 
-Analyze the customer's latest message together with the previous conversation and remembered preferences.
+Analyze the customer's latest message together with:
+- previous conversation
+- remembered bouquet preferences
+- REAL FLOGRAM seller proposal context supplied by the backend
 
 Return ONLY valid JSON.
 
@@ -266,7 +614,10 @@ Use exactly this structure:
     "bouquetSize": null,
     "wrapping": null,
     "specialInstructions": []
-  }
+  },
+  "proposalId": null,
+  "proposalNumber": null,
+  "shopName": null
 }
 
 Allowed intent values:
@@ -274,61 +625,172 @@ Allowed intent values:
 - "conversation"
 - "product_search"
 - "image_generation"
+- "proposal_question"
+- "select_proposal"
 
-Intent rules:
+=========================================================
+PRODUCT SEARCH
+=========================================================
 
-1. Use "product_search" when the customer wants to:
-   - find
-   - search
-   - show
-   - recommend
-   - browse
-   - buy
-   - see available bouquets
-   - see products that can actually be purchased from FLOGRAM
+Use "product_search" when the customer wants to:
+- find bouquets
+- search bouquets
+- show bouquets
+- recommend bouquets
+- browse bouquets
+- buy an existing bouquet
+- see available bouquet products
+- see products that can actually be purchased from FLOGRAM
 
-2. Use "image_generation" when the customer explicitly asks to:
-   - generate an image
-   - create a bouquet image
-   - make an inspiration image
-   - visualize a bouquet
-   - generate a bouquet design
-   - show what a custom bouquet could look like as a generated design
+=========================================================
+IMAGE GENERATION
+=========================================================
 
-3. Use "conversation" for normal bouquet planning, questions, advice, preference gathering, and general discussion.
+Use "image_generation" only when the customer explicitly asks to:
+- generate an image
+- create a bouquet image
+- make an inspiration image
+- visualize a bouquet
+- generate a bouquet design
+- show what a custom bouquet could look like
 
-Preference extraction rules:
+=========================================================
+PROPOSAL QUESTION
+=========================================================
 
-- Extract only preferences that the customer has actually provided or clearly confirmed.
+Use "proposal_question" when the customer wants information about REAL seller proposals, including:
+
+- "Which proposal is cheapest?"
+- "Which is the lowest price?"
+- "Compare the proposals."
+- "What is proposal 2 offering?"
+- "Which florist has the best price?"
+- "What are my offers?"
+- "How many proposals do I have?"
+- "Tell me about Maria's proposal."
+
+A proposal question does NOT select a proposal.
+
+Questions such as:
+- "Which is best?"
+- "Which would you recommend?"
+- "Which is cheapest?"
+- "Should I choose proposal 2?"
+
+must NOT be treated as selection.
+
+They are proposal_question.
+
+=========================================================
+SELECT PROPOSAL
+=========================================================
+
+Use "select_proposal" ONLY when the customer clearly and explicitly instructs FLOGRAM to choose, select, accept, pick, or proceed with ONE real seller proposal.
+
+Examples:
+
+- "Choose proposal 2."
+- "Select proposal 1."
+- "I want proposal 3."
+- "Accept Maria Flower Shop's proposal."
+- "Go with the ₱1,500 proposal."
+- "Pick the second offer."
+- "Yes, choose proposal 2."
+
+Do NOT select automatically.
+
+Do NOT interpret:
+- asking which proposal is best
+- asking which is cheapest
+- asking for a recommendation
+- comparing proposals
+
+as permission to select.
+
+A customer must make an explicit selection.
+
+=========================================================
+PROPOSAL SECURITY RULES
+=========================================================
+
+The proposal records below come from the FLOGRAM database.
+
+You MUST obey all of these rules:
+
+1. Never invent a proposal.
+
+2. Never invent a proposalId.
+
+3. Never invent a proposal number.
+
+4. Never invent a florist or shop.
+
+5. Never change a quoted price.
+
+6. Never change the seller response.
+
+7. Never claim that a proposal exists unless it appears in REAL PROPOSAL CONTEXT.
+
+8. If intent is "select_proposal", proposalId MUST exactly match one proposalId in REAL PROPOSAL CONTEXT.
+
+9. If the customer's selection is ambiguous, return:
+   "intent": "proposal_question"
+   and proposalId = null.
+
+10. If there are no proposals, never invent one.
+
+11. If canSelectProposal is false, do not create a new selection.
+
+12. The backend, not you, makes the final authorization decision.
+
+=========================================================
+PREFERENCE EXTRACTION
+=========================================================
+
+- Extract only preferences actually provided or clearly confirmed.
 - Do not invent missing preferences.
 - Budget values must be numbers only.
-- "under 1500", "up to 1500", and similar phrases mean maxBudget = 1500.
+- "under 1500" or "up to 1500" means maxBudget = 1500.
 - "at least 1000" means minBudget = 1000.
-- Keep flower names concise, for example "Rose", "Sunflower", "Tulip", "Lily".
-- Keep colors concise, for example "Red", "Pink", "White", "Yellow".
-- Preserve useful design details in styles, theme, bouquetSize, wrapping, or specialInstructions.
-- If the newest message says "show me the best options again", use the remembered preferences and classify it as product_search.
-- If the newest message says "generate it", "make an image of it", or similar wording, use the remembered bouquet preferences and classify it as image_generation.
+- Keep flower names concise.
+- Keep colors concise.
+- Preserve useful design details.
+- If the newest message says "show me the best options again",
+  use remembered preferences and classify as product_search.
+- If it says "generate it" or "make an image of it",
+  use remembered preferences and classify as image_generation.
 
 Do not include Markdown.
-Do not include an explanation outside the JSON.
+Do not include explanation outside the JSON.
           `.trim(),
         },
 
         {
-          role: "system",
+          role:
+            "system",
 
           content:
             `Remembered FLOGRAM bouquet preferences:\n${JSON.stringify(
               currentPreferences ||
-                {}
+              {}
+            )}`,
+        },
+
+        {
+          role:
+            "system",
+
+          content:
+            `REAL FLOGRAM PROPOSAL CONTEXT:\n${JSON.stringify(
+              proposalPromptContext
             )}`,
         },
 
         ...history,
 
         {
-          role: "user",
+          role:
+            "user",
 
           content:
             trimmedContent,
@@ -352,6 +814,15 @@ Do not include an explanation outside the JSON.
 
         preferences:
           {},
+
+        proposalId:
+          null,
+
+        proposalNumber:
+          null,
+
+        shopName:
+          null,
       };
     }
 
@@ -360,6 +831,8 @@ Do not include an explanation outside the JSON.
         "conversation",
         "product_search",
         "image_generation",
+        "proposal_question",
+        "select_proposal",
       ]);
 
     return {
@@ -376,13 +849,44 @@ Do not include an explanation outside the JSON.
           "object"
           ? parsed.preferences
           : {},
+
+      proposalId:
+        parsed.proposalId
+          ? String(
+              parsed.proposalId
+            )
+          : null,
+
+      proposalNumber:
+        normalizeNumber(
+          parsed.proposalNumber
+        ),
+
+      shopName:
+        parsed.shopName
+          ? String(
+              parsed.shopName
+            ).trim()
+          : null,
     };
   };
 
+/*
+ * =========================================================
+ * NORMAL CONVERSATION SYSTEM PROMPT
+ * =========================================================
+ */
+
 const getConversationSystemPrompt =
   (
-    preferences
+    preferences,
+    proposalContext = null
   ) => {
+    const proposalPromptContext =
+      buildProposalPromptContext(
+        proposalContext
+      );
+
     return `
 You are the FLOGRAM BloomBoard AI Bouquet Assistant.
 
@@ -403,6 +907,7 @@ You can help with:
 - decorations
 - customized bouquet requests
 - bouquet recommendations
+- explaining real seller proposals
 
 Remembered customer bouquet preferences:
 
@@ -410,13 +915,19 @@ ${JSON.stringify(
   preferences || {}
 )}
 
+REAL FLOGRAM SELLER PROPOSAL CONTEXT:
+
+${JSON.stringify(
+  proposalPromptContext
+)}
+
 Conversation behavior:
 
 - Be friendly, natural, helpful, and concise.
-- Use the remembered preferences when relevant.
-- Ask useful follow-up questions only when important details are still missing.
-- Do not repeatedly ask for information already supplied by the customer.
-- Prices should be written in Philippine pesos when discussing the customer's stated budget.
+- Use remembered preferences when relevant.
+- Ask useful follow-up questions only when important details are missing.
+- Do not repeatedly ask for information already supplied.
+- Prices should be written in Philippine pesos.
 
 Important FLOGRAM rules:
 
@@ -424,32 +935,52 @@ Important FLOGRAM rules:
 
 2. Never invent florist names, shop names, prices, product availability, delivery availability, or marketplace information.
 
-3. If the customer asks to see real bouquets they can purchase, FLOGRAM will search its MongoDB marketplace separately.
+3. Never invent seller proposals.
 
-4. Do not pretend you searched FLOGRAM unless real marketplace data is provided by the backend.
+4. Never invent proposal IDs.
 
-5. When helping create a customized bouquet, consider:
-   - occasion
-   - budget
-   - flowers
-   - colors
-   - theme
-   - style
-   - bouquet size
-   - wrapping
-   - ribbons
-   - decorations
-   - special instructions
+5. Never alter seller proposal prices or descriptions.
 
-6. If the customer wants an inspiration image, FLOGRAM uses Grok Imagine separately.
+6. Only discuss seller proposals contained in REAL FLOGRAM SELLER PROPOSAL CONTEXT.
 
-7. Do not claim an image has been generated unless FLOGRAM actually provides the generated image result.
+7. Never claim the customer selected a proposal unless the backend actually completed the selection.
 
-8. Stay primarily focused on flowers, bouquets, BloomBoard, bouquet customization, and related florist assistance.
+8. Asking for advice, comparison, cheapest price, or recommendation is NOT permission to select a proposal.
+
+9. A proposal requires an explicit customer selection before checkout.
+
+10. If the customer asks to see real bouquet products, FLOGRAM searches its MongoDB marketplace separately.
+
+11. Do not pretend you searched FLOGRAM unless real marketplace data is provided.
+
+12. When helping create a customized bouquet, consider:
+    - occasion
+    - budget
+    - flowers
+    - colors
+    - theme
+    - style
+    - bouquet size
+    - wrapping
+    - ribbons
+    - decorations
+    - special instructions
+
+13. If the customer wants an inspiration image, FLOGRAM uses Grok Imagine separately.
+
+14. Do not claim an image has been generated unless FLOGRAM actually provides it.
+
+15. Stay primarily focused on flowers, bouquets, BloomBoard, bouquet customization, real seller proposals, and related florist assistance.
 
 Your goal is to make bouquet planning feel like a natural conversation with an experienced bouquet design assistant.
     `.trim();
   };
+
+/*
+ * =========================================================
+ * PRODUCT CONTEXT
+ * =========================================================
+ */
 
 const buildProductContext = (
   flowers = []
@@ -457,7 +988,9 @@ const buildProductContext = (
   return flowers.map(
     (flower) => ({
       id:
-        String(flower._id),
+        String(
+          flower._id
+        ),
 
       name:
         flower.name,
@@ -472,14 +1005,16 @@ const buildProductContext = (
         flower.category,
 
       occasion:
-        flower.occasion || [],
+        flower.occasion ||
+        [],
 
       flowerTypes:
         flower.flowerTypes ||
         [],
 
       colors:
-        flower.colors || [],
+        flower.colors ||
+        [],
 
       florist:
         flower.florist
@@ -510,89 +1045,74 @@ const buildProductContext = (
   );
 };
 
-export const createAiConversation =
-  async (
-    customerId
-  ) => {
-    const customer =
-      await User.findById(
-        customerId
-      );
+/*
+ * =========================================================
+ * PROPOSAL FALLBACK TEXT
+ * =========================================================
+ */
 
-    if (!customer) {
-      const error =
-        new Error(
-          "Customer account was not found."
-        );
+const buildProposalFallbackText = (
+  proposalContext
+) => {
+  const proposals =
+    proposalContext
+      ?.availableProposals ||
+    [];
 
-      error.statusCode = 404;
+  if (
+    proposals.length ===
+    0
+  ) {
+    return "There are no active seller proposals for this custom bouquet request yet. I'll only show you real proposals submitted through FLOGRAM.";
+  }
 
-      throw error;
-    }
+  const sortedByPrice =
+    [...proposals].sort(
+      (a, b) =>
+        Number(
+          a.quotedPrice
+        ) -
+        Number(
+          b.quotedPrice
+        )
+    );
 
-    if (
-      customer.role !==
-      "customer"
-    ) {
-      const error =
-        new Error(
-          "Only customer accounts can use the BloomBoard AI Bouquet Assistant."
-        );
+  const cheapest =
+    sortedByPrice[0];
 
-      error.statusCode = 403;
+  const lines =
+    proposals.map(
+      (proposal) =>
+        `Proposal ${proposal.proposalNumber}: ${proposal.shopName} — ₱${Number(
+          proposal.quotedPrice
+        ).toLocaleString(
+          "en-PH"
+        )}. ${proposal.sellerResponse}`
+    );
 
-      throw error;
-    }
+  return (
+    `You currently have ${proposals.length} real seller proposal${
+      proposals.length === 1
+        ? ""
+        : "s"
+    }.\n\n` +
+    `${lines.join(
+      "\n\n"
+    )}\n\n` +
+    `The lowest quoted price is Proposal ${cheapest.proposalNumber} from ${cheapest.shopName} at ₱${Number(
+      cheapest.quotedPrice
+    ).toLocaleString(
+      "en-PH"
+    )}.`
+  );
+};
 
-    const conversation =
-      await AiConversation.create({
-        customer:
-          customerId,
-
-        title:
-          "New Bouquet Conversation",
-
-        status:
-          "active",
-
-        preferences: {
-          occasion:
-            null,
-
-          minBudget:
-            null,
-
-          maxBudget:
-            null,
-
-          flowerTypes:
-            [],
-
-          colors:
-            [],
-
-          styles:
-            [],
-
-          theme:
-            null,
-
-          bouquetSize:
-            null,
-
-          wrapping:
-            null,
-
-          specialInstructions:
-            [],
-        },
-
-        lastMessageAt:
-          new Date(),
-      });
-
-    return conversation;
-  };
+/*
+ * =========================================================
+ * CUSTOMER
+ * GET OWN AI CONVERSATIONS
+ * =========================================================
+ */
 
 export const getMyAiConversations =
   async (
@@ -606,6 +1126,17 @@ export const getMyAiConversations =
         -1,
     });
   };
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * GET ONE AI CONVERSATION
+ * =========================================================
+ *
+ * Also returns real proposal context when this
+ * conversation is linked to a custom bouquet request.
+ * =========================================================
+ */
 
 export const getAiConversationById =
   async (
@@ -627,7 +1158,8 @@ export const getAiConversationById =
           "AI conversation was not found."
         );
 
-      error.statusCode = 404;
+      error.statusCode =
+        404;
 
       throw error;
     }
@@ -641,11 +1173,33 @@ export const getAiConversationById =
           1,
       });
 
+    const {
+      request,
+      proposalContext,
+    } =
+      await loadProposalContext(
+        conversationId,
+        customerId
+      );
+
     return {
       conversation,
+
       messages,
+
+      customBouquetRequest:
+        request,
+
+      proposalContext,
     };
   };
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * SEND AI MESSAGE
+ * =========================================================
+ */
 
 export const sendAiMessage =
   async (
@@ -671,7 +1225,8 @@ export const sendAiMessage =
           "Active AI conversation was not found."
         );
 
-      error.statusCode = 404;
+      error.statusCode =
+        404;
 
       throw error;
     }
@@ -687,10 +1242,17 @@ export const sendAiMessage =
           "Message content is required."
         );
 
-      error.statusCode = 400;
+      error.statusCode =
+        400;
 
       throw error;
     }
+
+    /*
+     * =====================================================
+     * LOAD PREVIOUS MESSAGES
+     * =====================================================
+     */
 
     const previousMessages =
       await AiMessage.find({
@@ -703,6 +1265,29 @@ export const sendAiMessage =
         })
         .lean();
 
+    /*
+     * =====================================================
+     * LOAD REAL PROPOSALS
+     * =====================================================
+     */
+
+    const {
+      request:
+        linkedRequest,
+
+      proposalContext,
+    } =
+      await loadProposalContext(
+        conversationId,
+        customerId
+      );
+
+    /*
+     * =====================================================
+     * INTERPRET CUSTOMER MESSAGE
+     * =====================================================
+     */
+
     let interpretation;
 
     try {
@@ -711,7 +1296,8 @@ export const sendAiMessage =
           trimmedContent,
           previousMessages,
           conversation.preferences ||
-            {}
+            {},
+          proposalContext
         );
     } catch (error) {
       console.error(
@@ -725,6 +1311,15 @@ export const sendAiMessage =
 
         preferences:
           {},
+
+        proposalId:
+          null,
+
+        proposalNumber:
+          null,
+
+        shopName:
+          null,
       };
     }
 
@@ -741,6 +1336,12 @@ export const sendAiMessage =
 
     conversation.preferences =
       mergedPreferences;
+
+    /*
+     * =====================================================
+     * SAVE CUSTOMER MESSAGE
+     * =====================================================
+     */
 
     const userMessage =
       await AiMessage.create({
@@ -762,6 +1363,25 @@ export const sendAiMessage =
         metadata: {
           detectedIntent:
             intent,
+
+          customBouquetRequestId:
+            linkedRequest
+              ? String(
+                  linkedRequest._id
+                )
+              : null,
+
+          detectedProposalId:
+            interpretation
+              .proposalId,
+
+          detectedProposalNumber:
+            interpretation
+              .proposalNumber,
+
+          detectedProposalShopName:
+            interpretation
+              .shopName,
         },
       });
 
@@ -775,9 +1395,766 @@ export const sendAiMessage =
     let assistantMessage;
 
     /*
-     * PRODUCT SEARCH
+     * =====================================================
+     * PROPOSAL QUESTION
+     * =====================================================
      */
+
     if (
+      intent ===
+      "proposal_question"
+    ) {
+      if (
+        !linkedRequest
+      ) {
+        assistantMessage =
+          await AiMessage.create({
+            conversation:
+              conversationId,
+
+            sender:
+              null,
+
+            role:
+              "assistant",
+
+            messageType:
+              "text",
+
+            content:
+              "This AI conversation is not linked to a custom bouquet request yet. Create a custom bouquet request first, and I'll help you review real seller proposals here.",
+
+            metadata: {
+              provider:
+                "flogram",
+
+              intent:
+                "proposal_question",
+
+              eventType:
+                "proposal_context_missing",
+
+              availableProposals:
+                [],
+            },
+          });
+      } else if (
+        !proposalContext ||
+        (
+          proposalContext
+            .availableProposals ||
+          []
+        ).length ===
+          0
+      ) {
+        assistantMessage =
+          await AiMessage.create({
+            conversation:
+              conversationId,
+
+            sender:
+              null,
+
+            role:
+              "assistant",
+
+            messageType:
+              "text",
+
+            content:
+              "There are no seller proposals for this custom bouquet request yet. I'll only compare offers that have actually been submitted through FLOGRAM.",
+
+            metadata: {
+              provider:
+                "flogram",
+
+              intent:
+                "proposal_question",
+
+              eventType:
+                "custom_bouquet_proposals_empty",
+
+              customBouquetRequestId:
+                String(
+                  linkedRequest._id
+                ),
+
+              requestStatus:
+                linkedRequest.status,
+
+              availableProposals:
+                [],
+            },
+          });
+      } else {
+        const realProposalContext =
+          buildProposalPromptContext(
+            proposalContext
+          );
+
+        let explanation;
+
+        try {
+          const grokResult =
+            await generateGrokResponse([
+              {
+                role:
+                  "system",
+
+                content: `
+You are the FLOGRAM BloomBoard AI Bouquet Assistant.
+
+The FLOGRAM backend has supplied REAL seller proposals for the customer's custom bouquet request.
+
+Use ONLY these proposal records.
+
+REAL PROPOSALS:
+
+${JSON.stringify(
+  realProposalContext
+)}
+
+Rules:
+
+- Never invent a proposal.
+- Never invent a florist.
+- Never invent a shop.
+- Never invent or modify a price.
+- Never invent or modify a seller response.
+- Proposal numbers correspond exactly to the supplied proposalNumber values.
+- Proposal IDs must never be exposed unnecessarily to the customer.
+- Prices are Philippine pesos.
+- You may compare price, seller description, and other supplied proposal information.
+- If asked which is cheapest, calculate using quotedPrice.
+- If asked which is best, explain that "best" depends on the customer's priorities and compare only supplied facts.
+- Do not pretend to know quality, delivery reliability, flower quality, or seller reputation unless that information is explicitly supplied.
+- Do NOT select a proposal.
+- Do NOT say a proposal was selected.
+- Asking for comparison or advice does not authorize a selection.
+- Keep the response concise and useful.
+                `.trim(),
+              },
+
+              {
+                role:
+                  "user",
+
+                content:
+                  trimmedContent,
+              },
+            ]);
+
+          explanation =
+            grokResult.content;
+        } catch (error) {
+          console.error(
+            "Grok proposal comparison failed:",
+            error.message
+          );
+
+          explanation =
+            buildProposalFallbackText(
+              proposalContext
+            );
+        }
+
+        assistantMessage =
+          await AiMessage.create({
+            conversation:
+              conversationId,
+
+            sender:
+              null,
+
+            role:
+              "assistant",
+
+            messageType:
+              "text",
+
+            content:
+              explanation,
+
+            metadata: {
+              provider:
+                "flogram+xai",
+
+              intent:
+                "proposal_question",
+
+              eventType:
+                "custom_bouquet_proposal_comparison",
+
+              customBouquetRequestId:
+                proposalContext
+                  .customBouquetRequestId,
+
+              requestStatus:
+                proposalContext
+                  .requestStatus,
+
+              selectedProposalId:
+                proposalContext
+                  .selectedProposalId,
+
+              canSelectProposal:
+                proposalContext
+                  .canSelectProposal,
+
+              availableProposals:
+                proposalContext
+                  .availableProposals,
+            },
+          });
+      }
+    }
+
+    /*
+     * =====================================================
+     * SELECT REAL PROPOSAL
+     * =====================================================
+     */
+
+    else if (
+      intent ===
+      "select_proposal"
+    ) {
+      /*
+       * No linked request.
+       */
+
+      if (!linkedRequest) {
+        assistantMessage =
+          await AiMessage.create({
+            conversation:
+              conversationId,
+
+            sender:
+              null,
+
+            role:
+              "assistant",
+
+            messageType:
+              "text",
+
+            content:
+              "There isn't a custom bouquet request linked to this conversation yet, so there is no seller proposal I can select.",
+
+            metadata: {
+              provider:
+                "flogram",
+
+              intent:
+                "select_proposal",
+
+              selectionCompleted:
+                false,
+
+              reason:
+                "no_linked_request",
+            },
+          });
+      }
+
+      /*
+       * No proposal context.
+       */
+
+      else if (
+        !proposalContext
+      ) {
+        assistantMessage =
+          await AiMessage.create({
+            conversation:
+              conversationId,
+
+            sender:
+              null,
+
+            role:
+              "assistant",
+
+            messageType:
+              "text",
+
+            content:
+              "I couldn't load the seller proposals for this bouquet request right now. No proposal has been selected.",
+
+            metadata: {
+              provider:
+                "flogram",
+
+              intent:
+                "select_proposal",
+
+              customBouquetRequestId:
+                String(
+                  linkedRequest._id
+                ),
+
+              selectionCompleted:
+                false,
+
+              reason:
+                "proposal_context_unavailable",
+            },
+          });
+      }
+
+      /*
+       * Request already has a selected proposal.
+       */
+
+      else if (
+        !proposalContext
+          .canSelectProposal
+      ) {
+        const selectedProposal =
+          getAvailableProposalById(
+            proposalContext,
+            proposalContext
+              .selectedProposalId
+          );
+
+        assistantMessage =
+          await AiMessage.create({
+            conversation:
+              conversationId,
+
+            sender:
+              null,
+
+            role:
+              "assistant",
+
+            messageType:
+              "text",
+
+            content:
+              selectedProposal
+                ? `You've already selected Proposal ${selectedProposal.proposalNumber} from ${selectedProposal.shopName} for ₱${Number(
+                    selectedProposal.quotedPrice
+                  ).toLocaleString(
+                    "en-PH"
+                  )}. You can proceed to checkout.`
+                : "This custom bouquet request is already closed and is no longer accepting proposal selections.",
+
+            metadata: {
+              provider:
+                "flogram",
+
+              intent:
+                "select_proposal",
+
+              eventType:
+                selectedProposal
+                  ? "custom_bouquet_proposal_already_selected"
+                  : "custom_bouquet_request_closed",
+
+              customBouquetRequestId:
+                proposalContext
+                  .customBouquetRequestId,
+
+              requestStatus:
+                proposalContext
+                  .requestStatus,
+
+              proposalId:
+                selectedProposal
+                  ?.proposalId ||
+                proposalContext
+                  .selectedProposalId ||
+                null,
+
+              shopName:
+                selectedProposal
+                  ?.shopName ||
+                null,
+
+              quotedPrice:
+                selectedProposal
+                  ?.quotedPrice ??
+                null,
+
+              canProceedToCheckout:
+                proposalContext
+                  .requestStatus ===
+                "customer_accepted",
+
+              selectionCompleted:
+                false,
+            },
+          });
+      }
+
+      /*
+       * No proposals.
+       */
+
+      else if (
+        (
+          proposalContext
+            .availableProposals ||
+          []
+        ).length ===
+        0
+      ) {
+        assistantMessage =
+          await AiMessage.create({
+            conversation:
+              conversationId,
+
+            sender:
+              null,
+
+            role:
+              "assistant",
+
+            messageType:
+              "text",
+
+            content:
+              "There are no active seller proposals to select yet. No proposal has been selected.",
+
+            metadata: {
+              provider:
+                "flogram",
+
+              intent:
+                "select_proposal",
+
+              customBouquetRequestId:
+                proposalContext
+                  .customBouquetRequestId,
+
+              requestStatus:
+                proposalContext
+                  .requestStatus,
+
+              selectionCompleted:
+                false,
+
+              availableProposals:
+                [],
+            },
+          });
+      }
+
+      /*
+       * Resolve model interpretation against
+       * REAL proposal records.
+       */
+
+      else {
+        const selectedCandidate =
+          resolveProposalSelection(
+            proposalContext,
+            interpretation
+          );
+
+        /*
+         * Ambiguous selection.
+         */
+
+        if (!selectedCandidate) {
+          assistantMessage =
+            await AiMessage.create({
+              conversation:
+                conversationId,
+
+              sender:
+                null,
+
+              role:
+                "assistant",
+
+              messageType:
+                "text",
+
+              content:
+                "I want to make sure I select the correct seller offer. Please tell me exactly which proposal you want, for example, “Choose proposal 2.” No proposal has been selected yet.",
+
+              metadata: {
+                provider:
+                  "flogram",
+
+                intent:
+                  "select_proposal",
+
+                eventType:
+                  "custom_bouquet_proposal_selection_ambiguous",
+
+                customBouquetRequestId:
+                  proposalContext
+                    .customBouquetRequestId,
+
+                requestStatus:
+                  proposalContext
+                    .requestStatus,
+
+                selectionCompleted:
+                  false,
+
+                availableProposals:
+                  proposalContext
+                    .availableProposals,
+              },
+            });
+        }
+
+        /*
+         * Real proposal identified.
+         *
+         * CRITICAL:
+         *
+         * AI does NOT modify MongoDB directly.
+         *
+         * We call the proposal service,
+         * which validates ownership,
+         * request status,
+         * proposal membership,
+         * florist validity,
+         * and performs the atomic request lock.
+         */
+
+        else {
+          try {
+            const selectionResult =
+              await selectCustomBouquetProposal(
+                proposalContext
+                  .customBouquetRequestId,
+
+                selectedCandidate
+                  .proposalId,
+
+                customerId,
+
+                trimmedContent
+              );
+
+            /*
+             * selectCustomBouquetProposal()
+             * already creates the official
+             * selection confirmation message
+             * inside the AI conversation.
+             *
+             * Retrieve that real message instead
+             * of creating a duplicate.
+             */
+
+            assistantMessage =
+              await AiMessage.findOne({
+                conversation:
+                  conversationId,
+
+                "metadata.eventType":
+                  "custom_bouquet_proposal_selected",
+
+                "metadata.proposalId":
+                  String(
+                    selectedCandidate
+                      .proposalId
+                  ),
+              }).sort({
+                createdAt:
+                  -1,
+              });
+
+            /*
+             * Safety fallback.
+             *
+             * This should normally not execute
+             * because the proposal service
+             * creates the selection message.
+             */
+
+            if (!assistantMessage) {
+              assistantMessage =
+                await AiMessage.create({
+                  conversation:
+                    conversationId,
+
+                  sender:
+                    null,
+
+                  role:
+                    "assistant",
+
+                  messageType:
+                    "text",
+
+                  content:
+                    `You've selected Proposal ${selectedCandidate.proposalNumber} from ${selectedCandidate.shopName} for ₱${Number(
+                      selectedCandidate
+                        .quotedPrice
+                    ).toLocaleString(
+                      "en-PH"
+                    )}. Your request is now locked and you can proceed to checkout.`,
+
+                  metadata: {
+                    provider:
+                      "flogram",
+
+                    intent:
+                      "select_proposal",
+
+                    eventType:
+                      "custom_bouquet_proposal_selected",
+
+                    customBouquetRequestId:
+                      proposalContext
+                        .customBouquetRequestId,
+
+                    proposalId:
+                      selectedCandidate
+                        .proposalId,
+
+                    proposalNumber:
+                      selectedCandidate
+                        .proposalNumber,
+
+                    floristId:
+                      selectedCandidate
+                        .floristId,
+
+                    shopName:
+                      selectedCandidate
+                        .shopName,
+
+                    quotedPrice:
+                      selectedCandidate
+                        .quotedPrice,
+
+                    proposalStatus:
+                      "selected",
+
+                    requestStatus:
+                      "customer_accepted",
+
+                    canProceedToCheckout:
+                      true,
+
+                    selectionCompleted:
+                      true,
+                  },
+                });
+            }
+
+            /*
+             * Ensure checkout metadata is
+             * available in the send-message
+             * response as well.
+             */
+
+            return await finalizeAiResponse({
+              conversation,
+
+              conversationId,
+
+              trimmedContent,
+
+              intent,
+
+              mergedPreferences,
+
+              userMessage,
+
+              assistantMessage,
+
+              extra: {
+                customBouquetRequestId:
+                  proposalContext
+                    .customBouquetRequestId,
+
+                selectedProposalId:
+                  selectedCandidate
+                    .proposalId,
+
+                selectedProposal:
+                  selectionResult
+                    .selectedProposal,
+
+                request:
+                  selectionResult
+                    .request,
+
+                canProceedToCheckout:
+                  true,
+              },
+            });
+          } catch (error) {
+            /*
+             * Backend selection is the
+             * source of truth.
+             *
+             * Never pretend selection
+             * succeeded after a backend
+             * validation failure.
+             */
+
+            console.error(
+              "Proposal selection failed:",
+              error.message
+            );
+
+            assistantMessage =
+              await AiMessage.create({
+                conversation:
+                  conversationId,
+
+                sender:
+                  null,
+
+                role:
+                  "assistant",
+
+                messageType:
+                  "text",
+
+                content:
+                  `I couldn't select that proposal. ${error.message}`,
+
+                metadata: {
+                  provider:
+                    "flogram",
+
+                  intent:
+                    "select_proposal",
+
+                  eventType:
+                    "custom_bouquet_proposal_selection_failed",
+
+                  customBouquetRequestId:
+                    proposalContext
+                      .customBouquetRequestId,
+
+                  proposalId:
+                    selectedCandidate
+                      .proposalId,
+
+                  selectionCompleted:
+                    false,
+
+                  canProceedToCheckout:
+                    false,
+
+                  errorMessage:
+                    error.message,
+                },
+              });
+          }
+        }
+      }
+    }
+
+    /*
+     * =====================================================
+     * PRODUCT SEARCH
+     * =====================================================
+     */
+
+    else if (
       intent ===
       "product_search"
     ) {
@@ -1001,8 +2378,11 @@ ${JSON.stringify(
     }
 
     /*
+     * =====================================================
      * IMAGE GENERATION
+     * =====================================================
      */
+
     else if (
       intent ===
       "image_generation"
@@ -1042,10 +2422,6 @@ Image requirements:
             imagePrompt
           );
 
-        /*
-         * Save xAI image permanently
-         * inside FLOGRAM.
-         */
         const savedImage =
           await saveRemoteAiImage(
             imageResult.url
@@ -1078,9 +2454,6 @@ Image requirements:
               intent:
                 "image_generation",
 
-              /*
-               * Permanent FLOGRAM path.
-               */
               imageUrl:
                 savedImage.path,
 
@@ -1093,10 +2466,6 @@ Image requirements:
               filename:
                 savedImage.filename,
 
-              /*
-               * Temporary source URL
-               * returned by xAI.
-               */
               sourceImageUrl:
                 imageResult.url,
 
@@ -1166,8 +2535,11 @@ Image requirements:
     }
 
     /*
+     * =====================================================
      * NORMAL CONVERSATION
+     * =====================================================
      */
+
     else {
       const grokMessages = [
         {
@@ -1176,7 +2548,8 @@ Image requirements:
 
           content:
             getConversationSystemPrompt(
-              mergedPreferences
+              mergedPreferences,
+              proposalContext
             ),
         },
 
@@ -1224,6 +2597,13 @@ Image requirements:
 
               preferences:
                 mergedPreferences,
+
+              customBouquetRequestId:
+                linkedRequest
+                  ? String(
+                      linkedRequest._id
+                    )
+                  : null,
             },
           });
       } catch (error) {
@@ -1263,6 +2643,57 @@ Image requirements:
       }
     }
 
+    /*
+     * =====================================================
+     * FINALIZE
+     * =====================================================
+     */
+
+    return finalizeAiResponse({
+      conversation,
+
+      conversationId,
+
+      trimmedContent,
+
+      intent,
+
+      mergedPreferences,
+
+      userMessage,
+
+      assistantMessage,
+
+      extra: {
+        customBouquetRequestId:
+          linkedRequest
+            ? String(
+                linkedRequest._id
+              )
+            : null,
+
+        proposalContext,
+      },
+    });
+  };
+
+/*
+ * =========================================================
+ * FINALIZE AI RESPONSE
+ * =========================================================
+ */
+
+const finalizeAiResponse =
+  async ({
+    conversation,
+    conversationId,
+    trimmedContent,
+    intent,
+    mergedPreferences,
+    userMessage,
+    assistantMessage,
+    extra = {},
+  }) => {
     const userMessageCount =
       await AiMessage.countDocuments({
         conversation:
@@ -1300,8 +2731,17 @@ Image requirements:
       userMessage,
 
       assistantMessage,
+
+      ...extra,
     };
   };
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * ARCHIVE AI CONVERSATION
+ * =========================================================
+ */
 
 export const archiveAiConversation =
   async (
@@ -1323,7 +2763,8 @@ export const archiveAiConversation =
           "AI conversation was not found."
         );
 
-      error.statusCode = 404;
+      error.statusCode =
+        404;
 
       throw error;
     }

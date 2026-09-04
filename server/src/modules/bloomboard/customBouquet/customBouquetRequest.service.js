@@ -6,6 +6,10 @@ import Florist from "../../florists/florist.model.js";
 import AiConversation from "../ai/aiConversation.model.js";
 import AiMessage from "../ai/aiMessage.model.js";
 
+import {
+  createAiConversation,
+} from "../ai/aiConversation.service.js";
+
 /*
  * =========================================================
  * HELPERS
@@ -49,16 +53,88 @@ const normalizeOptionalNumber = (
     : number;
 };
 
+const getApprovedSellerFlorist =
+  async (
+    sellerId
+  ) => {
+    const seller =
+      await User.findById(
+        sellerId
+      );
+
+    if (
+      !seller ||
+      seller.role !==
+        "seller"
+    ) {
+      const error =
+        new Error(
+          "Only seller accounts can access custom bouquet requests."
+        );
+
+      error.statusCode = 403;
+
+      throw error;
+    }
+
+    const florist =
+      await Florist.findOne({
+        owner:
+          sellerId,
+
+        verificationStatus:
+          "approved",
+
+        isActive:
+          true,
+      });
+
+    if (!florist) {
+      const error =
+        new Error(
+          "An approved and active florist profile is required."
+        );
+
+      error.statusCode = 403;
+
+      throw error;
+    }
+
+    return {
+      seller,
+      florist,
+    };
+  };
+
 /*
  * =========================================================
  * CUSTOMER
  * CREATE CUSTOM BOUQUET REQUEST
  * =========================================================
  *
- * The customer can create a proposal
- * from a generated AI bouquet image
- * and send it to a florist.
+ * NEW WORKFLOW:
+ *
+ * Customer creates ONE open bouquet request.
+ *
+ * No florist is selected yet.
+ *
+ * The request becomes available to all
+ * approved + active FLOGRAM florists.
+ *
+ * Sellers will later submit separate
+ * CustomBouquetProposal documents.
+ *
+ * After the customer selects a proposal:
+ *
+ * request.selectedProposal
+ * request.florist
+ * request.quotedPrice
+ * request.sellerResponse
+ *
+ * will contain the winning proposal.
+ * =========================================================
  */
+
 export const createCustomBouquetRequest =
   async (
     customerId,
@@ -95,60 +171,24 @@ export const createCustomBouquetRequest =
     }
 
     /*
-     * Florist is required because the
-     * customer is sending the proposal
-     * to a specific shop.
+     * =====================================================
+     * AI CONVERSATION
+     * =====================================================
+     *
+     * If the request came from an existing
+     * AI conversation, validate ownership.
+     *
+     * If the request came from a manually
+     * uploaded reference image and does not
+     * already have an AI conversation,
+     * automatically create one.
+     *
+     * This allows the customer to later
+     * receive, compare, and select seller
+     * proposals through the AI conversation.
+     * =====================================================
      */
-    if (!requestData.floristId) {
-      const error =
-        new Error(
-          "Florist is required."
-        );
 
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    const florist =
-      await Florist.findById(
-        requestData.floristId
-      );
-
-    if (!florist) {
-      const error =
-        new Error(
-          "Florist was not found."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    /*
-     * Only approved florists should
-     * receive custom bouquet requests.
-     */
-    if (
-      florist.verificationStatus !==
-      "approved"
-    ) {
-      const error =
-        new Error(
-          "Custom bouquet requests can only be sent to approved florists."
-        );
-
-      error.statusCode = 403;
-
-      throw error;
-    }
-
-    /*
-     * Optional:
-     * verify the AI conversation belongs
-     * to the customer.
-     */
     let aiConversation = null;
 
     if (
@@ -157,7 +197,8 @@ export const createCustomBouquetRequest =
       aiConversation =
         await AiConversation.findOne({
           _id:
-            requestData.aiConversationId,
+            requestData
+              .aiConversationId,
 
           customer:
             customerId,
@@ -176,13 +217,15 @@ export const createCustomBouquetRequest =
     }
 
     /*
-     * Optional:
-     * verify the generated AI message.
+     * =====================================================
+     * AI SOURCE MESSAGE
+     * =====================================================
      *
-     * The image used for the custom
-     * bouquet request must come from
-     * this customer's own AI conversation.
+     * Used when the customer generated
+     * an inspiration image with FLOGRAM AI.
+     * =====================================================
      */
+
     let sourceMessage = null;
 
     if (
@@ -190,7 +233,8 @@ export const createCustomBouquetRequest =
     ) {
       sourceMessage =
         await AiMessage.findById(
-          requestData.sourceMessageId
+          requestData
+            .sourceMessageId
         );
 
       if (!sourceMessage) {
@@ -221,14 +265,15 @@ export const createCustomBouquetRequest =
       }
 
       /*
-       * Make sure the message belongs
-       * to one of this customer's
-       * conversations.
+       * Make sure the generated
+       * image belongs to this customer.
        */
+
       const messageConversation =
         await AiConversation.findOne({
           _id:
-            sourceMessage.conversation,
+            sourceMessage
+              .conversation,
 
           customer:
             customerId,
@@ -248,14 +293,16 @@ export const createCustomBouquetRequest =
       }
 
       /*
-       * If both IDs were provided,
-       * they must point to the same
-       * conversation.
+       * If both conversation ID and
+       * source message ID are supplied,
+       * they must belong together.
        */
+
       if (
         aiConversation &&
         String(
-          sourceMessage.conversation
+          sourceMessage
+            .conversation
         ) !==
           String(
             aiConversation._id
@@ -270,16 +317,32 @@ export const createCustomBouquetRequest =
 
         throw error;
       }
+
+      /*
+       * If sourceMessage was supplied
+       * but aiConversationId was omitted,
+       * use the source message's
+       * conversation.
+       */
+
+      if (!aiConversation) {
+        aiConversation =
+          messageConversation;
+      }
     }
 
     /*
-     * Get the permanent image path.
-     *
-     * Prefer the image stored in the
-     * generated AiMessage so customers
-     * cannot submit arbitrary image paths.
+     * =====================================================
+     * INSPIRATION IMAGE
+     * =====================================================
      */
-    let inspirationImage = null;
+
+    let inspirationImage =
+      null;
+
+    /*
+     * AI image takes priority.
+     */
 
     if (sourceMessage) {
       inspirationImage =
@@ -300,20 +363,21 @@ export const createCustomBouquetRequest =
     }
 
     /*
-     * If no AI source message is supplied,
-     * optionally allow a direct inspiration
-     * image path.
+     * Manual uploaded image.
      *
-     * This also lets us support manually
-     * uploaded bouquet inspirations later.
+     * Controller supplies the
+     * permanent /uploads/... path.
      */
+
     if (
       !inspirationImage &&
-      requestData.inspirationImage
+      requestData
+        .inspirationImage
     ) {
       inspirationImage =
         String(
-          requestData.inspirationImage
+          requestData
+            .inspirationImage
         ).trim();
     }
 
@@ -329,9 +393,38 @@ export const createCustomBouquetRequest =
     }
 
     /*
-     * Pull remembered AI preferences
-     * when available.
+     * =====================================================
+     * AUTO-CREATE AI CONVERSATION
+     * =====================================================
+     *
+     * Manual image requests do not
+     * start from the AI page.
+     *
+     * Create an AI conversation so
+     * seller proposals can later be
+     * presented and discussed there.
+     * =====================================================
      */
+
+    let automaticallyCreatedConversation =
+      false;
+
+    if (!aiConversation) {
+      aiConversation =
+        await createAiConversation(
+          customerId
+        );
+
+      automaticallyCreatedConversation =
+        true;
+    }
+
+    /*
+     * =====================================================
+     * REMEMBERED AI PREFERENCES
+     * =====================================================
+     */
+
     const conversationPreferences =
       aiConversation
         ?.preferences
@@ -363,19 +456,22 @@ export const createCustomBouquetRequest =
       throw error;
     }
 
-    let requestedDate = null;
+    let requestedDate =
+      null;
 
     if (
       requestData.requestedDate
     ) {
       requestedDate =
         new Date(
-          requestData.requestedDate
+          requestData
+            .requestedDate
         );
 
       if (
         Number.isNaN(
-          requestedDate.getTime()
+          requestedDate
+            .getTime()
         )
       ) {
         const error =
@@ -389,21 +485,36 @@ export const createCustomBouquetRequest =
       }
     }
 
+    /*
+     * =====================================================
+     * CREATE OPEN REQUEST
+     * =====================================================
+     *
+     * IMPORTANT:
+     *
+     * florist = null
+     * selectedProposal = null
+     *
+     * because the customer has not
+     * selected a seller yet.
+     * =====================================================
+     */
+
     const request =
       await CustomBouquetRequest.create({
         customer:
           customerId,
 
         florist:
-          florist._id,
+          null,
+
+        selectedProposal:
+          null,
 
         aiConversation:
           aiConversation
             ? aiConversation._id
-            : sourceMessage
-              ? sourceMessage
-                  .conversation
-              : null,
+            : null,
 
         sourceMessage:
           sourceMessage
@@ -483,8 +594,134 @@ export const createCustomBouquetRequest =
           null,
 
         status:
-          "pending",
+          "open",
+
+        quotedPrice:
+          null,
+
+        sellerResponse:
+          null,
+
+        proposalSelectedAt:
+          null,
+
+        customerDecisionAt:
+          null,
+
+        customerDecisionMessage:
+          null,
+
+        convertedToOrderAt:
+          null,
       });
+
+    /*
+     * =====================================================
+     * AI CONVERSATION REQUEST MESSAGE
+     * =====================================================
+     *
+     * Add a real assistant message so
+     * the request becomes visible in
+     * the same AI conversation.
+     *
+     * Later, proposal cards will be
+     * loaded from the real proposal
+     * collection using the
+     * customBouquetRequestId stored
+     * in metadata.
+     * =====================================================
+     */
+
+    if (aiConversation) {
+      const occasionLabel =
+        request.occasion
+          ? ` for ${request.occasion}`
+          : "";
+
+      const budgetLabel =
+        request.budget !==
+          null &&
+        request.budget !==
+          undefined
+          ? ` with a budget of up to ₱${Number(
+              request.budget
+            ).toLocaleString(
+              "en-PH"
+            )}`
+          : "";
+
+      await AiMessage.create({
+        conversation:
+          aiConversation._id,
+
+        sender:
+          null,
+
+        role:
+          "assistant",
+
+        messageType:
+          "text",
+
+        content:
+          `Your custom bouquet request${occasionLabel}${budgetLabel} has been submitted to FLOGRAM florists. I'll help you review the real seller proposals here as they arrive. Once you choose a proposal, the request will stop accepting new offers and you can proceed to checkout.`,
+
+        metadata: {
+          provider:
+            "flogram",
+
+          intent:
+            "custom_bouquet_request",
+
+          eventType:
+            "custom_bouquet_request_created",
+
+          customBouquetRequestId:
+            String(
+              request._id
+            ),
+
+          requestStatus:
+            "open",
+
+          inspirationImage:
+            request
+              .inspirationImage,
+
+          automaticallyCreatedConversation,
+        },
+      });
+
+      /*
+       * Give automatically created
+       * conversations a useful title.
+       */
+
+      if (
+        automaticallyCreatedConversation
+      ) {
+        aiConversation.title =
+          request.occasion
+            ? `Custom ${request.occasion} Bouquet`
+            : "Custom Bouquet Request";
+
+        aiConversation.lastMessageAt =
+          new Date();
+
+        await aiConversation.save();
+      } else {
+        aiConversation.lastMessageAt =
+          new Date();
+
+        await aiConversation.save();
+      }
+    }
+
+    /*
+     * =====================================================
+     * RETURN REQUEST
+     * =====================================================
+     */
 
     return CustomBouquetRequest.findById(
       request._id
@@ -496,6 +733,13 @@ export const createCustomBouquetRequest =
       .populate(
         "florist",
         "shopName address contactNumber businessEmail shopLogo"
+      )
+      .populate(
+        "selectedProposal"
+      )
+      .populate(
+        "aiConversation",
+        "title status preferences lastMessageAt"
       );
   };
 
@@ -505,6 +749,7 @@ export const createCustomBouquetRequest =
  * GET OWN CUSTOM BOUQUET REQUESTS
  * =========================================================
  */
+
 export const getCustomerCustomBouquetRequests =
   async (
     customerId
@@ -517,6 +762,13 @@ export const getCustomerCustomBouquetRequests =
         "florist",
         "shopName address contactNumber businessEmail shopLogo"
       )
+      .populate(
+        "selectedProposal"
+      )
+      .populate(
+        "aiConversation",
+        "title status lastMessageAt"
+      )
       .sort({
         createdAt:
           -1,
@@ -526,61 +778,86 @@ export const getCustomerCustomBouquetRequests =
 /*
  * =========================================================
  * SELLER
- * GET REQUESTS SENT TO SELLER'S SHOP
+ * GET AVAILABLE CUSTOM BOUQUET REQUESTS
+ * =========================================================
+ *
+ * NEW WORKFLOW:
+ *
+ * All approved + active florists can see
+ * all OPEN bouquet requests.
+ *
+ * A seller may also continue seeing a
+ * request they WON after customer selection.
+ *
+ * The proposal model will later determine
+ * whether this seller has already submitted
+ * a proposal.
  * =========================================================
  */
+
 export const getSellerCustomBouquetRequests =
   async (
     sellerId,
     filters = {}
   ) => {
-    const seller =
-      await User.findById(
+    const {
+      florist,
+    } =
+      await getApprovedSellerFlorist(
         sellerId
       );
 
-    if (
-      !seller ||
-      seller.role !==
-        "seller"
-    ) {
-      const error =
-        new Error(
-          "Only seller accounts can view florist custom bouquet requests."
-        );
+    let query;
 
-      error.statusCode = 403;
+    /*
+     * Explicit status filter.
+     */
 
-      throw error;
+    if (filters.status) {
+      if (
+        filters.status ===
+        "open"
+      ) {
+        query = {
+          status:
+            "open",
+        };
+      } else {
+        /*
+         * Closed/non-open requests
+         * are visible only when this
+         * florist became the winner.
+         */
+        query = {
+          florist:
+            florist._id,
+
+          status:
+            filters.status,
+        };
+      }
     }
 
-    const florist =
-      await Florist.findOne({
-        owner:
-          sellerId,
-      });
+    /*
+     * Default seller view:
+     *
+     * - all currently open requests
+     * - requests won by this florist
+     */
 
-    if (!florist) {
-      const error =
-        new Error(
-          "Florist profile was not found."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    const query = {
-      florist:
-        florist._id,
-    };
-
-    if (
-      filters.status
-    ) {
-      query.status =
-        filters.status;
+    else {
+      query = {
+        $or: [
+          {
+            status:
+              "open",
+          },
+          {
+            florist:
+              florist._id,
+          },
+        ],
+      };
     }
 
     return CustomBouquetRequest.find(
@@ -588,11 +865,14 @@ export const getSellerCustomBouquetRequests =
     )
       .populate(
         "customer",
-        "firstName lastName email phoneNumber profileImage"
+        "firstName lastName profileImage"
       )
       .populate(
         "florist",
         "shopName address contactNumber businessEmail shopLogo"
+      )
+      .populate(
+        "selectedProposal"
       )
       .sort({
         createdAt:
@@ -603,9 +883,10 @@ export const getSellerCustomBouquetRequests =
 /*
  * =========================================================
  * CUSTOMER / SELLER
- * GET ONE REQUEST
+ * GET ONE CUSTOM BOUQUET REQUEST
  * =========================================================
  */
+
 export const getCustomBouquetRequestById =
   async (
     requestId,
@@ -638,6 +919,13 @@ export const getCustomBouquetRequestById =
         .populate(
           "florist",
           "shopName owner address contactNumber businessEmail shopLogo"
+        )
+        .populate(
+          "selectedProposal"
+        )
+        .populate(
+          "aiConversation",
+          "title status preferences lastMessageAt"
         );
 
     if (!request) {
@@ -652,16 +940,27 @@ export const getCustomBouquetRequestById =
     }
 
     /*
-     * Customer can only read own request.
+     * =====================================================
+     * CUSTOMER ACCESS
+     * =====================================================
      */
+
     if (
       user.role ===
       "customer"
     ) {
+      const requestCustomerId =
+        request.customer?._id
+          ? String(
+              request.customer
+                ._id
+            )
+          : String(
+              request.customer
+            );
+
       if (
-        String(
-          request.customer._id
-        ) !==
+        requestCustomerId !==
         String(userId)
       ) {
         const error =
@@ -678,30 +977,59 @@ export const getCustomBouquetRequestById =
     }
 
     /*
-     * Seller can only read requests
-     * belonging to their own florist.
+     * =====================================================
+     * SELLER ACCESS
+     * =====================================================
+     *
+     * Approved sellers can view OPEN
+     * requests because they are allowed
+     * to submit proposals.
+     *
+     * Once the request closes, only the
+     * winning florist can continue to
+     * access it through this service.
+     * =====================================================
      */
+
     if (
       user.role ===
       "seller"
     ) {
+      const {
+        florist,
+      } =
+        await getApprovedSellerFlorist(
+          userId
+        );
+
       if (
-        String(
-          request.florist.owner
-        ) !==
-        String(userId)
+        request.status ===
+        "open"
       ) {
-        const error =
-          new Error(
-            "You do not have permission to view this custom bouquet request."
-          );
-
-        error.statusCode = 403;
-
-        throw error;
+        return request;
       }
 
-      return request;
+      if (
+        request.florist &&
+        String(
+          request.florist._id ??
+            request.florist
+        ) ===
+          String(
+            florist._id
+          )
+      ) {
+        return request;
+      }
+
+      const error =
+        new Error(
+          "This custom bouquet request is no longer available to this florist."
+        );
+
+      error.statusCode = 403;
+
+      throw error;
     }
 
     const error =
@@ -716,281 +1044,18 @@ export const getCustomBouquetRequestById =
 
 /*
  * =========================================================
- * SELLER
- * ACCEPT REQUEST
- * =========================================================
- */
-export const acceptCustomBouquetRequest =
-  async (
-    requestId,
-    sellerId,
-    sellerResponse = null
-  ) => {
-    const florist =
-      await Florist.findOne({
-        owner:
-          sellerId,
-      });
-
-    if (!florist) {
-      const error =
-        new Error(
-          "Florist profile was not found."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    const request =
-      await CustomBouquetRequest.findOne({
-        _id:
-          requestId,
-
-        florist:
-          florist._id,
-      });
-
-    if (!request) {
-      const error =
-        new Error(
-          "Custom bouquet request was not found or does not belong to this florist."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    if (
-      request.status !==
-      "pending"
-    ) {
-      const error =
-        new Error(
-          "Only pending custom bouquet requests can be accepted."
-        );
-
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    request.status =
-      "accepted";
-
-    request.sellerResponse =
-      sellerResponse
-        ? String(
-            sellerResponse
-          ).trim()
-        : null;
-
-    request.respondedAt =
-      new Date();
-
-    await request.save();
-
-    return request;
-  };
-
-/*
- * =========================================================
- * SELLER
- * REJECT REQUEST
- * =========================================================
- */
-export const rejectCustomBouquetRequest =
-  async (
-    requestId,
-    sellerId,
-    sellerResponse = null
-  ) => {
-    const florist =
-      await Florist.findOne({
-        owner:
-          sellerId,
-      });
-
-    if (!florist) {
-      const error =
-        new Error(
-          "Florist profile was not found."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    const request =
-      await CustomBouquetRequest.findOne({
-        _id:
-          requestId,
-
-        florist:
-          florist._id,
-      });
-
-    if (!request) {
-      const error =
-        new Error(
-          "Custom bouquet request was not found or does not belong to this florist."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    if (
-      request.status !==
-      "pending"
-    ) {
-      const error =
-        new Error(
-          "Only pending custom bouquet requests can be rejected."
-        );
-
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    request.status =
-      "rejected";
-
-    request.sellerResponse =
-      sellerResponse
-        ? String(
-            sellerResponse
-          ).trim()
-        : null;
-
-    request.quotedPrice =
-      null;
-
-    request.respondedAt =
-      new Date();
-
-    await request.save();
-
-    return request;
-  };
-
-/*
- * =========================================================
- * SELLER
- * SEND PRICE QUOTE
- * =========================================================
- */
-export const quoteCustomBouquetRequest =
-  async (
-    requestId,
-    sellerId,
-    quoteData
-  ) => {
-    const florist =
-      await Florist.findOne({
-        owner:
-          sellerId,
-      });
-
-    if (!florist) {
-      const error =
-        new Error(
-          "Florist profile was not found."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    const request =
-      await CustomBouquetRequest.findOne({
-        _id:
-          requestId,
-
-        florist:
-          florist._id,
-      });
-
-    if (!request) {
-      const error =
-        new Error(
-          "Custom bouquet request was not found or does not belong to this florist."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    if (
-      request.status !==
-        "pending" &&
-      request.status !==
-        "accepted"
-    ) {
-      const error =
-        new Error(
-          "This custom bouquet request can no longer be quoted."
-        );
-
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    const quotedPrice =
-      normalizeOptionalNumber(
-        quoteData.quotedPrice
-      );
-
-    if (
-      quotedPrice === null ||
-      quotedPrice < 0
-    ) {
-      const error =
-        new Error(
-          "A valid quoted price is required."
-        );
-
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    request.status =
-      "quoted";
-
-    request.quotedPrice =
-      quotedPrice;
-
-    request.sellerResponse =
-      quoteData.sellerResponse
-        ? String(
-            quoteData
-              .sellerResponse
-          ).trim()
-        : null;
-
-    request.respondedAt =
-      new Date();
-
-    await request.save();
-
-    return request;
-  };
-
-/*
- * =========================================================
  * CUSTOMER
  * CANCEL OWN REQUEST
  * =========================================================
+ *
+ * A request can only be cancelled while
+ * it is still accepting proposals.
+ *
+ * Legacy pending / accepted states are
+ * temporarily supported for old records.
+ * =========================================================
  */
+
 export const cancelCustomBouquetRequest =
   async (
     requestId,
@@ -1016,15 +1081,13 @@ export const cancelCustomBouquetRequest =
       throw error;
     }
 
-    /*
-     * Once rejected/cancelled,
-     * there is nothing more to cancel.
-     *
-     * We also prevent cancellation
-     * after a final quote for now.
-     */
     if (
       ![
+        "open",
+
+        /*
+         * Legacy records
+         */
         "pending",
         "accepted",
       ].includes(
@@ -1046,220 +1109,189 @@ export const cancelCustomBouquetRequest =
 
     await request.save();
 
-    return request;
-  };
-
-  /*
- * =========================================================
- * CUSTOMER
- * ACCEPT SELLER QUOTE
- * =========================================================
- */
-export const acceptCustomBouquetQuote =
-  async (
-    requestId,
-    customerId,
-    customerDecisionMessage = null
-  ) => {
-    const customer =
-      await User.findById(
-        customerId
-      );
-
-    if (!customer) {
-      const error =
-        new Error(
-          "Customer account was not found."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
+    /*
+     * Inform the AI conversation.
+     */
 
     if (
-      customer.role !==
-      "customer"
+      request.aiConversation
     ) {
-      const error =
-        new Error(
-          "Only customer accounts can accept custom bouquet quotes."
-        );
+      await AiMessage.create({
+        conversation:
+          request
+            .aiConversation,
 
-      error.statusCode = 403;
+        sender:
+          null,
 
-      throw error;
-    }
+        role:
+          "assistant",
 
-    const request =
-      await CustomBouquetRequest.findOne({
-        _id:
-          requestId,
+        messageType:
+          "text",
 
-        customer:
-          customerId,
+        content:
+          "Your custom bouquet request has been cancelled. Florists can no longer submit proposals for this request.",
+
+        metadata: {
+          provider:
+            "flogram",
+
+          intent:
+            "custom_bouquet_request",
+
+          eventType:
+            "custom_bouquet_request_cancelled",
+
+          customBouquetRequestId:
+            String(
+              request._id
+            ),
+
+          requestStatus:
+            "cancelled",
+        },
       });
 
-    if (!request) {
-      const error =
-        new Error(
-          "Custom bouquet request was not found or does not belong to this customer."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
+      await AiConversation.findByIdAndUpdate(
+        request
+          .aiConversation,
+        {
+          lastMessageAt:
+            new Date(),
+        }
+      );
     }
-
-    /*
-     * Customer can only accept after
-     * the seller has submitted a quote.
-     */
-    if (
-      request.status !==
-      "quoted"
-    ) {
-      const error =
-        new Error(
-          "Only quoted custom bouquet requests can be accepted."
-        );
-
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    /*
-     * A valid seller quote must exist.
-     */
-    if (
-      request.quotedPrice ===
-        null ||
-      request.quotedPrice ===
-        undefined
-    ) {
-      const error =
-        new Error(
-          "This custom bouquet request does not have a valid seller quote."
-        );
-
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    request.status =
-      "customer_accepted";
-
-    request.customerDecisionAt =
-      new Date();
-
-    request.customerDecisionMessage =
-      customerDecisionMessage
-        ? String(
-            customerDecisionMessage
-          ).trim()
-        : null;
-
-    await request.save();
 
     return request;
   };
 
 /*
  * =========================================================
- * CUSTOMER
- * DECLINE SELLER QUOTE
+ * LEGACY SINGLE-FLORIST ACTIONS
+ * =========================================================
+ *
+ * These exports are temporarily retained
+ * because the existing controller/routes
+ * still import them.
+ *
+ * The old workflow:
+ *
+ * seller accepts request
+ * seller rejects request
+ * seller directly quotes request
+ * customer accepts/declines quote
+ *
+ * is being replaced by:
+ *
+ * CustomBouquetProposal
+ *
+ * We intentionally prevent these methods
+ * from changing NEW open requests so the
+ * new proposal workflow cannot be bypassed.
  * =========================================================
  */
+
+const throwLegacyProposalError =
+  () => {
+    const error =
+      new Error(
+        "This action belongs to the previous single-florist custom bouquet workflow. Seller responses must now be submitted as bouquet proposals."
+      );
+
+    error.statusCode = 410;
+
+    throw error;
+  };
+
+/*
+ * SELLER
+ * Legacy accept request.
+ */
+
+export const acceptCustomBouquetRequest =
+  async (
+    requestId,
+    sellerId,
+    sellerResponse = null
+  ) => {
+    void requestId;
+    void sellerId;
+    void sellerResponse;
+
+    return throwLegacyProposalError();
+  };
+
+/*
+ * SELLER
+ * Legacy reject request.
+ */
+
+export const rejectCustomBouquetRequest =
+  async (
+    requestId,
+    sellerId,
+    sellerResponse = null
+  ) => {
+    void requestId;
+    void sellerId;
+    void sellerResponse;
+
+    return throwLegacyProposalError();
+  };
+
+/*
+ * SELLER
+ * Legacy quote request.
+ */
+
+export const quoteCustomBouquetRequest =
+  async (
+    requestId,
+    sellerId,
+    quoteData
+  ) => {
+    void requestId;
+    void sellerId;
+    void quoteData;
+
+    return throwLegacyProposalError();
+  };
+
+/*
+ * CUSTOMER
+ * Legacy accept quotation.
+ */
+
+export const acceptCustomBouquetQuote =
+  async (
+    requestId,
+    customerId,
+    customerDecisionMessage =
+      null
+  ) => {
+    void requestId;
+    void customerId;
+    void customerDecisionMessage;
+
+    return throwLegacyProposalError();
+  };
+
+/*
+ * CUSTOMER
+ * Legacy decline quotation.
+ */
+
 export const declineCustomBouquetQuote =
   async (
     requestId,
     customerId,
-    customerDecisionMessage = null
+    customerDecisionMessage =
+      null
   ) => {
-    const customer =
-      await User.findById(
-        customerId
-      );
+    void requestId;
+    void customerId;
+    void customerDecisionMessage;
 
-    if (!customer) {
-      const error =
-        new Error(
-          "Customer account was not found."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    if (
-      customer.role !==
-      "customer"
-    ) {
-      const error =
-        new Error(
-          "Only customer accounts can decline custom bouquet quotes."
-        );
-
-      error.statusCode = 403;
-
-      throw error;
-    }
-
-    const request =
-      await CustomBouquetRequest.findOne({
-        _id:
-          requestId,
-
-        customer:
-          customerId,
-      });
-
-    if (!request) {
-      const error =
-        new Error(
-          "Custom bouquet request was not found or does not belong to this customer."
-        );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    /*
-     * Customer can only decline after
-     * the seller has submitted a quote.
-     */
-    if (
-      request.status !==
-      "quoted"
-    ) {
-      const error =
-        new Error(
-          "Only quoted custom bouquet requests can be declined."
-        );
-
-      error.statusCode = 400;
-
-      throw error;
-    }
-
-    request.status =
-      "customer_declined";
-
-    request.customerDecisionAt =
-      new Date();
-
-    request.customerDecisionMessage =
-      customerDecisionMessage
-        ? String(
-            customerDecisionMessage
-          ).trim()
-        : null;
-
-    await request.save();
-
-    return request;
+    return throwLegacyProposalError();
   };

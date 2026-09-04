@@ -105,9 +105,7 @@ export async function apiRequest<T>(
       `${API_URL}${endpoint}`,
       {
         ...requestOptions,
-
-        headers:
-          requestHeaders,
+        headers: requestHeaders,
       }
     );
 

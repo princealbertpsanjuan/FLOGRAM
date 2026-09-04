@@ -3,6 +3,12 @@ import mongoose from "mongoose";
 const customBouquetRequestSchema =
   new mongoose.Schema(
     {
+      /*
+       * =====================================================
+       * CUSTOMER
+       * =====================================================
+       */
+
       customer: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -17,6 +23,24 @@ const customBouquetRequestSchema =
           true,
       },
 
+      /*
+       * =====================================================
+       * WINNING FLORIST
+       * =====================================================
+       *
+       * IMPORTANT:
+       *
+       * A custom bouquet request is now broadcast
+       * to all eligible/approved florists.
+       *
+       * Therefore, florist is NULL while the
+       * request is still accepting proposals.
+       *
+       * It is filled only after the customer
+       * selects one seller proposal.
+       * =====================================================
+       */
+
       florist: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -24,12 +48,53 @@ const customBouquetRequestSchema =
         ref:
           "Florist",
 
-        required:
-          true,
+        default:
+          null,
 
         index:
           true,
       },
+
+      /*
+       * =====================================================
+       * SELECTED PROPOSAL
+       * =====================================================
+       *
+       * References the winning
+       * CustomBouquetProposal.
+       *
+       * NULL while the request is still open.
+       * =====================================================
+       */
+
+      selectedProposal: {
+        type:
+          mongoose.Schema.Types.ObjectId,
+
+        ref:
+          "CustomBouquetProposal",
+
+        default:
+          null,
+
+        index:
+          true,
+      },
+
+      /*
+       * =====================================================
+       * AI CONNECTION
+       * =====================================================
+       *
+       * AI-created requests can point to the
+       * customer's existing AI conversation
+       * and generated-image message.
+       *
+       * Manual image requests may also later
+       * receive an AI conversation so the
+       * customer can discuss seller proposals.
+       * =====================================================
+       */
 
       aiConversation: {
         type:
@@ -40,6 +105,9 @@ const customBouquetRequestSchema =
 
         default:
           null,
+
+        index:
+          true,
       },
 
       sourceMessage: {
@@ -53,6 +121,18 @@ const customBouquetRequestSchema =
           null,
       },
 
+      /*
+       * =====================================================
+       * INSPIRATION IMAGE
+       * =====================================================
+       *
+       * Can come from:
+       *
+       * - manually uploaded reference image
+       * - AI-generated bouquet image
+       * =====================================================
+       */
+
       inspirationImage: {
         type:
           String,
@@ -63,6 +143,12 @@ const customBouquetRequestSchema =
         trim:
           true,
       },
+
+      /*
+       * =====================================================
+       * CUSTOMER REQUEST DETAILS
+       * =====================================================
+       */
 
       occasion: {
         type:
@@ -75,6 +161,12 @@ const customBouquetRequestSchema =
           true,
       },
 
+      /*
+       * Customer's preferred / maximum
+       * budget.
+       *
+       * This is NOT the seller's quote.
+       */
       budget: {
         type:
           Number,
@@ -104,6 +196,20 @@ const customBouquetRequestSchema =
         default:
           null,
       },
+
+      /*
+       * =====================================================
+       * OPTIONAL DESIGN PREFERENCES
+       * =====================================================
+       *
+       * These remain supported because AI
+       * conversations may automatically provide
+       * them.
+       *
+       * Manual reference-photo requests do not
+       * have to require these fields in the UI.
+       * =====================================================
+       */
 
       flowerTypes: {
         type:
@@ -185,42 +291,83 @@ const customBouquetRequestSchema =
       },
 
       /*
-       * Request lifecycle:
+       * =====================================================
+       * REQUEST LIFECYCLE
+       * =====================================================
        *
-       * pending
+       * NEW FLOW:
+       *
+       * open
        *   ↓
-       * accepted / rejected
+       * sellers submit proposals
        *   ↓
-       * quoted
+       * customer selects one proposal
        *   ↓
        * customer_accepted
-       * or
-       * customer_declined
+       *   ↓
+       * checkout / order creation
+       *   ↓
+       * converted_to_order
+       *
+       * The customer may cancel while the
+       * request is still open.
+       *
+       * -----------------------------------------------------
+       * Legacy statuses are temporarily retained
+       * in the enum so existing database records
+       * from the previous single-florist workflow
+       * remain readable during development.
+       * -----------------------------------------------------
        */
+
       status: {
         type:
           String,
 
         enum: [
+          /*
+           * New proposal workflow
+           */
+          "open",
+          "customer_accepted",
+          "cancelled",
+          "converted_to_order",
+
+          /*
+           * Legacy workflow
+           */
           "pending",
           "accepted",
           "rejected",
           "quoted",
-          "customer_accepted",
           "customer_declined",
-          "cancelled",
         ],
 
         default:
-          "pending",
+          "open",
 
         index:
           true,
       },
 
       /*
-       * SELLER RESPONSE
+       * =====================================================
+       * WINNING PROPOSAL SNAPSHOT
+       * =====================================================
+       *
+       * These fields stay on the request so
+       * existing order/checkout logic can continue
+       * reading:
+       *
+       * request.florist
+       * request.quotedPrice
+       * request.sellerResponse
+       *
+       * They remain NULL until a proposal is
+       * selected.
+       * =====================================================
        */
+
       sellerResponse: {
         type:
           String,
@@ -235,9 +382,6 @@ const customBouquetRequestSchema =
           2000,
       },
 
-      /*
-       * SELLER'S FINAL QUOTE
-       */
       quotedPrice: {
         type:
           Number,
@@ -250,10 +394,12 @@ const customBouquetRequestSchema =
       },
 
       /*
-       * Last time the seller
-       * accepted, rejected, or quoted.
+       * =====================================================
+       * PROPOSAL SELECTION
+       * =====================================================
        */
-      respondedAt: {
+
+      proposalSelectedAt: {
         type:
           Date,
 
@@ -262,7 +408,11 @@ const customBouquetRequestSchema =
       },
 
       /*
-       * CUSTOMER QUOTE DECISION
+       * Existing field retained for compatibility.
+       *
+       * When the customer chooses a proposal,
+       * customerDecisionAt can also record the
+       * selection time.
        */
       customerDecisionAt: {
         type:
@@ -272,6 +422,13 @@ const customBouquetRequestSchema =
           null,
       },
 
+      /*
+       * Can store an optional customer note
+       * associated with the selection.
+       *
+       * Example:
+       * "I choose Maria's proposal."
+       */
       customerDecisionMessage: {
         type:
           String,
@@ -285,6 +442,24 @@ const customBouquetRequestSchema =
         maxlength:
           2000,
       },
+
+      /*
+       * =====================================================
+       * ORDER CONVERSION
+       * =====================================================
+       *
+       * Records when the selected proposal
+       * was converted into an actual order.
+       * =====================================================
+       */
+
+      convertedToOrderAt: {
+        type:
+          Date,
+
+        default:
+          null,
+      },
     },
     {
       timestamps:
@@ -296,28 +471,76 @@ const customBouquetRequestSchema =
   );
 
 /*
- * Customer request history.
+ * =========================================================
+ * CUSTOMER REQUEST HISTORY
+ * =========================================================
  */
-customBouquetRequestSchema.index({
-  customer:
-    1,
 
-  createdAt:
-    -1,
+customBouquetRequestSchema.index({
+  customer: 1,
+  createdAt: -1,
 });
 
 /*
- * Seller florist inbox.
+ * =========================================================
+ * OPEN REQUESTS
+ * =========================================================
+ *
+ * Used by sellers when viewing bouquet
+ * requests that are still accepting
+ * proposals.
+ * =========================================================
  */
+
 customBouquetRequestSchema.index({
-  florist:
-    1,
+  status: 1,
+  createdAt: -1,
+});
 
-  status:
-    1,
+/*
+ * =========================================================
+ * CUSTOMER + STATUS
+ * =========================================================
+ */
 
-  createdAt:
-    -1,
+customBouquetRequestSchema.index({
+  customer: 1,
+  status: 1,
+  createdAt: -1,
+});
+
+/*
+ * =========================================================
+ * AI CONVERSATION
+ * =========================================================
+ *
+ * Allows us to efficiently find the custom
+ * bouquet request associated with an
+ * AI conversation.
+ * =========================================================
+ */
+
+customBouquetRequestSchema.index({
+  aiConversation: 1,
+  createdAt: -1,
+});
+
+/*
+ * =========================================================
+ * WINNING FLORIST
+ * =========================================================
+ *
+ * florist is NULL while bidding is open.
+ *
+ * After selection this makes it easy to
+ * locate requests won by a particular shop.
+ * =========================================================
+ */
+
+customBouquetRequestSchema.index({
+  florist: 1,
+  status: 1,
+  createdAt: -1,
 });
 
 const CustomBouquetRequest =

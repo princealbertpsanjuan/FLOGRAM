@@ -254,3 +254,41 @@ export const riderRemittanceProofUpload =
         5 * 1024 * 1024,
     },
   });
+
+  /*
+ * =========================================================
+ * CUSTOM BOUQUET REQUEST INSPIRATION IMAGE
+ * uploads/bloomboard/custom-requests/
+ * =========================================================
+ *
+ * Used when a customer manually uploads
+ * a reference/inspiration image for a
+ * custom bouquet request.
+ *
+ * Field name used by the route:
+ *
+ * inspirationImage
+ *
+ * Maximum:
+ * 5 MB
+ *
+ * Accepted:
+ * JPG / JPEG / PNG
+ * =========================================================
+ */
+
+export const customBouquetRequestUpload =
+  multer({
+    storage: createStorage([
+      "bloomboard",
+      "custom-requests",
+    ]),
+
+    fileFilter:
+      imageOnlyFileFilter,
+
+    limits: {
+      fileSize:
+        5 * 1024 * 1024,
+    },
+  });

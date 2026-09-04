@@ -31,13 +31,22 @@ app.use(morgan("dev"));
  *
  * IMPORTANT FOR PAYMONGO:
  *
- * PayMongo webhook signatures must be
- * verified against the ORIGINAL raw
- * request body.
+ * PayMongo webhook signatures must be verified
+ * against the ORIGINAL raw request body.
  *
- * The verify callback runs before
- * express.json() converts the request
- * into a JavaScript object.
+ * The verify callback runs before express.json()
+ * converts the request into a JavaScript object.
+ *
+ * FLOGRAM currently has two PayMongo webhook routes:
+ *
+ * 1. Legacy / single-order payment webhook
+ *    /api/v1/payments/webhook/paymongo
+ *
+ * 2. Grouped / cart checkout webhook
+ *    /api/v1/checkout/webhook/paymongo
+ *
+ * Both must preserve the original raw JSON bytes.
+ * =========================================================
  */
 app.use(
   express.json({
@@ -48,13 +57,24 @@ app.use(
       res,
       buffer
     ) => {
+      const payMongoWebhookPaths = [
+        "/api/v1/payments/webhook/paymongo",
+        "/api/v1/checkout/webhook/paymongo",
+      ];
+
       /*
-       * Only preserve raw bytes for
-       * the PayMongo webhook endpoint.
+       * originalUrl may include a query string,
+       * so compare only the pathname portion.
        */
+      const requestPath =
+        String(
+          req.originalUrl || ""
+        ).split("?")[0];
+
       if (
-        req.originalUrl ===
-        "/api/v1/payments/webhook/paymongo"
+        payMongoWebhookPaths.includes(
+          requestPath
+        )
       ) {
         req.rawBody =
           Buffer.from(
@@ -88,6 +108,7 @@ app.use(
  * becomes:
  *
  * http://localhost:5000/uploads/flowers/example.jpg
+ * =========================================================
  */
 app.use(
   "/uploads",
@@ -100,7 +121,9 @@ app.use(
 );
 
 /*
+ * =========================================================
  * ROOT
+ * =========================================================
  */
 app.get(
   "/",
@@ -117,7 +140,9 @@ app.get(
 );
 
 /*
+ * =========================================================
  * API
+ * =========================================================
  */
 app.use(
   "/api/v1",
@@ -125,8 +150,12 @@ app.use(
 );
 
 /*
- * These must stay after
- * all valid routes.
+ * =========================================================
+ * ERROR HANDLING
+ * =========================================================
+ *
+ * These must stay after all valid routes.
+ * =========================================================
  */
 app.use(
   notFound
