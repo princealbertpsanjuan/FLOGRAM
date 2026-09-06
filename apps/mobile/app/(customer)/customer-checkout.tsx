@@ -3,11 +3,19 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import * as Location from "expo-location";
+
+import MapView, {
+  Marker,
+  type LatLng,
+} from "react-native-maps";
 
 import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -16,7 +24,6 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -44,21 +51,50 @@ type PaymentMethod =
   | "cash_on_pickup"
   | "paymongo";
 
+type PaymentStatus =
+  | "unpaid"
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | string;
+
+type CheckoutStatus =
+  | "created"
+  | "payment_pending"
+  | "paid"
+  | "completed"
+  | "cancelled"
+  | "failed"
+  | string;
+
+/* =========================================================
+ * ADDRESS
+ * ======================================================= */
+
 type Address = {
   street?: string;
   barangay?: string;
   city?: string;
   province?: string;
   postalCode?: string;
+  landmark?: string;
 };
+
+/* =========================================================
+ * FLORIST
+ * ======================================================= */
 
 type Florist = {
   _id?: string;
   shopName?: string;
   shopLogo?: string | null;
-
   address?: Address | null;
 };
+
+/* =========================================================
+ * CUSTOM BOUQUET
+ * ======================================================= */
 
 type Proposal = {
   _id?: string;
@@ -112,7 +148,6 @@ type CustomBouquetRequest = {
 
 type CustomRequestResponse = {
   success: boolean;
-
   message?: string;
 
   data?: {
@@ -121,7 +156,7 @@ type CustomRequestResponse = {
 };
 
 /* =========================================================
- * CART TYPES
+ * CART
  * ======================================================= */
 
 type CartFlower = {
@@ -204,7 +239,245 @@ type CartResponse = {
 };
 
 /* =========================================================
- * ORDER TYPES
+ * GROUPED CHECKOUT QUOTE
+ * ======================================================= */
+
+type CheckoutQuoteItem = {
+  cartItem?: string | null;
+
+  flower?: string | CartFlower | null;
+
+  seller?: string | null;
+
+  florist?:
+    | string
+    | Florist
+    | null;
+
+  productName?: string;
+
+  inspirationImage?: string | null;
+
+  quantity?: number;
+
+  unitPrice?: number;
+
+  subtotal?: number;
+
+  deliveryFee?: number;
+
+  preOrderFee?: number;
+
+  totalAmount?: number;
+
+  deliveryDistanceMeters?:
+    | number
+    | null;
+
+  deliveryDurationSeconds?:
+    | number
+    | null;
+};
+
+type CheckoutShopQuote = {
+  florist?:
+    | string
+    | Florist
+    | null;
+
+  shopName?: string;
+
+  itemCount?: number;
+
+  totalQuantity?: number;
+
+  productsSubtotal?: number;
+
+  deliveryFee?: number;
+
+  preOrderFee?: number;
+
+  totalAmount?: number;
+
+  deliveryDistanceMeters?:
+    | number
+    | null;
+
+  deliveryDurationSeconds?:
+    | number
+    | null;
+
+  items?: CheckoutQuoteItem[];
+};
+
+type CheckoutQuote = {
+  itemCount?: number;
+
+  totalQuantity?: number;
+
+  shopCount?: number;
+
+  productsSubtotal?: number;
+
+  deliveryFee?: number;
+
+  preOrderFee?: number;
+
+  totalAmount?: number;
+
+  shops?: CheckoutShopQuote[];
+
+  items?: CheckoutQuoteItem[];
+};
+
+type CheckoutQuoteResponse = {
+  success: boolean;
+
+  message?: string;
+
+  data?: {
+    quote?: CheckoutQuote;
+  };
+};
+
+/* =========================================================
+ * GROUPED CHECKOUT
+ * ======================================================= */
+
+type CheckoutOrder = {
+  _id: string;
+
+  productName?: string;
+
+  quantity?: number;
+
+  subtotal?: number;
+
+  deliveryFee?: number;
+
+  preOrderFee?: number;
+
+  totalAmount?: number;
+
+  paymentMethod?: PaymentMethod;
+
+  paymentStatus?: PaymentStatus;
+
+  orderStatus?: string;
+
+  florist?: Florist | null;
+};
+
+type Checkout = {
+  _id: string;
+
+  customer?: string;
+
+  items?: CheckoutQuoteItem[];
+
+  orders?: CheckoutOrder[];
+
+  shopBreakdown?: CheckoutShopQuote[];
+
+  fulfillmentType?: FulfillmentType;
+
+  productsSubtotal?: number;
+
+  deliveryFee?: number;
+
+  preOrderFee?: number;
+
+  totalAmount?: number;
+
+  paymentMethod?: PaymentMethod;
+
+  paymentProvider?: string | null;
+
+  paymentStatus?: PaymentStatus;
+
+  checkoutStatus?: CheckoutStatus;
+
+  paymongoCheckoutSessionId?:
+    | string
+    | null;
+
+  paymongoPaymentId?:
+    | string
+    | null;
+
+  paymentCheckoutUrl?:
+    | string
+    | null;
+
+  paymentInitiatedAt?:
+    | string
+    | null;
+
+  paidAt?:
+    | string
+    | null;
+
+  paymentFailedAt?:
+    | string
+    | null;
+
+  lastPaymentEventId?:
+    | string
+    | null;
+
+  createdAt?: string;
+
+  updatedAt?: string;
+};
+
+type CreateCheckoutResponse = {
+  success: boolean;
+
+  message?: string;
+
+  data?: {
+    checkout?: Checkout;
+  };
+};
+
+type GetCheckoutResponse = {
+  success: boolean;
+
+  message?: string;
+
+  data?: {
+    checkout?: Checkout;
+  };
+};
+
+type GroupedPayMongoResponse = {
+  success: boolean;
+
+  message?: string;
+
+  data?: {
+    checkoutId?: string;
+
+    checkoutSessionId?: string;
+
+    checkoutUrl?: string;
+
+    paymentStatus?: PaymentStatus;
+
+    productsSubtotal?: number;
+
+    deliveryFee?: number;
+
+    preOrderFee?: number;
+
+    totalAmount?: number;
+  };
+};
+
+/* =========================================================
+ * LEGACY ORDER
+ *
+ * Still used by custom bouquet checkout.
  * ======================================================= */
 
 type Order = {
@@ -265,7 +538,7 @@ type CreateOrderResponse = {
   };
 };
 
-type PayMongoCheckoutResponse = {
+type LegacyPayMongoResponse = {
   success: boolean;
 
   message?: string;
@@ -326,14 +599,18 @@ const COLORS = {
  * ======================================================= */
 
 const API_BASE =
-  process.env.EXPO_PUBLIC_API_URL ??
+  process.env
+    .EXPO_PUBLIC_API_URL ??
   "";
 
 const SERVER_ORIGIN =
   API_BASE.replace(
     /\/api\/v1\/?$/i,
     ""
-  ).replace(/\/+$/, "");
+  ).replace(
+    /\/+$/,
+    ""
+  );
 
 const getImageUrl = (
   image?: string | null
@@ -350,16 +627,26 @@ const getImageUrl = (
   }
 
   if (
-    value.startsWith("http://") ||
-    value.startsWith("https://")
+    value.startsWith(
+      "http://"
+    ) ||
+    value.startsWith(
+      "https://"
+    )
   ) {
     return value;
   }
 
   const cleaned =
     value
-      .replaceAll("\\", "/")
-      .replace(/^\/+/, "");
+      .replaceAll(
+        "\\",
+        "/"
+      )
+      .replace(
+        /^\/+/,
+        ""
+      );
 
   if (!SERVER_ORIGIN) {
     return cleaned;
@@ -378,7 +665,8 @@ const getErrorMessage = (
 ) => {
   if (
     error &&
-    typeof error === "object" &&
+    typeof error ===
+      "object" &&
     "message" in error
   ) {
     const message =
@@ -416,8 +704,11 @@ const formatCurrency = (
   ).toLocaleString(
     "en-PH",
     {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits:
+        2,
+
+      maximumFractionDigits:
+        2,
     }
   )}`;
 };
@@ -462,6 +753,18 @@ const isValidTime = (
     value.trim()
   );
 };
+
+const sleep = (
+  milliseconds: number
+) =>
+  new Promise<void>(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        milliseconds
+      );
+    }
+  );
 
 const getFlorist = (
   request:
@@ -531,7 +834,8 @@ const isCartItemPurchasable = (
     item.flower &&
       item.flower.isActive ===
         true &&
-      item.flower.isAvailable ===
+      item.flower
+        .isAvailable ===
         true
   );
 };
@@ -570,15 +874,18 @@ export default function CustomerCheckoutScreen() {
         "";
 
   const mode =
-    Array.isArray(params.mode)
-      ? params.mode[0] ?? ""
+    Array.isArray(
+      params.mode
+    )
+      ? params.mode[0] ??
+        ""
       : params.mode ?? "";
 
   const isCartCheckout =
     mode === "cart";
 
   /* =======================================================
-   * DATA
+   * SOURCE DATA
    * ===================================================== */
 
   const [
@@ -618,7 +925,7 @@ export default function CustomerCheckoutScreen() {
     >(null);
 
   /* =======================================================
-   * CHECKOUT
+   * FORM
    * ===================================================== */
 
   const [
@@ -678,16 +985,37 @@ export default function CustomerCheckoutScreen() {
     useState("");
 
   const [
-    latitude,
-    setLatitude,
+    deliveryCoordinate,
+    setDeliveryCoordinate,
   ] =
-    useState("");
+    useState<LatLng | null>(
+      null
+    );
 
   const [
-    longitude,
-    setLongitude,
+    locationPermissionGranted,
+    setLocationPermissionGranted,
   ] =
-    useState("");
+    useState(false);
+
+  const [
+    locatingCustomer,
+    setLocatingCustomer,
+  ] =
+    useState(false);
+
+  const [
+    locationError,
+    setLocationError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const deliveryMapRef =
+    useRef<MapView | null>(
+      null
+    );
 
   const [
     scheduled,
@@ -727,11 +1055,54 @@ export default function CustomerCheckoutScreen() {
       "cash_on_delivery"
     );
 
+  /* =======================================================
+   * GROUPED CART CHECKOUT STATE
+   * ===================================================== */
+
+  const [
+    quote,
+    setQuote,
+  ] =
+    useState<
+      CheckoutQuote | null
+    >(null);
+
+  const [
+    quoteLoading,
+    setQuoteLoading,
+  ] =
+    useState(false);
+
+  const [
+    quoteError,
+    setQuoteError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
   const [
     submitting,
     setSubmitting,
   ] =
     useState(false);
+
+  const [
+    checkingPayment,
+    setCheckingPayment,
+  ] =
+    useState(false);
+
+  const [
+    createdCheckout,
+    setCreatedCheckout,
+  ] =
+    useState<
+      Checkout | null
+    >(null);
+
+  const quoteRequestIdRef =
+    useRef(0);
 
   /* =======================================================
    * LOAD CUSTOM REQUEST
@@ -811,8 +1182,8 @@ export default function CustomerCheckoutScreen() {
         }
 
         if (
-          loadedCart.items.length ===
-          0
+          loadedCart.items
+            .length === 0
         ) {
           throw new Error(
             "Your shopping cart is empty."
@@ -820,7 +1191,8 @@ export default function CustomerCheckoutScreen() {
         }
 
         if (
-          loadedCart.unavailableItemCount >
+          loadedCart
+            .unavailableItemCount >
           0
         ) {
           throw new Error(
@@ -836,7 +1208,7 @@ export default function CustomerCheckoutScreen() {
     );
 
   /* =======================================================
-   * LOAD CHECKOUT DATA
+   * LOAD SCREEN
    * ===================================================== */
 
   const loadCheckout =
@@ -846,10 +1218,14 @@ export default function CustomerCheckoutScreen() {
       ) => {
         try {
           if (showLoader) {
-            setLoading(true);
+            setLoading(
+              true
+            );
           }
 
-          setLoadError(null);
+          setLoadError(
+            null
+          );
 
           if (
             isCartCheckout
@@ -867,7 +1243,9 @@ export default function CustomerCheckoutScreen() {
           );
         } finally {
           if (showLoader) {
-            setLoading(false);
+            setLoading(
+              false
+            );
           }
         }
       },
@@ -881,10 +1259,6 @@ export default function CustomerCheckoutScreen() {
   useEffect(() => {
     void loadCheckout();
   }, [loadCheckout]);
-
-  /* =======================================================
-   * REFRESH
-   * ===================================================== */
 
   const handleRefresh =
     useCallback(
@@ -907,19 +1281,22 @@ export default function CustomerCheckoutScreen() {
     );
 
   /* =======================================================
-   * CUSTOM DERIVED VALUES
+   * DERIVED CUSTOM VALUES
    * ===================================================== */
 
   const florist =
     useMemo(
       () =>
-        getFlorist(request),
+        getFlorist(
+          request
+        ),
       [request]
     );
 
   const customImageUrl =
     getImageUrl(
-      request?.inspirationImage
+      request
+        ?.inspirationImage
     );
 
   const customTitle =
@@ -928,7 +1305,8 @@ export default function CustomerCheckoutScreen() {
       : "Custom Bouquet";
 
   const quotedPrice =
-    request?.quotedPrice ??
+    request
+      ?.quotedPrice ??
     (
       typeof request
         ?.selectedProposal ===
@@ -955,56 +1333,156 @@ export default function CustomerCheckoutScreen() {
       : null;
 
   /* =======================================================
-   * CART DERIVED VALUES
+   * DERIVED CART VALUES
    * ===================================================== */
 
   const cartItems =
     cart?.items ?? [];
 
   const cartSubtotal =
-    cart?.estimatedSubtotal ??
+    cart
+      ?.estimatedSubtotal ??
     0;
 
   const cartTotalQuantity =
-    cart?.totalQuantity ??
+    cart
+      ?.totalQuantity ??
     0;
 
-  const cartHasMultipleItems =
-    cartItems.length > 1;
+  /* =======================================================
+   * DELIVERY LOCATION PIN
+   * ===================================================== */
 
-  /*
-   * Current backend creates one Order
-   * document per flower listing.
-   *
-   * Therefore multiple cart products
-   * create multiple orders.
-   *
-   * Hosted PayMongo checkout is kept
-   * to one cart item per checkout so
-   * we do not open multiple hosted
-   * payment pages at once.
-   */
+  const selectDeliveryCoordinate =
+    useCallback(
+      (coordinate: LatLng) => {
+        if (
+          !Number.isFinite(
+            coordinate.latitude
+          ) ||
+          !Number.isFinite(
+            coordinate.longitude
+          )
+        ) {
+          return;
+        }
 
-  useEffect(() => {
-    if (
-      isCartCheckout &&
-      cartHasMultipleItems &&
-      paymentMethod ===
-        "paymongo"
-    ) {
-      setPaymentMethod(
-        fulfillmentType ===
-          "delivery"
-          ? "cash_on_delivery"
-          : "cash_on_pickup"
-      );
-    }
-  }, [
-    isCartCheckout,
-    cartHasMultipleItems,
-    paymentMethod,
-    fulfillmentType,
-  ]);
+        setDeliveryCoordinate(
+          coordinate
+        );
+
+        setLocationError(
+          null
+        );
+
+        setQuote(
+          null
+        );
+
+        setQuoteError(
+          null
+        );
+      },
+      []
+    );
+
+  /* =======================================================
+   * USE CURRENT LOCATION
+   * ===================================================== */
+
+  const handleUseCurrentLocation =
+    useCallback(
+      async () => {
+        try {
+          setLocatingCustomer(
+            true
+          );
+
+          setLocationError(
+            null
+          );
+
+          const permission =
+            await Location
+              .requestForegroundPermissionsAsync();
+
+          if (
+            permission.status !==
+            "granted"
+          ) {
+            setLocationPermissionGranted(
+              false
+            );
+
+            setLocationError(
+              "Location permission is required to use your current location. You can still tap the map to choose the delivery point."
+            );
+
+            return;
+          }
+
+          setLocationPermissionGranted(
+            true
+          );
+
+          const currentLocation =
+            await Location
+              .getCurrentPositionAsync(
+                {
+                  accuracy:
+                    Location.Accuracy.High,
+                }
+              );
+
+          const coordinate:
+            LatLng = {
+            latitude:
+              currentLocation.coords
+                .latitude,
+
+            longitude:
+              currentLocation.coords
+                .longitude,
+          };
+
+          selectDeliveryCoordinate(
+            coordinate
+          );
+
+          deliveryMapRef.current
+            ?.animateToRegion(
+              {
+                latitude:
+                  coordinate.latitude,
+
+                longitude:
+                  coordinate.longitude,
+
+                latitudeDelta:
+                  0.008,
+
+                longitudeDelta:
+                  0.008,
+              },
+              500
+            );
+        } catch (error) {
+          setLocationError(
+            getErrorMessage(
+              error,
+              "Unable to get your current location. Tap the map to choose the delivery point manually."
+            )
+          );
+        } finally {
+          setLocatingCustomer(
+            false
+          );
+        }
+      },
+      [
+        selectDeliveryCoordinate,
+      ]
+    );
 
   /* =======================================================
    * FULFILLMENT
@@ -1015,6 +1493,14 @@ export default function CustomerCheckoutScreen() {
   ) => {
     setFulfillmentType(
       value
+    );
+
+    setQuote(
+      null
+    );
+
+    setQuoteError(
+      null
     );
 
     if (
@@ -1044,307 +1530,237 @@ export default function CustomerCheckoutScreen() {
    * VALIDATION
    * ===================================================== */
 
+  const getValidationError =
+    useCallback(
+      (
+        checkPayment = true
+      ) => {
+        if (
+          isCartCheckout
+        ) {
+          if (
+            !cart ||
+            cart.items.length === 0
+          ) {
+            return "Your shopping cart is empty.";
+          }
+
+          const unavailable =
+            cart.items.some(
+              (item) =>
+                !isCartItemPurchasable(
+                  item
+                )
+            );
+
+          if (unavailable) {
+            return "Remove unavailable flower listings before checkout.";
+          }
+        } else {
+          if (!request) {
+            return "The bouquet request has not loaded.";
+          }
+
+          if (
+            request.status !==
+            "customer_accepted"
+          ) {
+            return "Select a florist proposal before proceeding to checkout.";
+          }
+        }
+
+        if (
+          !recipientName.trim()
+        ) {
+          return "Enter the recipient's full name.";
+        }
+
+        if (
+          !recipientPhone.trim()
+        ) {
+          return "Enter the recipient's phone number.";
+        }
+
+        if (
+          !isValidPhilippinePhone(
+            recipientPhone
+          )
+        ) {
+          return "Enter a valid Philippine phone number such as 09171234567.";
+        }
+
+        if (
+          fulfillmentType ===
+          "delivery"
+        ) {
+          if (
+            !street.trim() ||
+            !barangay.trim() ||
+            !city.trim() ||
+            !province.trim()
+          ) {
+            return "Complete the street, barangay, city, and province fields.";
+          }
+
+          if (
+            !deliveryCoordinate
+          ) {
+            return "Pin the exact delivery location on the map.";
+          }
+
+          const selectedLatitude =
+            deliveryCoordinate.latitude;
+
+          const selectedLongitude =
+            deliveryCoordinate.longitude;
+
+          if (
+            !Number.isFinite(
+              selectedLatitude
+            ) ||
+            !Number.isFinite(
+              selectedLongitude
+            ) ||
+            selectedLatitude < -90 ||
+            selectedLatitude > 90 ||
+            selectedLongitude < -180 ||
+            selectedLongitude > 180
+          ) {
+            return "The pinned delivery location is invalid.";
+          }
+        }
+
+        if (scheduled) {
+          if (
+            !isValidDate(
+              deliveryDate
+            )
+          ) {
+            return "Enter the scheduled date using YYYY-MM-DD.";
+          }
+
+          const selectedDate =
+            new Date(
+              `${deliveryDate}T23:59:59`
+            );
+
+          if (
+            Number.isNaN(
+              selectedDate.getTime()
+            )
+          ) {
+            return "Enter a valid scheduled delivery date.";
+          }
+
+          if (
+            selectedDate.getTime() <=
+            Date.now()
+          ) {
+            return "Scheduled delivery must be in the future.";
+          }
+
+          const hasStart =
+            Boolean(
+              startTime.trim()
+            );
+
+          const hasEnd =
+            Boolean(
+              endTime.trim()
+            );
+
+          if (
+            hasStart !== hasEnd
+          ) {
+            return "Enter both delivery start and end times, or leave both empty.";
+          }
+
+          if (
+            hasStart &&
+            !isValidTime(
+              startTime
+            )
+          ) {
+            return "Use HH:MM format for the delivery start time.";
+          }
+
+          if (
+            hasEnd &&
+            !isValidTime(
+              endTime
+            )
+          ) {
+            return "Use HH:MM format for the delivery end time.";
+          }
+        }
+
+        if (checkPayment) {
+          if (
+            fulfillmentType ===
+              "delivery" &&
+            paymentMethod ===
+              "cash_on_pickup"
+          ) {
+            return "Cash on pickup cannot be used for delivery.";
+          }
+
+          if (
+            fulfillmentType ===
+              "pickup" &&
+            paymentMethod ===
+              "cash_on_delivery"
+          ) {
+            return "Cash on delivery cannot be used for pickup.";
+          }
+        }
+
+        return null;
+      },
+      [
+        barangay,
+        cart,
+        city,
+        deliveryCoordinate,
+        deliveryDate,
+        endTime,
+        fulfillmentType,
+        isCartCheckout,
+        paymentMethod,
+        province,
+        recipientName,
+        recipientPhone,
+        request,
+        scheduled,
+        startTime,
+        street,
+      ]
+    );
+
   const validateForm =
     () => {
-      /*
-       * SOURCE
-       */
-
-      if (
-        isCartCheckout
-      ) {
-        if (
-          !cart ||
-          cart.items.length ===
-            0
-        ) {
-          Alert.alert(
-            "Checkout unavailable",
-            "Your shopping cart is empty."
-          );
-
-          return false;
-        }
-
-        const unavailable =
-          cart.items.some(
-            (item) =>
-              !isCartItemPurchasable(
-                item
-              )
-          );
-
-        if (unavailable) {
-          Alert.alert(
-            "Unavailable product",
-            "Remove unavailable flower listings before checkout."
-          );
-
-          return false;
-        }
-
-        if (
-          paymentMethod ===
-            "paymongo" &&
-          cart.items.length > 1
-        ) {
-          Alert.alert(
-            "PayMongo",
-            "For now, online payment can be used when checking out one flower listing at a time. Use cash payment for this multi-item checkout."
-          );
-
-          return false;
-        }
-      } else {
-        if (!request) {
-          Alert.alert(
-            "Checkout unavailable",
-            "The bouquet request has not loaded."
-          );
-
-          return false;
-        }
-
-        if (
-          request.status !==
-          "customer_accepted"
-        ) {
-          Alert.alert(
-            "Checkout unavailable",
-            "Select a florist proposal before proceeding to checkout."
-          );
-
-          return false;
-        }
-      }
-
-      /*
-       * RECIPIENT
-       */
-
-      if (
-        !recipientName.trim()
-      ) {
-        Alert.alert(
-          "Recipient required",
-          "Enter the recipient's full name."
+      const error =
+        getValidationError(
+          true
         );
 
-        return false;
+      if (!error) {
+        return true;
       }
 
-      if (
-        !recipientPhone.trim()
-      ) {
-        Alert.alert(
-          "Phone number required",
-          "Enter the recipient's phone number."
-        );
+      Alert.alert(
+        "Checkout information",
+        error
+      );
 
-        return false;
-      }
-
-      if (
-        !isValidPhilippinePhone(
-          recipientPhone
-        )
-      ) {
-        Alert.alert(
-          "Invalid phone number",
-          "Enter a valid Philippine number such as 09171234567."
-        );
-
-        return false;
-      }
-
-      /*
-       * DELIVERY
-       */
-
-      if (
-        fulfillmentType ===
-        "delivery"
-      ) {
-        if (
-          !street.trim() ||
-          !barangay.trim() ||
-          !city.trim() ||
-          !province.trim()
-        ) {
-          Alert.alert(
-            "Delivery address required",
-            "Complete the street, barangay, city, and province fields."
-          );
-
-          return false;
-        }
-
-        const lat =
-          Number(latitude);
-
-        const lng =
-          Number(longitude);
-
-        if (
-          !latitude.trim() ||
-          !longitude.trim() ||
-          !Number.isFinite(
-            lat
-          ) ||
-          !Number.isFinite(
-            lng
-          )
-        ) {
-          Alert.alert(
-            "Delivery location required",
-            "Enter the exact latitude and longitude of the delivery location."
-          );
-
-          return false;
-        }
-
-        if (
-          lat < -90 ||
-          lat > 90 ||
-          lng < -180 ||
-          lng > 180
-        ) {
-          Alert.alert(
-            "Invalid coordinates",
-            "Check the latitude and longitude values."
-          );
-
-          return false;
-        }
-      }
-
-      /*
-       * SCHEDULE
-       */
-
-      if (scheduled) {
-        if (
-          !isValidDate(
-            deliveryDate
-          )
-        ) {
-          Alert.alert(
-            "Delivery date required",
-            "Use YYYY-MM-DD for the scheduled delivery date."
-          );
-
-          return false;
-        }
-
-        const date =
-          new Date(
-            `${deliveryDate}T23:59:59`
-          );
-
-        if (
-          date.getTime() <=
-          Date.now()
-        ) {
-          Alert.alert(
-            "Invalid delivery date",
-            "Scheduled delivery must be in the future."
-          );
-
-          return false;
-        }
-
-        const hasStart =
-          Boolean(
-            startTime.trim()
-          );
-
-        const hasEnd =
-          Boolean(
-            endTime.trim()
-          );
-
-        if (
-          hasStart !==
-          hasEnd
-        ) {
-          Alert.alert(
-            "Delivery time",
-            "Enter both the start and end time, or leave both empty."
-          );
-
-          return false;
-        }
-
-        if (
-          hasStart &&
-          !isValidTime(
-            startTime
-          )
-        ) {
-          Alert.alert(
-            "Invalid start time",
-            "Use HH:MM format, for example 14:00."
-          );
-
-          return false;
-        }
-
-        if (
-          hasEnd &&
-          !isValidTime(
-            endTime
-          )
-        ) {
-          Alert.alert(
-            "Invalid end time",
-            "Use HH:MM format, for example 16:00."
-          );
-
-          return false;
-        }
-      }
-
-      /*
-       * PAYMENT
-       */
-
-      if (
-        fulfillmentType ===
-          "delivery" &&
-        paymentMethod ===
-          "cash_on_pickup"
-      ) {
-        Alert.alert(
-          "Invalid payment method",
-          "Cash on pickup cannot be used for delivery orders."
-        );
-
-        return false;
-      }
-
-      if (
-        fulfillmentType ===
-          "pickup" &&
-        paymentMethod ===
-          "cash_on_delivery"
-      ) {
-        Alert.alert(
-          "Invalid payment method",
-          "Cash on delivery cannot be used for pickup orders."
-        );
-
-        return false;
-      }
-
-      return true;
+      return false;
     };
 
   /* =======================================================
-   * COMMON ORDER BODY
+   * COMMON BODY
    * ===================================================== */
 
-  const buildCommonBody =
-    () => {
+  const commonBody =
+    useMemo(() => {
       const body: Record<
         string,
         unknown
@@ -1360,8 +1776,6 @@ export default function CustomerCheckoutScreen() {
         isPreOrder:
           scheduled,
 
-        paymentMethod,
-
         customerNotes:
           notes.trim() ||
           undefined,
@@ -1371,48 +1785,60 @@ export default function CustomerCheckoutScreen() {
         fulfillmentType ===
         "delivery"
       ) {
-        body.deliveryAddress =
-          {
-            street:
-              street.trim(),
+        body.deliveryAddress = {
+          street:
+            street.trim(),
 
-            barangay:
-              barangay.trim(),
+          barangay:
+            barangay.trim(),
 
-            city:
-              city.trim(),
+          city:
+            city.trim(),
 
-            province:
-              province.trim(),
+          province:
+            province.trim(),
 
-            postalCode:
-              postalCode.trim() ||
-              undefined,
+          postalCode:
+            postalCode.trim() ||
+            undefined,
 
-            landmark:
-              landmark.trim() ||
-              undefined,
-          };
+          landmark:
+            landmark.trim() ||
+            undefined,
+        };
 
-        body.deliveryLocation =
-          {
+        if (
+          deliveryCoordinate
+        ) {
+          body.deliveryLocation = {
             latitude:
-              Number(
-                latitude
-              ),
+              deliveryCoordinate.latitude,
 
             longitude:
-              Number(
-                longitude
-              ),
+              deliveryCoordinate.longitude,
           };
+        }
       }
 
-      if (scheduled) {
-        body.requestedDeliveryDate =
+      if (
+        scheduled &&
+        isValidDate(
+          deliveryDate
+        )
+      ) {
+        const requestedDate =
           new Date(
             `${deliveryDate}T12:00:00`
-          ).toISOString();
+          );
+
+        if (
+          !Number.isNaN(
+            requestedDate.getTime()
+          )
+        ) {
+          body.requestedDeliveryDate =
+            requestedDate.toISOString();
+        }
 
         if (
           startTime.trim()
@@ -1430,18 +1856,408 @@ export default function CustomerCheckoutScreen() {
       }
 
       return body;
+    }, [
+      barangay,
+      city,
+      deliveryCoordinate,
+      deliveryDate,
+      endTime,
+      fulfillmentType,
+      landmark,
+      notes,
+      postalCode,
+      province,
+      recipientName,
+      recipientPhone,
+      scheduled,
+      startTime,
+      street,
+    ]);
+
+  /* =======================================================
+   * CART QUOTE
+   * ===================================================== */
+
+  const requestCartQuote =
+    useCallback(
+      async (
+        showErrors = false
+      ) => {
+        if (
+          !isCartCheckout
+        ) {
+          return null;
+        }
+
+        const validationError =
+          getValidationError(
+            false
+          );
+
+        if (
+          validationError
+        ) {
+          setQuote(
+            null
+          );
+
+          if (showErrors) {
+            Alert.alert(
+              "Complete checkout details",
+              validationError
+            );
+          }
+
+          return null;
+        }
+
+        const requestId =
+          ++quoteRequestIdRef
+            .current;
+
+        try {
+          setQuoteLoading(
+            true
+          );
+
+          setQuoteError(
+            null
+          );
+
+          const response =
+            await apiRequest<CheckoutQuoteResponse>(
+              "/checkout/quote",
+              {
+                method:
+                  "POST",
+
+                authenticated:
+                  true,
+
+                body:
+                  JSON.stringify(
+                    commonBody
+                  ),
+              }
+            );
+
+          if (
+            requestId !==
+            quoteRequestIdRef
+              .current
+          ) {
+            return null;
+          }
+
+          const loadedQuote =
+            response?.data
+              ?.quote;
+
+          if (!loadedQuote) {
+            throw new Error(
+              "The server did not return a checkout quote."
+            );
+          }
+
+          setQuote(
+            loadedQuote
+          );
+
+          return loadedQuote;
+        } catch (error) {
+          if (
+            requestId ===
+            quoteRequestIdRef
+              .current
+          ) {
+            const message =
+              getErrorMessage(
+                error,
+                "Unable to calculate the checkout total."
+              );
+
+            setQuote(
+              null
+            );
+
+            setQuoteError(
+              message
+            );
+
+            if (showErrors) {
+              Alert.alert(
+                "Unable to calculate total",
+                message
+              );
+            }
+          }
+
+          return null;
+        } finally {
+          if (
+            requestId ===
+            quoteRequestIdRef
+              .current
+          ) {
+            setQuoteLoading(
+              false
+            );
+          }
+        }
+      },
+      [
+        commonBody,
+        getValidationError,
+        isCartCheckout,
+      ]
+    );
+
+  /*
+   * Automatically refresh the server quote.
+   *
+   * A short debounce prevents route calculation
+   * on every keystroke.
+   */
+  useEffect(() => {
+    if (
+      !isCartCheckout ||
+      !cart
+    ) {
+      return;
+    }
+
+    setQuote(
+      null
+    );
+
+    setQuoteError(
+      null
+    );
+
+    const validationError =
+      getValidationError(
+        false
+      );
+
+    if (validationError) {
+      return;
+    }
+
+    const timer =
+      setTimeout(
+        () => {
+          void requestCartQuote(
+            false
+          );
+        },
+        700
+      );
+
+    return () => {
+      clearTimeout(
+        timer
+      );
+    };
+  }, [
+    cart,
+    commonBody,
+    getValidationError,
+    isCartCheckout,
+    requestCartQuote,
+  ]);
+
+  /* =======================================================
+   * GROUPED CHECKOUT CREATION
+   * ===================================================== */
+
+  const createGroupedCheckout =
+    async () => {
+      const freshQuote =
+        quote ??
+        (
+          await requestCartQuote(
+            true
+          )
+        );
+
+      if (!freshQuote) {
+        throw new Error(
+          "A valid checkout quote is required before placing the order."
+        );
+      }
+
+      const response =
+        await apiRequest<CreateCheckoutResponse>(
+          "/checkout",
+          {
+            method:
+              "POST",
+
+            authenticated:
+              true,
+
+            body:
+              JSON.stringify({
+                ...commonBody,
+
+                paymentMethod,
+              }),
+          }
+        );
+
+      const checkout =
+        response?.data
+          ?.checkout;
+
+      if (!checkout?._id) {
+        throw new Error(
+          "The server did not return the created checkout."
+        );
+      }
+
+      setCreatedCheckout(
+        checkout
+      );
+
+      return checkout;
     };
 
   /* =======================================================
-   * PAYMONGO
+   * GROUPED PAYMONGO
    * ===================================================== */
 
-  const startPayMongoCheckout =
+  const getGroupedCheckout =
+    async (
+      checkoutId: string
+    ) => {
+      const response =
+        await apiRequest<GetCheckoutResponse>(
+          `/checkout/${checkoutId}`,
+          {
+            authenticated:
+              true,
+          }
+        );
+
+      const checkout =
+        response?.data
+          ?.checkout;
+
+      if (!checkout) {
+        throw new Error(
+          "The checkout was not returned by the server."
+        );
+      }
+
+      setCreatedCheckout(
+        checkout
+      );
+
+      return checkout;
+    };
+
+  const waitForGroupedPayment =
+    async (
+      checkoutId: string
+    ) => {
+      try {
+        setCheckingPayment(
+          true
+        );
+
+        /*
+         * Give PayMongo webhook time to reach
+         * the backend after browser checkout.
+         */
+        for (
+          let attempt = 0;
+          attempt < 10;
+          attempt += 1
+        ) {
+          if (attempt > 0) {
+            await sleep(
+              1500
+            );
+          }
+
+          const checkout =
+            await getGroupedCheckout(
+              checkoutId
+            );
+
+          if (
+            checkout.paymentStatus ===
+            "paid"
+          ) {
+            return checkout;
+          }
+
+          if (
+            checkout.paymentStatus ===
+              "failed" ||
+            checkout.checkoutStatus ===
+              "failed"
+          ) {
+            return checkout;
+          }
+        }
+
+        return await getGroupedCheckout(
+          checkoutId
+        );
+      } finally {
+        setCheckingPayment(
+          false
+        );
+      }
+    };
+
+  const startGroupedPayMongo =
+    async (
+      checkout: Checkout
+    ) => {
+      const response =
+        await apiRequest<GroupedPayMongoResponse>(
+          `/checkout/${checkout._id}/paymongo`,
+          {
+            method:
+              "POST",
+
+            authenticated:
+              true,
+          }
+        );
+
+      const checkoutUrl =
+        response?.data
+          ?.checkoutUrl;
+
+      if (!checkoutUrl) {
+        throw new Error(
+          "PayMongo did not return a checkout URL."
+        );
+      }
+
+      await WebBrowser
+        .openBrowserAsync(
+          checkoutUrl
+        );
+
+      return waitForGroupedPayment(
+        checkout._id
+      );
+    };
+
+  /* =======================================================
+   * LEGACY CUSTOM BOUQUET PAYMONGO
+   * ===================================================== */
+
+  const startCustomPayMongo =
     async (
       orderId: string
     ) => {
       const response =
-        await apiRequest<PayMongoCheckoutResponse>(
+        await apiRequest<LegacyPayMongoResponse>(
           `/payments/orders/${orderId}/checkout`,
           {
             method:
@@ -1462,40 +2278,10 @@ export default function CustomerCheckoutScreen() {
         );
       }
 
-      const supported =
-        await Linking.canOpenURL(
+      await WebBrowser
+        .openBrowserAsync(
           checkoutUrl
         );
-
-      if (!supported) {
-        throw new Error(
-          "Unable to open the PayMongo checkout page."
-        );
-      }
-
-      await Linking.openURL(
-        checkoutUrl
-      );
-    };
-
-  /* =======================================================
-   * REMOVE COMPLETED CART ITEM
-   * ===================================================== */
-
-  const removeCompletedCartItem =
-    async (
-      cartItemId: string
-    ) => {
-      await apiRequest<CartResponse>(
-        `/cart/items/${cartItemId}`,
-        {
-          method:
-            "DELETE",
-
-          authenticated:
-            true,
-        }
-      );
     };
 
   /* =======================================================
@@ -1511,7 +2297,9 @@ export default function CustomerCheckoutScreen() {
       }
 
       const body = {
-        ...buildCommonBody(),
+        ...commonBody,
+
+        paymentMethod,
 
         sourceType:
           "custom_bouquet",
@@ -1538,7 +2326,8 @@ export default function CustomerCheckoutScreen() {
         );
 
       const order =
-        response?.data?.order;
+        response?.data
+          ?.order;
 
       if (!order?._id) {
         throw new Error(
@@ -1550,141 +2339,109 @@ export default function CustomerCheckoutScreen() {
     };
 
   /* =======================================================
-   * CART ORDERS
+   * COMPLETE / NAVIGATION
    * ===================================================== */
 
-  const placeCartOrders =
+  const returnHome =
+    () => {
+      router.replace(
+        "/(customer)/customer-dashboard" as never
+      );
+    };
+
+  const showGroupedPaymentResult =
+    (
+      checkout: Checkout
+    ) => {
+      if (
+        checkout.paymentStatus ===
+        "paid"
+      ) {
+        Alert.alert(
+          "Payment successful",
+          `Your payment of ${formatCurrency(
+            checkout.totalAmount
+          )} was verified successfully. Your orders have been placed.`,
+          [
+            {
+              text:
+                "Continue",
+
+              onPress:
+                returnHome,
+            },
+          ]
+        );
+
+        return;
+      }
+
+      if (
+        checkout.paymentStatus ===
+        "failed"
+      ) {
+        Alert.alert(
+          "Payment not completed",
+          "PayMongo reported that the payment was not completed. Your checkout has been saved.",
+          [
+            {
+              text:
+                "OK",
+            },
+          ]
+        );
+
+        return;
+      }
+
+      Alert.alert(
+        "Payment verification pending",
+        "The payment page was closed, but FLOGRAM has not received PayMongo's successful payment confirmation yet. You can check the payment status again.",
+        [
+          {
+            text:
+              "Stay Here",
+          },
+
+          {
+            text:
+              "Check Again",
+
+            onPress:
+              () => {
+                void handleCheckPaymentAgain();
+              },
+          },
+        ]
+      );
+    };
+
+  const handleCheckPaymentAgain =
     async () => {
       if (
-        !cart ||
-        cart.items.length ===
-          0
+        !createdCheckout?._id
       ) {
-        throw new Error(
-          "Your cart is empty."
-        );
+        return;
       }
 
-      const createdOrders:
-        Order[] = [];
-
-      const failedItems: {
-        item: CartItem;
-        error: string;
-      }[] = [];
-
-      /*
-       * IMPORTANT:
-       *
-       * Current Order model represents
-       * one flower listing per order.
-       *
-       * Therefore each cart item becomes
-       * one Order.
-       */
-
-      for (
-        const item of
-        cart.items
-      ) {
-        if (
-          !item.flower?._id
-        ) {
-          failedItems.push({
-            item,
-
-            error:
-              "Flower listing information is missing.",
-          });
-
-          continue;
-        }
-
-        try {
-          const body = {
-            ...buildCommonBody(),
-
-            sourceType:
-              "flower_listing",
-
-            flowerId:
-              item.flower._id,
-
-            quantity:
-              Math.max(
-                Number(
-                  item.quantity
-                ) || 1,
-                1
-              ),
-          };
-
-          const response =
-            await apiRequest<CreateOrderResponse>(
-              "/orders",
-              {
-                method:
-                  "POST",
-
-                authenticated:
-                  true,
-
-                body:
-                  JSON.stringify(
-                    body
-                  ),
-              }
-            );
-
-          const order =
-            response?.data?.order;
-
-          if (!order?._id) {
-            throw new Error(
-              "The server did not return the created order."
-            );
-          }
-
-          createdOrders.push(
-            order
+      try {
+        const checkout =
+          await waitForGroupedPayment(
+            createdCheckout._id
           );
 
-          /*
-           * Remove only after the
-           * corresponding order
-           * successfully exists.
-           */
-
-          try {
-            await removeCompletedCartItem(
-              item._id
-            );
-          } catch (
-            cartError
-          ) {
-            console.warn(
-              "Order created but cart item could not be removed:",
-              cartError
-            );
-          }
-        } catch (error) {
-          failedItems.push({
-            item,
-
-            error:
-              getErrorMessage(
-                error,
-                "Unable to create this order."
-              ),
-          });
-        }
+        showGroupedPaymentResult(
+          checkout
+        );
+      } catch (error) {
+        Alert.alert(
+          "Unable to check payment",
+          getErrorMessage(
+            error,
+            "Please try again."
+          )
+        );
       }
-
-      return {
-        createdOrders,
-
-        failedItems,
-      };
     };
 
   /* =======================================================
@@ -1705,124 +2462,40 @@ export default function CustomerCheckoutScreen() {
         );
 
         /*
-         * ===============================================
-         * CART CHECKOUT
-         * ===============================================
+         * =================================================
+         * CART → GROUPED CHECKOUT
+         * =================================================
          */
-
         if (
           isCartCheckout
         ) {
-          const {
-            createdOrders,
-            failedItems,
-          } =
-            await placeCartOrders();
-
-          if (
-            createdOrders.length ===
-            0
-          ) {
-            throw new Error(
-              failedItems[0]
-                ?.error ||
-                "No orders could be created."
-            );
-          }
+          const checkout =
+            await createGroupedCheckout();
 
           /*
-           * PAYMONGO
-           *
-           * Validation guarantees this
-           * is only one cart item.
+           * CASH
            */
-
           if (
-            paymentMethod ===
+            paymentMethod !==
             "paymongo"
           ) {
-            const order =
-              createdOrders[0];
-
-            try {
-              await startPayMongoCheckout(
-                order._id
-              );
-
-              Alert.alert(
-                "Order created",
-                "Your flower order was created. Complete payment through the PayMongo checkout page.",
-                [
-                  {
-                    text:
-                      "View Orders",
-
-                    onPress:
-                      () =>
-                        router.replace(
-                          "/(customer)/customer-orders" as never
-                        ),
-                  },
-                ]
-              );
-            } catch (
-              paymentError
-            ) {
-              Alert.alert(
-                "Order created",
-                `Your order was created, but the payment page could not be opened.\n\n${getErrorMessage(
-                  paymentError,
-                  "You can retry payment later."
-                )}`,
-                [
-                  {
-                    text:
-                      "View Orders",
-
-                    onPress:
-                      () =>
-                        router.replace(
-                          "/(customer)/customer-orders" as never
-                        ),
-                  },
-                ]
-              );
-            }
-
-            return;
-          }
-
-          /*
-           * PARTIAL SUCCESS
-           */
-
-          if (
-            failedItems.length >
-            0
-          ) {
             Alert.alert(
-              "Some orders were placed",
-              `${createdOrders.length} order${
-                createdOrders.length ===
-                1
-                  ? ""
-                  : "s"
-              } were created successfully, but ${failedItems.length} cart item${
-                failedItems.length ===
-                1
-                  ? ""
-                  : "s"
-              } could not be ordered. The failed items remain in your cart.`,
+              "Order placed!",
+              fulfillmentType ===
+              "delivery"
+                ? `Your checkout was created successfully. ${formatCurrency(
+                    checkout.totalAmount
+                  )} will be collected upon delivery.`
+                : `Your checkout was created successfully. ${formatCurrency(
+                    checkout.totalAmount
+                  )} will be collected when you pick up your order.`,
               [
                 {
                   text:
-                    "View Orders",
+                    "Continue",
 
                   onPress:
-                    () =>
-                      router.replace(
-                        "/(customer)/customer-orders" as never
-                      ),
+                    returnHome,
                 },
               ]
             );
@@ -1830,40 +2503,43 @@ export default function CustomerCheckoutScreen() {
             return;
           }
 
-          Alert.alert(
-            "Orders placed!",
-            `${createdOrders.length} order${
-              createdOrders.length ===
-              1
-                ? ""
-                : "s"
-            } ${
-              createdOrders.length ===
-              1
-                ? "has"
-                : "have"
-            } been placed successfully.`,
-            [
-              {
-                text:
-                  "View Orders",
+          /*
+           * PAYMONGO
+           */
+          try {
+            const updatedCheckout =
+              await startGroupedPayMongo(
+                checkout
+              );
 
-                onPress:
-                  () =>
-                    router.replace(
-                      "/(customer)/customer-orders" as never
-                    ),
-              },
-            ]
-          );
+            showGroupedPaymentResult(
+              updatedCheckout
+            );
+          } catch (paymentError) {
+            Alert.alert(
+              "Checkout created",
+              `Your orders were created, but the PayMongo payment page could not be completed.\n\n${getErrorMessage(
+                paymentError,
+                "You can retry payment."
+              )}`,
+              [
+                {
+                  text:
+                    "OK",
+                },
+              ]
+            );
+          }
 
           return;
         }
 
         /*
-         * ===============================================
-         * CUSTOM BOUQUET CHECKOUT
-         * ===============================================
+         * =================================================
+         * CUSTOM BOUQUET
+         *
+         * Preserve existing direct Order flow.
+         * =================================================
          */
 
         const order =
@@ -1874,23 +2550,20 @@ export default function CustomerCheckoutScreen() {
           "paymongo"
         ) {
           try {
-            await startPayMongoCheckout(
+            await startCustomPayMongo(
               order._id
             );
 
             Alert.alert(
-              "Order created",
-              "Your custom bouquet order was created. Complete your payment through the PayMongo checkout page.",
+              "Payment submitted",
+              "Your custom bouquet order was created. FLOGRAM will update the payment status after PayMongo confirms the payment.",
               [
                 {
                   text:
-                    "View Orders",
+                    "Continue",
 
                   onPress:
-                    () =>
-                      router.replace(
-                        "/(customer)/customer-orders" as never
-                      ),
+                    returnHome,
                 },
               ]
             );
@@ -1899,20 +2572,14 @@ export default function CustomerCheckoutScreen() {
           ) {
             Alert.alert(
               "Order created",
-              `Your order was created, but the payment page could not be opened.\n\n${getErrorMessage(
+              `Your custom bouquet order was created, but the PayMongo payment page could not be opened.\n\n${getErrorMessage(
                 paymentError,
                 "You can retry payment later."
               )}`,
               [
                 {
                   text:
-                    "View Orders",
-
-                  onPress:
-                    () =>
-                      router.replace(
-                        "/(customer)/customer-orders" as never
-                      ),
+                    "OK",
                 },
               ]
             );
@@ -1930,12 +2597,10 @@ export default function CustomerCheckoutScreen() {
           [
             {
               text:
-                "View Orders",
+                "Continue",
 
-              onPress: () =>
-                router.replace(
-                  "/(customer)/customer-orders" as never
-                ),
+              onPress:
+                returnHome,
             },
           ]
         );
@@ -2003,8 +2668,7 @@ export default function CustomerCheckoutScreen() {
               styles.stateText
             }
           >
-            Preparing your
-            checkout...
+            Preparing your checkout...
           </Text>
         </View>
       </SafeAreaView>
@@ -2234,65 +2898,19 @@ export default function CustomerCheckoutScreen() {
             />
           }
         >
-          {/* =============================================
+          {/* =================================================
               ORDER SUMMARY
-          ============================================= */}
+          ================================================= */}
 
-          <View
-            style={
-              styles.section
+          <Section
+            icon="flower-outline"
+            title="Order Summary"
+            subtitle={
+              isCartCheckout
+                ? "Review all flower listings in this checkout."
+                : "Review your selected custom bouquet."
             }
           >
-            <View
-              style={
-                styles.sectionHeading
-              }
-            >
-              <View
-                style={
-                  styles.sectionIcon
-                }
-              >
-                <Ionicons
-                  name="flower-outline"
-                  size={20}
-                  color={
-                    COLORS.primary
-                  }
-                />
-              </View>
-
-              <View
-                style={{
-                  flex: 1,
-                }}
-              >
-                <Text
-                  style={
-                    styles.sectionTitle
-                  }
-                >
-                  Order Summary
-                </Text>
-
-                <Text
-                  style={
-                    styles.sectionSubtitle
-                  }
-                >
-                  {isCartCheckout
-                    ? "Review the flower listings in your cart."
-                    : "Review your selected custom bouquet."}
-                </Text>
-              </View>
-            </View>
-
-            {/*
-             * ===========================================
-             * CART SUMMARY
-             * ===========================================
-             */}
-
             {isCartCheckout ? (
               <>
                 {cartItems.map(
@@ -2347,7 +2965,7 @@ export default function CustomerCheckoutScreen() {
                           >
                             <Ionicons
                               name="flower-outline"
-                              size={30}
+                              size={29}
                               color={
                                 COLORS.primary
                               }
@@ -2423,12 +3041,12 @@ export default function CustomerCheckoutScreen() {
 
                         <View
                           style={
-                            styles.cartLineTotal
+                            styles.lineTotalBox
                           }
                         >
                           <Text
                             style={
-                              styles.cartLineTotalLabel
+                              styles.lineTotalLabel
                             }
                           >
                             Subtotal
@@ -2436,7 +3054,7 @@ export default function CustomerCheckoutScreen() {
 
                           <Text
                             style={
-                              styles.cartLineTotalValue
+                              styles.lineTotalValue
                             }
                           >
                             {formatCurrency(
@@ -2455,12 +3073,12 @@ export default function CustomerCheckoutScreen() {
 
                 <View
                   style={
-                    styles.cartInfoBadge
+                    styles.infoBadge
                   }
                 >
                   <Ionicons
                     name="information-circle-outline"
-                    size={18}
+                    size={19}
                     color={
                       COLORS.blue
                     }
@@ -2468,31 +3086,23 @@ export default function CustomerCheckoutScreen() {
 
                   <Text
                     style={
-                      styles.cartInfoText
+                      styles.infoBadgeText
                     }
                   >
-                    Each flower
-                    listing becomes
-                    its own order.
-                    Delivery fees are
-                    calculated by the
-                    backend using each
-                    florist&apos;s
-                    location.
+                    FLOGRAM groups this cart
+                    into one customer checkout.
+                    Each florist still receives
+                    separate fulfillment orders.
+                    Delivery and pre-order fees
+                    are calculated once per shop.
                   </Text>
                 </View>
               </>
             ) : (
               <>
-                {/*
-                 * =======================================
-                 * CUSTOM BOUQUET SUMMARY
-                 * =======================================
-                 */}
-
                 <View
                   style={
-                    styles.productCard
+                    styles.customProductCard
                   }
                 >
                   {customImageUrl ? (
@@ -2531,9 +3141,6 @@ export default function CustomerCheckoutScreen() {
                       style={
                         styles.productName
                       }
-                      numberOfLines={
-                        2
-                      }
                     >
                       {
                         customTitle
@@ -2556,9 +3163,6 @@ export default function CustomerCheckoutScreen() {
                       <Text
                         style={
                           styles.floristName
-                        }
-                        numberOfLines={
-                          1
                         }
                       >
                         {florist
@@ -2592,263 +3196,84 @@ export default function CustomerCheckoutScreen() {
 
                 <View
                   style={
-                    styles.selectedProposalBadge
+                    styles.successBadge
                   }
                 >
                   <Ionicons
                     name="checkmark-circle"
-                    size={17}
+                    size={18}
                     color={
                       COLORS.success
                     }
                   />
 
-                  <View
-                    style={{
-                      flex: 1,
-                    }}
+                  <Text
+                    style={
+                      styles.successBadgeText
+                    }
                   >
-                    <Text
-                      style={
-                        styles.selectedProposalTitle
-                      }
-                    >
-                      Selected
-                      Proposal
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.selectedProposalText
-                      }
-                    >
-                      This price came
-                      from the florist
-                      proposal you
-                      accepted.
-                    </Text>
-                  </View>
+                    Selected florist proposal
+                  </Text>
                 </View>
               </>
             )}
-          </View>
+          </Section>
 
-          {/* =============================================
+          {/* =================================================
               FULFILLMENT
-          ============================================= */}
+          ================================================= */}
 
-          <View
-            style={
-              styles.section
-            }
+          <Section
+            icon="bicycle-outline"
+            title="Fulfillment"
+            subtitle="Choose how you want to receive your bouquet."
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Fulfillment
-            </Text>
-
-            <Text
-              style={
-                styles.sectionSubtitle
-              }
-            >
-              Choose how you want
-              to receive your
-              bouquet.
-            </Text>
-
             <View
               style={
                 styles.choiceRow
               }
             >
-              <Pressable
+              <ChoiceCard
+                icon="bicycle-outline"
+                title="Delivery"
+                subtitle="Rider delivery"
+                selected={
+                  fulfillmentType ===
+                  "delivery"
+                }
                 onPress={() =>
                   chooseFulfillment(
                     "delivery"
                   )
                 }
-                style={[
-                  styles.choiceCard,
+              />
 
+              <ChoiceCard
+                icon="storefront-outline"
+                title="Pickup"
+                subtitle="Pick up at shop"
+                selected={
                   fulfillmentType ===
-                    "delivery" &&
-                    styles.choiceCardActive,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.choiceIcon,
-
-                    fulfillmentType ===
-                      "delivery" &&
-                      styles.choiceIconActive,
-                  ]}
-                >
-                  <Ionicons
-                    name="bicycle-outline"
-                    size={23}
-                    color={
-                      fulfillmentType ===
-                      "delivery"
-                        ? "#FFFFFF"
-                        : COLORS.primary
-                    }
-                  />
-                </View>
-
-                <Text
-                  style={
-                    styles.choiceTitle
-                  }
-                >
-                  Delivery
-                </Text>
-
-                <Text
-                  style={
-                    styles.choiceText
-                  }
-                >
-                  Rider delivery to
-                  your location
-                </Text>
-
-                {fulfillmentType ===
-                  "delivery" && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={18}
-                    color={
-                      COLORS.primary
-                    }
-                    style={
-                      styles.choiceCheck
-                    }
-                  />
-                )}
-              </Pressable>
-
-              <Pressable
+                  "pickup"
+                }
                 onPress={() =>
                   chooseFulfillment(
                     "pickup"
                   )
                 }
-                style={[
-                  styles.choiceCard,
-
-                  fulfillmentType ===
-                    "pickup" &&
-                    styles.choiceCardActive,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.choiceIcon,
-
-                    fulfillmentType ===
-                      "pickup" &&
-                      styles.choiceIconActive,
-                  ]}
-                >
-                  <Ionicons
-                    name="storefront-outline"
-                    size={23}
-                    color={
-                      fulfillmentType ===
-                      "pickup"
-                        ? "#FFFFFF"
-                        : COLORS.primary
-                    }
-                  />
-                </View>
-
-                <Text
-                  style={
-                    styles.choiceTitle
-                  }
-                >
-                  Pickup
-                </Text>
-
-                <Text
-                  style={
-                    styles.choiceText
-                  }
-                >
-                  Pick up from the
-                  florist shop
-                </Text>
-
-                {fulfillmentType ===
-                  "pickup" && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={18}
-                    color={
-                      COLORS.primary
-                    }
-                    style={
-                      styles.choiceCheck
-                    }
-                  />
-                )}
-              </Pressable>
+              />
             </View>
-          </View>
+          </Section>
 
-          {/* =============================================
+          {/* =================================================
               RECIPIENT
-          ============================================= */}
+          ================================================= */}
 
-          <View
-            style={
-              styles.section
-            }
+          <Section
+            icon="person-outline"
+            title="Recipient Details"
+            subtitle="Who will receive the bouquet?"
           >
-            <View
-              style={
-                styles.sectionHeading
-              }
-            >
-              <View
-                style={
-                  styles.sectionIcon
-                }
-              >
-                <Ionicons
-                  name="person-outline"
-                  size={20}
-                  color={
-                    COLORS.primary
-                  }
-                />
-              </View>
-
-              <View>
-                <Text
-                  style={
-                    styles.sectionTitle
-                  }
-                >
-                  Recipient Details
-                </Text>
-
-                <Text
-                  style={
-                    styles.sectionSubtitle
-                  }
-                >
-                  Who will receive
-                  the bouquet?
-                </Text>
-              </View>
-            </View>
-
             <Field
               label="Full Name"
             >
@@ -2890,76 +3315,33 @@ export default function CustomerCheckoutScreen() {
                   styles.helperText
                 }
               >
-                Philippine mobile
-                number, e.g.
-                09171234567
+                Philippine mobile number
               </Text>
             </Field>
-          </View>
+          </Section>
 
-          {/* =============================================
+          {/* =================================================
               DELIVERY ADDRESS
-          ============================================= */}
+          ================================================= */}
 
           {fulfillmentType ===
             "delivery" && (
-            <View
-              style={
-                styles.section
-              }
+            <Section
+              icon="location-outline"
+              title="Delivery Address"
+              subtitle="Enter the recipient's delivery location."
             >
-              <View
-                style={
-                  styles.sectionHeading
-                }
-              >
-                <View
-                  style={
-                    styles.sectionIcon
-                  }
-                >
-                  <Ionicons
-                    name="location-outline"
-                    size={20}
-                    color={
-                      COLORS.primary
-                    }
-                  />
-                </View>
-
-                <View
-                  style={{
-                    flex: 1,
-                  }}
-                >
-                  <Text
-                    style={
-                      styles.sectionTitle
-                    }
-                  >
-                    Delivery Address
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.sectionSubtitle
-                    }
-                  >
-                    Enter the complete
-                    destination.
-                  </Text>
-                </View>
-              </View>
-
               <Field
-                label="Street / House No."
+                label="Street / House Number"
               >
                 <TextInput
-                  value={street}
+                  value={
+                    street
+                  }
                   onChangeText={
                     setStreet
                   }
-                  placeholder="e.g. 123 Magsaysay Avenue"
+                  placeholder="123 Sample Street"
                   placeholderTextColor="#A59CA1"
                   style={
                     styles.input
@@ -2992,7 +3374,7 @@ export default function CustomerCheckoutScreen() {
               >
                 <View
                   style={
-                    styles.halfField
+                    styles.column
                   }
                 >
                   <Field
@@ -3005,7 +3387,7 @@ export default function CustomerCheckoutScreen() {
                       onChangeText={
                         setCity
                       }
-                      placeholder="City"
+                      placeholder="Naga City"
                       placeholderTextColor="#A59CA1"
                       style={
                         styles.input
@@ -3016,7 +3398,7 @@ export default function CustomerCheckoutScreen() {
 
                 <View
                   style={
-                    styles.halfField
+                    styles.column
                   }
                 >
                   <Field
@@ -3029,7 +3411,7 @@ export default function CustomerCheckoutScreen() {
                       onChangeText={
                         setProvince
                       }
-                      placeholder="Province"
+                      placeholder="Camarines Sur"
                       placeholderTextColor="#A59CA1"
                       style={
                         styles.input
@@ -3046,7 +3428,7 @@ export default function CustomerCheckoutScreen() {
               >
                 <View
                   style={
-                    styles.halfField
+                    styles.column
                   }
                 >
                   <Field
@@ -3071,7 +3453,7 @@ export default function CustomerCheckoutScreen() {
 
                 <View
                   style={
-                    styles.halfField
+                    styles.column
                   }
                 >
                   <Field
@@ -3096,262 +3478,283 @@ export default function CustomerCheckoutScreen() {
 
               <View
                 style={
-                  styles.locationCard
+                  styles.locationNotice
                 }
               >
-                <View
+                <Ionicons
+                  name="navigate-circle-outline"
+                  size={20}
+                  color={
+                    COLORS.blue
+                  }
+                />
+
+                <Text
                   style={
-                    styles.locationHeader
+                    styles.locationNoticeText
                   }
                 >
-                  <View
-                    style={
-                      styles.locationIcon
-                    }
-                  >
-                    <Ionicons
-                      name="navigate-outline"
-                      size={20}
-                      color={
-                        COLORS.primary
-                      }
-                    />
-                  </View>
-
-                  <View
-                    style={{
-                      flex: 1,
-                    }}
-                  >
-                    <Text
-                      style={
-                        styles.locationTitle
-                      }
-                    >
-                      Delivery Map
-                      Location
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.locationText
-                      }
-                    >
-                      These coordinates
-                      are used by the
-                      backend to
-                      calculate the
-                      route and
-                      delivery fee.
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  style={
-                    styles.twoColumnRow
-                  }
-                >
-                  <View
-                    style={
-                      styles.halfField
-                    }
-                  >
-                    <Field
-                      label="Latitude"
-                    >
-                      <TextInput
-                        value={
-                          latitude
-                        }
-                        onChangeText={
-                          setLatitude
-                        }
-                        placeholder="13.6218"
-                        placeholderTextColor="#A59CA1"
-                        keyboardType="numbers-and-punctuation"
-                        style={
-                          styles.input
-                        }
-                      />
-                    </Field>
-                  </View>
-
-                  <View
-                    style={
-                      styles.halfField
-                    }
-                  >
-                    <Field
-                      label="Longitude"
-                    >
-                      <TextInput
-                        value={
-                          longitude
-                        }
-                        onChangeText={
-                          setLongitude
-                        }
-                        placeholder="123.1948"
-                        placeholderTextColor="#A59CA1"
-                        keyboardType="numbers-and-punctuation"
-                        style={
-                          styles.input
-                        }
-                      />
-                    </Field>
-                  </View>
-                </View>
+                  Pin the recipient&apos;s exact delivery location. FLOGRAM will use the pinned point to calculate the delivery route and fee.
+                </Text>
               </View>
-            </View>
+
+              <View
+                style={
+                  styles.deliveryMapCard
+                }
+              >
+                <MapView
+                  ref={
+                    deliveryMapRef
+                  }
+                  style={
+                    styles.deliveryMap
+                  }
+                  initialRegion={{
+                    latitude: 13.6218,
+                    longitude: 123.1948,
+                    latitudeDelta: 0.02,
+                    longitudeDelta: 0.02,
+                  }}
+                  showsUserLocation={
+                    locationPermissionGranted
+                  }
+                  showsMyLocationButton={
+                    false
+                  }
+                  showsCompass
+                  rotateEnabled
+                  pitchEnabled
+                  zoomEnabled
+                  scrollEnabled
+                  mapType="standard"
+                  onPress={(event) => {
+                    selectDeliveryCoordinate(
+                      event.nativeEvent.coordinate
+                    );
+                  }}
+                >
+                  {deliveryCoordinate && (
+                    <Marker
+                      coordinate={
+                        deliveryCoordinate
+                      }
+                      title="Delivery Location"
+                      description="Recipient delivery point"
+                      draggable
+                      onDragEnd={(event) => {
+                        selectDeliveryCoordinate(
+                          event.nativeEvent.coordinate
+                        );
+                      }}
+                    />
+                  )}
+                </MapView>
+
+                {!deliveryCoordinate && (
+                  <View
+                    pointerEvents="none"
+                    style={
+                      styles.mapHintOverlay
+                    }
+                  >
+                    <View
+                      style={
+                        styles.mapHintBubble
+                      }
+                    >
+                      <Ionicons
+                        name="location"
+                        size={18}
+                        color={
+                          COLORS.primary
+                        }
+                      />
+
+                      <Text
+                        style={
+                          styles.mapHintText
+                        }
+                      >
+                        Tap the map to place the delivery pin
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <Pressable
+                disabled={
+                  locatingCustomer
+                }
+                onPress={() => {
+                  void handleUseCurrentLocation();
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.currentLocationButton,
+                  pressed &&
+                    styles.currentLocationButtonPressed,
+                  locatingCustomer &&
+                    styles.currentLocationButtonDisabled,
+                ]}
+              >
+                {locatingCustomer ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      COLORS.primary
+                    }
+                  />
+                ) : (
+                  <Ionicons
+                    name="navigate"
+                    size={18}
+                    color={
+                      COLORS.primary
+                    }
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.currentLocationButtonText
+                  }
+                >
+                  {locatingCustomer
+                    ? "Finding your location..."
+                    : "Use My Current Location"}
+                </Text>
+              </Pressable>
+
+              {deliveryCoordinate && (
+                <View
+                  style={
+                    styles.selectedLocationCard
+                  }
+                >
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={
+                      COLORS.success
+                    }
+                  />
+
+                  <View
+                    style={
+                      styles.selectedLocationTextArea
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.selectedLocationTitle
+                      }
+                    >
+                      Delivery location pinned
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.selectedLocationText
+                      }
+                    >
+                      Tap another point or drag the marker to adjust the destination.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {locationError && (
+                <View
+                  style={
+                    styles.locationErrorCard
+                  }
+                >
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={18}
+                    color={
+                      COLORS.danger
+                    }
+                  />
+
+                  <Text
+                    style={
+                      styles.locationErrorText
+                    }
+                  >
+                    {locationError}
+                  </Text>
+                </View>
+              )}
+            </Section>
           )}
 
-          {/* =============================================
+          {/* =================================================
               SCHEDULE
-          ============================================= */}
+          ================================================= */}
 
-          <View
-            style={
-              styles.section
-            }
+          <Section
+            icon="calendar-outline"
+            title="Delivery Schedule"
+            subtitle="Order now or schedule a future fulfillment."
           >
-            <View
+            <Pressable
+              onPress={() => {
+                setScheduled(
+                  (value) =>
+                    !value
+                );
+
+                setQuote(
+                  null
+                );
+              }}
               style={
-                styles.sectionHeading
+                styles.toggleRow
               }
             >
               <View
                 style={
-                  styles.sectionIcon
+                  styles.toggleTextArea
                 }
               >
-                <Ionicons
-                  name="calendar-outline"
-                  size={20}
-                  color={
-                    COLORS.primary
+                <Text
+                  style={
+                    styles.toggleTitle
                   }
+                >
+                  Pre-order / Schedule
+                </Text>
+
+                <Text
+                  style={
+                    styles.toggleSubtitle
+                  }
+                >
+                  Schedule this order for a
+                  future date.
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.switchTrack,
+
+                  scheduled &&
+                    styles.switchTrackActive,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.switchThumb,
+
+                    scheduled &&
+                      styles.switchThumbActive,
+                  ]}
                 />
-              </View>
-
-              <View>
-                <Text
-                  style={
-                    styles.sectionTitle
-                  }
-                >
-                  Schedule
-                </Text>
-
-                <Text
-                  style={
-                    styles.sectionSubtitle
-                  }
-                >
-                  Receive it now or
-                  schedule a future
-                  date.
-                </Text>
-              </View>
-            </View>
-
-            <Pressable
-              onPress={() =>
-                setScheduled(false)
-              }
-              style={[
-                styles.radioCard,
-
-                !scheduled &&
-                  styles.radioCardActive,
-              ]}
-            >
-              <Ionicons
-                name={
-                  !scheduled
-                    ? "radio-button-on"
-                    : "radio-button-off"
-                }
-                size={20}
-                color={
-                  !scheduled
-                    ? COLORS.primary
-                    : COLORS.textMuted
-                }
-              />
-
-              <View
-                style={{
-                  flex: 1,
-                }}
-              >
-                <Text
-                  style={
-                    styles.radioTitle
-                  }
-                >
-                  As soon as
-                  possible
-                </Text>
-
-                <Text
-                  style={
-                    styles.radioText
-                  }
-                >
-                  Process the order
-                  without scheduling.
-                </Text>
-              </View>
-            </Pressable>
-
-            <Pressable
-              onPress={() =>
-                setScheduled(true)
-              }
-              style={[
-                styles.radioCard,
-
-                scheduled &&
-                  styles.radioCardActive,
-              ]}
-            >
-              <Ionicons
-                name={
-                  scheduled
-                    ? "radio-button-on"
-                    : "radio-button-off"
-                }
-                size={20}
-                color={
-                  scheduled
-                    ? COLORS.primary
-                    : COLORS.textMuted
-                }
-              />
-
-              <View
-                style={{
-                  flex: 1,
-                }}
-              >
-                <Text
-                  style={
-                    styles.radioTitle
-                  }
-                >
-                  Schedule Order
-                </Text>
-
-                <Text
-                  style={
-                    styles.radioText
-                  }
-                >
-                  Choose a future
-                  date and preferred
-                  time.
-                </Text>
               </View>
             </Pressable>
 
@@ -3364,33 +3767,20 @@ export default function CustomerCheckoutScreen() {
                 <Field
                   label="Delivery Date"
                 >
-                  <View
-                    style={
-                      styles.iconInput
+                  <TextInput
+                    value={
+                      deliveryDate
                     }
-                  >
-                    <Ionicons
-                      name="calendar-outline"
-                      size={18}
-                      color={
-                        COLORS.textMuted
-                      }
-                    />
-
-                    <TextInput
-                      value={
-                        deliveryDate
-                      }
-                      onChangeText={
-                        setDeliveryDate
-                      }
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#A59CA1"
-                      style={
-                        styles.iconTextInput
-                      }
-                    />
-                  </View>
+                    onChangeText={
+                      setDeliveryDate
+                    }
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#A59CA1"
+                    autoCapitalize="none"
+                    style={
+                      styles.input
+                    }
+                  />
                 </Field>
 
                 <View
@@ -3400,11 +3790,11 @@ export default function CustomerCheckoutScreen() {
                 >
                   <View
                     style={
-                      styles.halfField
+                      styles.column
                     }
                   >
                     <Field
-                      label="Start"
+                      label="Start Time"
                     >
                       <TextInput
                         value={
@@ -3415,6 +3805,7 @@ export default function CustomerCheckoutScreen() {
                         }
                         placeholder="14:00"
                         placeholderTextColor="#A59CA1"
+                        autoCapitalize="none"
                         style={
                           styles.input
                         }
@@ -3424,11 +3815,11 @@ export default function CustomerCheckoutScreen() {
 
                   <View
                     style={
-                      styles.halfField
+                      styles.column
                     }
                   >
                     <Field
-                      label="End"
+                      label="End Time"
                     >
                       <TextInput
                         value={
@@ -3439,6 +3830,7 @@ export default function CustomerCheckoutScreen() {
                         }
                         placeholder="16:00"
                         placeholderTextColor="#A59CA1"
+                        autoCapitalize="none"
                         style={
                           styles.input
                         }
@@ -3449,12 +3841,12 @@ export default function CustomerCheckoutScreen() {
 
                 <View
                   style={
-                    styles.preorderNotice
+                    styles.warningBadge
                   }
                 >
                   <Ionicons
                     name="information-circle-outline"
-                    size={16}
+                    size={18}
                     color={
                       COLORS.warning
                     }
@@ -3462,491 +3854,676 @@ export default function CustomerCheckoutScreen() {
 
                   <Text
                     style={
-                      styles.preorderNoticeText
+                      styles.warningText
                     }
                   >
-                    Scheduled orders
-                    may include the
-                    backend pre-order
-                    fee.
+                    Pre-order fees are
+                    calculated by the backend.
+                    For grouped cart checkout,
+                    the fee is charged once per
+                    florist/shop.
                   </Text>
                 </View>
               </View>
             )}
-          </View>
+          </Section>
 
-          {/* =============================================
+          {/* =================================================
               NOTES
-          ============================================= */}
+          ================================================= */}
 
-          <View
-            style={
-              styles.section
-            }
+          <Section
+            icon="chatbubble-ellipses-outline"
+            title="Order Notes"
+            subtitle="Add optional instructions for your florist or rider."
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Order Notes
-            </Text>
-
-            <Text
-              style={
-                styles.sectionSubtitle
-              }
-            >
-              Optional instructions
-              for the florist or
-              delivery.
-            </Text>
-
             <TextInput
-              value={notes}
+              value={
+                notes
+              }
               onChangeText={
                 setNotes
               }
-              placeholder="Add order instructions..."
+              placeholder="Example: Please handle carefully."
               placeholderTextColor="#A59CA1"
               multiline
-              maxLength={2000}
               textAlignVertical="top"
               style={[
                 styles.input,
                 styles.notesInput,
               ]}
             />
+          </Section>
 
-            <Text
-              style={
-                styles.counterText
-              }
-            >
-              {notes.length}/2000
-            </Text>
-          </View>
-
-          {/* =============================================
+          {/* =================================================
               PAYMENT
-          ============================================= */}
+          ================================================= */}
 
-          <View
-            style={
-              styles.section
-            }
+          <Section
+            icon="wallet-outline"
+            title="Payment Method"
+            subtitle="Choose how you want to pay."
           >
-            <View
-              style={
-                styles.sectionHeading
-              }
-            >
-              <View
-                style={
-                  styles.sectionIcon
-                }
-              >
-                <Ionicons
-                  name="card-outline"
-                  size={20}
-                  color={
-                    COLORS.primary
-                  }
-                />
-              </View>
-
-              <View>
-                <Text
-                  style={
-                    styles.sectionTitle
-                  }
-                >
-                  Payment Method
-                </Text>
-
-                <Text
-                  style={
-                    styles.sectionSubtitle
-                  }
-                >
-                  Choose how you
-                  want to pay.
-                </Text>
-              </View>
-            </View>
-
-            <Pressable
-              onPress={() =>
-                setPaymentMethod(
-                  fulfillmentType ===
-                    "delivery"
-                    ? "cash_on_delivery"
-                    : "cash_on_pickup"
-                )
-              }
-              style={[
-                styles.paymentCard,
-
-                paymentMethod !==
-                  "paymongo" &&
-                  styles.paymentCardActive,
-              ]}
-            >
-              <View
-                style={
-                  styles.paymentIcon
-                }
-              >
-                <Ionicons
-                  name="cash-outline"
-                  size={22}
-                  color={
-                    COLORS.primary
-                  }
-                />
-              </View>
-
-              <View
-                style={{
-                  flex: 1,
-                }}
-              >
-                <Text
-                  style={
-                    styles.paymentTitle
-                  }
-                >
-                  {fulfillmentType ===
-                  "delivery"
-                    ? "Cash on Delivery"
-                    : "Cash on Pickup"}
-                </Text>
-
-                <Text
-                  style={
-                    styles.paymentText
-                  }
-                >
-                  {fulfillmentType ===
-                  "delivery"
-                    ? "Pay when the order is delivered."
-                    : "Pay when you collect the order."}
-                </Text>
-              </View>
-
-              <Ionicons
-                name={
-                  paymentMethod !==
-                  "paymongo"
-                    ? "radio-button-on"
-                    : "radio-button-off"
-                }
-                size={21}
-                color={
-                  paymentMethod !==
-                  "paymongo"
-                    ? COLORS.primary
-                    : COLORS.textMuted
-                }
-              />
-            </Pressable>
-
-            <Pressable
-              onPress={() => {
-                if (
-                  isCartCheckout &&
-                  cartHasMultipleItems
-                ) {
-                  Alert.alert(
-                    "PayMongo",
-                    "Online payment is currently available when checking out one flower listing at a time because each flower listing becomes a separate order."
-                  );
-
-                  return;
-                }
-
-                setPaymentMethod(
-                  "paymongo"
-                );
-              }}
-              style={[
-                styles.paymentCard,
-
-                paymentMethod ===
-                  "paymongo" &&
-                  styles.paymentCardActive,
-
-                isCartCheckout &&
-                  cartHasMultipleItems &&
-                  styles.paymentCardDisabled,
-              ]}
-            >
-              <View
-                style={
-                  styles.paymentIcon
-                }
-              >
-                <Ionicons
-                  name="wallet-outline"
-                  size={22}
-                  color={
-                    isCartCheckout &&
-                    cartHasMultipleItems
-                      ? "#AFA7AB"
-                      : COLORS.primary
-                  }
-                />
-              </View>
-
-              <View
-                style={{
-                  flex: 1,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.paymentTitle,
-
-                    isCartCheckout &&
-                      cartHasMultipleItems &&
-                      styles.disabledText,
-                  ]}
-                >
-                  PayMongo
-                </Text>
-
-                <Text
-                  style={
-                    styles.paymentText
-                  }
-                >
-                  {isCartCheckout &&
-                  cartHasMultipleItems
-                    ? "Available for single-item checkout"
-                    : "GCash • Card • QRPh"}
-                </Text>
-              </View>
-
-              <Ionicons
-                name={
+            {fulfillmentType ===
+              "delivery" && (
+              <PaymentChoice
+                icon="cash-outline"
+                title="Cash on Delivery"
+                subtitle="Pay when the rider delivers your order."
+                selected={
                   paymentMethod ===
-                  "paymongo"
-                    ? "radio-button-on"
-                    : "radio-button-off"
+                  "cash_on_delivery"
                 }
-                size={21}
-                color={
-                  isCartCheckout &&
-                  cartHasMultipleItems
-                    ? "#C8C2C5"
-                    : paymentMethod ===
-                        "paymongo"
-                      ? COLORS.primary
-                      : COLORS.textMuted
+                onPress={() =>
+                  setPaymentMethod(
+                    "cash_on_delivery"
+                  )
                 }
               />
-            </Pressable>
-          </View>
-
-          {/* =============================================
-              TOTAL
-          ============================================= */}
-
-          <View
-            style={
-              styles.totalCard
-            }
-          >
-            <View
-              style={
-                styles.totalHeader
-              }
-            >
-              <Text
-                style={
-                  styles.totalTitle
-                }
-              >
-                Order Total
-              </Text>
-
-              <Ionicons
-                name="receipt-outline"
-                size={21}
-                color={
-                  COLORS.primary
-                }
-              />
-            </View>
-
-            <View
-              style={
-                styles.totalDivider
-              }
-            />
-
-            <View
-              style={
-                styles.totalRow
-              }
-            >
-              <Text
-                style={
-                  styles.totalLabel
-                }
-              >
-                {isCartCheckout
-                  ? `Products (${cartTotalQuantity})`
-                  : "Bouquet subtotal"}
-              </Text>
-
-              <Text
-                style={
-                  styles.totalValue
-                }
-              >
-                {formatCurrency(
-                  isCartCheckout
-                    ? cartSubtotal
-                    : customSubtotal
-                )}
-              </Text>
-            </View>
-
-            <View
-              style={
-                styles.totalRow
-              }
-            >
-              <Text
-                style={
-                  styles.totalLabel
-                }
-              >
-                Delivery fee
-              </Text>
-
-              <Text
-                style={
-                  styles.calculatedText
-                }
-              >
-                {fulfillmentType ===
-                "pickup"
-                  ? "₱0.00"
-                  : "Calculated by backend"}
-              </Text>
-            </View>
-
-            {scheduled && (
-              <View
-                style={
-                  styles.totalRow
-                }
-              >
-                <Text
-                  style={
-                    styles.totalLabel
-                  }
-                >
-                  Pre-order fee
-                </Text>
-
-                <Text
-                  style={
-                    styles.calculatedText
-                  }
-                >
-                  Calculated by
-                  backend
-                </Text>
-              </View>
             )}
 
-            <View
-              style={
-                styles.totalNotice
-              }
-            >
-              <Ionicons
-                name="information-circle-outline"
-                size={16}
-                color={
-                  COLORS.blue
+            {fulfillmentType ===
+              "pickup" && (
+              <PaymentChoice
+                icon="cash-outline"
+                title="Cash on Pickup"
+                subtitle="Pay when you collect your order from the shop."
+                selected={
+                  paymentMethod ===
+                  "cash_on_pickup"
+                }
+                onPress={() =>
+                  setPaymentMethod(
+                    "cash_on_pickup"
+                  )
                 }
               />
+            )}
 
-              <Text
+            <PaymentChoice
+              icon="card-outline"
+              title="PayMongo"
+              subtitle={
+                isCartCheckout
+                  ? "Pay all items in this checkout through one PayMongo payment."
+                  : "Pay securely through PayMongo."
+              }
+              selected={
+                paymentMethod ===
+                "paymongo"
+              }
+              onPress={() =>
+                setPaymentMethod(
+                  "paymongo"
+                )
+              }
+            />
+          </Section>
+
+          {/* =================================================
+              CART SERVER QUOTE
+          ================================================= */}
+
+          {isCartCheckout && (
+            <Section
+              icon="receipt-outline"
+              title="Checkout Total"
+              subtitle="Calculated securely by the FLOGRAM backend."
+            >
+              {quoteLoading ? (
+                <View
+                  style={
+                    styles.quoteLoading
+                  }
+                >
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      COLORS.primary
+                    }
+                  />
+
+                  <Text
+                    style={
+                      styles.quoteLoadingText
+                    }
+                  >
+                    Calculating delivery
+                    and pre-order fees...
+                  </Text>
+                </View>
+              ) : quote ? (
+                <>
+                  {Boolean(
+                    quote.shops
+                      ?.length
+                  ) && (
+                    <View
+                      style={
+                        styles.shopBreakdownContainer
+                      }
+                    >
+                      {quote.shops?.map(
+                        (
+                          shop,
+                          index
+                        ) => (
+                          <View
+                            key={
+                              `${
+                                shop.shopName ??
+                                "shop"
+                              }-${index}`
+                            }
+                            style={
+                              styles.shopCard
+                            }
+                          >
+                            <View
+                              style={
+                                styles.shopHeader
+                              }
+                            >
+                              <View
+                                style={
+                                  styles.shopIcon
+                                }
+                              >
+                                <Ionicons
+                                  name="storefront-outline"
+                                  size={17}
+                                  color={
+                                    COLORS.primary
+                                  }
+                                />
+                              </View>
+
+                              <View
+                                style={
+                                  styles.shopHeaderText
+                                }
+                              >
+                                <Text
+                                  style={
+                                    styles.shopName
+                                  }
+                                >
+                                  {shop.shopName ||
+                                    `Shop ${
+                                      index +
+                                      1
+                                    }`}
+                                </Text>
+
+                                <Text
+                                  style={
+                                    styles.shopMeta
+                                  }
+                                >
+                                  {shop.itemCount ??
+                                    0}{" "}
+                                  product
+                                  {(shop.itemCount ??
+                                    0) ===
+                                  1
+                                    ? ""
+                                    : "s"}{" "}
+                                  •{" "}
+                                  {shop.totalQuantity ??
+                                    0}{" "}
+                                  item
+                                  {(shop.totalQuantity ??
+                                    0) ===
+                                  1
+                                    ? ""
+                                    : "s"}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <SummaryRow
+                              label="Products"
+                              value={
+                                shop.productsSubtotal
+                              }
+                            />
+
+                            <SummaryRow
+                              label="Delivery"
+                              value={
+                                shop.deliveryFee
+                              }
+                            />
+
+                            <SummaryRow
+                              label="Pre-order"
+                              value={
+                                shop.preOrderFee
+                              }
+                            />
+
+                            <View
+                              style={
+                                styles.shopTotalDivider
+                              }
+                            />
+
+                            <SummaryRow
+                              label="Shop total"
+                              value={
+                                shop.totalAmount
+                              }
+                              strong
+                            />
+                          </View>
+                        )
+                      )}
+                    </View>
+                  )}
+
+                  <View
+                    style={
+                      styles.totalCard
+                    }
+                  >
+                    <SummaryRow
+                      label="Products subtotal"
+                      value={
+                        quote.productsSubtotal
+                      }
+                    />
+
+                    <SummaryRow
+                      label="Delivery fee"
+                      value={
+                        quote.deliveryFee
+                      }
+                    />
+
+                    <SummaryRow
+                      label="Pre-order fee"
+                      value={
+                        quote.preOrderFee
+                      }
+                    />
+
+                    <View
+                      style={
+                        styles.totalDivider
+                      }
+                    />
+
+                    <View
+                      style={
+                        styles.grandTotalRow
+                      }
+                    >
+                      <View>
+                        <Text
+                          style={
+                            styles.grandTotalLabel
+                          }
+                        >
+                          Total
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.grandTotalCaption
+                          }
+                        >
+                          {quote.shopCount ??
+                            0}{" "}
+                          shop
+                          {(quote.shopCount ??
+                            0) ===
+                          1
+                            ? ""
+                            : "s"}{" "}
+                          •{" "}
+                          {quote.totalQuantity ??
+                            cartTotalQuantity}{" "}
+                          item
+                          {(quote.totalQuantity ??
+                            cartTotalQuantity) ===
+                          1
+                            ? ""
+                            : "s"}
+                        </Text>
+                      </View>
+
+                      <Text
+                        style={
+                          styles.grandTotalValue
+                        }
+                      >
+                        {formatCurrency(
+                          quote.totalAmount
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View>
+                  <View
+                    style={
+                      styles.pendingQuote
+                    }
+                  >
+                    <Ionicons
+                      name="calculator-outline"
+                      size={22}
+                      color={
+                        quoteError
+                          ? COLORS.danger
+                          : COLORS.primary
+                      }
+                    />
+
+                    <Text
+                      style={[
+                        styles.pendingQuoteText,
+
+                        quoteError &&
+                          styles.pendingQuoteError,
+                      ]}
+                    >
+                      {quoteError ||
+                        "Complete the recipient and fulfillment details to calculate the final server total."}
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    onPress={() => {
+                      void requestCartQuote(
+                        true
+                      );
+                    }}
+                    disabled={
+                      quoteLoading
+                    }
+                    style={
+                      styles.calculateButton
+                    }
+                  >
+                    <Ionicons
+                      name="calculator-outline"
+                      size={17}
+                      color="#FFFFFF"
+                    />
+
+                    <Text
+                      style={
+                        styles.calculateButtonText
+                      }
+                    >
+                      Calculate Total
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </Section>
+          )}
+
+          {/* =================================================
+              CUSTOM SUMMARY
+          ================================================= */}
+
+          {!isCartCheckout && (
+            <Section
+              icon="receipt-outline"
+              title="Price Summary"
+              subtitle="Final delivery and pre-order fees are calculated by the backend when the custom bouquet order is created."
+            >
+              <View
                 style={
-                  styles.totalNoticeText
+                  styles.totalCard
                 }
               >
-                {isCartCheckout &&
-                fulfillmentType ===
-                  "delivery"
-                  ? "The displayed subtotal covers products only. Each order's final total is calculated using its florist-to-customer delivery route."
-                  : fulfillmentType ===
-                      "delivery"
-                    ? "The backend calculates the final amount using the florist-to-customer delivery route."
-                    : "Pickup has no rider delivery fee."}
-              </Text>
+                <SummaryRow
+                  label="Bouquet subtotal"
+                  value={
+                    customSubtotal
+                  }
+                />
+
+                <View
+                  style={
+                    styles.totalDivider
+                  }
+                />
+
+                <View
+                  style={
+                    styles.grandTotalRow
+                  }
+                >
+                  <View>
+                    <Text
+                      style={
+                        styles.grandTotalLabel
+                      }
+                    >
+                      Bouquet
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.grandTotalCaption
+                      }
+                    >
+                      Delivery or scheduling
+                      fees are confirmed by
+                      the server.
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={
+                      styles.grandTotalValue
+                    }
+                  >
+                    {formatCurrency(
+                      customSubtotal
+                    )}
+                  </Text>
+                </View>
+              </View>
+            </Section>
+          )}
+
+          {/* =================================================
+              PAYMENT STATUS
+          ================================================= */}
+
+          {createdCheckout &&
+            paymentMethod ===
+              "paymongo" && (
+            <View
+              style={
+                styles.paymentStatusCard
+              }
+            >
+              <View
+                style={
+                  styles.paymentStatusHeader
+                }
+              >
+                <Ionicons
+                  name={
+                    createdCheckout
+                      .paymentStatus ===
+                    "paid"
+                      ? "checkmark-circle"
+                      : "time-outline"
+                  }
+                  size={23}
+                  color={
+                    createdCheckout
+                      .paymentStatus ===
+                    "paid"
+                      ? COLORS.success
+                      : COLORS.warning
+                  }
+                />
+
+                <View
+                  style={{
+                    flex: 1,
+                  }}
+                >
+                  <Text
+                    style={
+                      styles.paymentStatusTitle
+                    }
+                  >
+                    {createdCheckout
+                      .paymentStatus ===
+                    "paid"
+                      ? "Payment verified"
+                      : "Payment status"}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.paymentStatusText
+                    }
+                  >
+                    {createdCheckout
+                      .paymentStatus ??
+                      "pending"}
+                  </Text>
+                </View>
+              </View>
+
+              {createdCheckout
+                .paymentStatus !==
+                "paid" && (
+                <Pressable
+                  onPress={() => {
+                    void handleCheckPaymentAgain();
+                  }}
+                  disabled={
+                    checkingPayment
+                  }
+                  style={
+                    styles.checkPaymentButton
+                  }
+                >
+                  {checkingPayment ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={
+                        COLORS.primary
+                      }
+                    />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="refresh"
+                        size={17}
+                        color={
+                          COLORS.primary
+                        }
+                      />
+
+                      <Text
+                        style={
+                          styles.checkPaymentText
+                        }
+                      >
+                        Check Payment Status
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
             </View>
-          </View>
+          )}
 
           <View
             style={
-              styles.bottomSpace
+              styles.bottomSpacer
             }
           />
         </ScrollView>
 
-        {/* =============================================
-            PLACE ORDER BAR
-        ============================================= */}
+        {/* =================================================
+            BOTTOM CHECKOUT BAR
+        ================================================= */}
 
         <View
           style={
-            styles.checkoutBar
+            styles.bottomBar
           }
         >
           <View
             style={
-              styles.checkoutTotal
+              styles.bottomTotalArea
             }
           >
             <Text
               style={
-                styles.checkoutTotalLabel
+                styles.bottomTotalLabel
               }
             >
-              Product subtotal
+              {isCartCheckout
+                ? "Final total"
+                : "Bouquet subtotal"}
             </Text>
 
             <Text
               style={
-                styles.checkoutTotalValue
+                styles.bottomTotal
               }
             >
-              {formatCurrency(
-                isCartCheckout
-                  ? cartSubtotal
-                  : customSubtotal
-              )}
+              {isCartCheckout
+                ? quote
+                  ? formatCurrency(
+                      quote.totalAmount
+                    )
+                  : formatCurrency(
+                      cartSubtotal
+                    )
+                : formatCurrency(
+                    customSubtotal
+                  )}
             </Text>
+
+            {isCartCheckout &&
+              !quote && (
+              <Text
+                style={
+                  styles.bottomEstimate
+                }
+              >
+                Complete details for final
+                fees
+              </Text>
+            )}
           </View>
 
           <Pressable
-            onPress={() =>
-              void placeOrder()
-            }
+            onPress={() => {
+              void placeOrder();
+            }}
             disabled={
-              submitting
+              submitting ||
+              checkingPayment
             }
-            style={[
+            style={({ pressed }) => [
               styles.placeOrderButton,
 
-              submitting &&
+              (
+                submitting ||
+                checkingPayment
+              ) &&
                 styles.placeOrderButtonDisabled,
+
+              pressed &&
+                !submitting &&
+                styles.placeOrderButtonPressed,
             ]}
           >
             {submitting ? (
@@ -3961,15 +4538,19 @@ export default function CustomerCheckoutScreen() {
                     styles.placeOrderButtonText
                   }
                 >
-                  {isCartCheckout &&
-                  cartItems.length >
-                    1
-                    ? `Place ${cartItems.length} Orders`
+                  {paymentMethod ===
+                  "paymongo"
+                    ? "Continue to PayMongo"
                     : "Place Order"}
                 </Text>
 
                 <Ionicons
-                  name="arrow-forward"
+                  name={
+                    paymentMethod ===
+                    "paymongo"
+                      ? "card-outline"
+                      : "arrow-forward"
+                  }
                   size={18}
                   color="#FFFFFF"
                 />
@@ -3979,6 +4560,81 @@ export default function CustomerCheckoutScreen() {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/* =========================================================
+ * SECTION
+ * ======================================================= */
+
+function Section({
+  icon,
+  title,
+  subtitle,
+  children,
+}: {
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
+  title: string;
+
+  subtitle?: string;
+
+  children:
+    React.ReactNode;
+}) {
+  return (
+    <View
+      style={
+        styles.section
+      }
+    >
+      <View
+        style={
+          styles.sectionHeading
+        }
+      >
+        <View
+          style={
+            styles.sectionIcon
+          }
+        >
+          <Ionicons
+            name={icon}
+            size={19}
+            color={
+              COLORS.primary
+            }
+          />
+        </View>
+
+        <View
+          style={
+            styles.sectionHeadingText
+          }
+        >
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            {title}
+          </Text>
+
+          {subtitle ? (
+            <Text
+              style={
+                styles.sectionSubtitle
+              }
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      {children}
+    </View>
   );
 }
 
@@ -3998,7 +4654,7 @@ function Field({
   return (
     <View
       style={
-        styles.fieldGroup
+        styles.field
       }
     >
       <Text
@@ -4010,6 +4666,240 @@ function Field({
       </Text>
 
       {children}
+    </View>
+  );
+}
+
+/* =========================================================
+ * CHOICE CARD
+ * ======================================================= */
+
+function ChoiceCard({
+  icon,
+  title,
+  subtitle,
+  selected,
+  onPress,
+}: {
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
+  title: string;
+
+  subtitle: string;
+
+  selected: boolean;
+
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={
+        onPress
+      }
+      style={[
+        styles.choiceCard,
+
+        selected &&
+          styles.choiceCardActive,
+      ]}
+    >
+      <View
+        style={[
+          styles.choiceIcon,
+
+          selected &&
+            styles.choiceIconActive,
+        ]}
+      >
+        <Ionicons
+          name={
+            icon
+          }
+          size={22}
+          color={
+            selected
+              ? "#FFFFFF"
+              : COLORS.primary
+          }
+        />
+      </View>
+
+      <Text
+        style={
+          styles.choiceTitle
+        }
+      >
+        {title}
+      </Text>
+
+      <Text
+        style={
+          styles.choiceSubtitle
+        }
+      >
+        {subtitle}
+      </Text>
+
+      {selected && (
+        <Ionicons
+          name="checkmark-circle"
+          size={18}
+          color={
+            COLORS.primary
+          }
+          style={
+            styles.choiceCheck
+          }
+        />
+      )}
+    </Pressable>
+  );
+}
+
+/* =========================================================
+ * PAYMENT CHOICE
+ * ======================================================= */
+
+function PaymentChoice({
+  icon,
+  title,
+  subtitle,
+  selected,
+  onPress,
+}: {
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
+  title: string;
+
+  subtitle: string;
+
+  selected: boolean;
+
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={
+        onPress
+      }
+      style={[
+        styles.paymentChoice,
+
+        selected &&
+          styles.paymentChoiceActive,
+      ]}
+    >
+      <View
+        style={[
+          styles.paymentIcon,
+
+          selected &&
+            styles.paymentIconActive,
+        ]}
+      >
+        <Ionicons
+          name={
+            icon
+          }
+          size={21}
+          color={
+            selected
+              ? "#FFFFFF"
+              : COLORS.primary
+          }
+        />
+      </View>
+
+      <View
+        style={
+          styles.paymentMain
+        }
+      >
+        <Text
+          style={
+            styles.paymentTitle
+          }
+        >
+          {title}
+        </Text>
+
+        <Text
+          style={
+            styles.paymentSubtitle
+          }
+        >
+          {subtitle}
+        </Text>
+      </View>
+
+      <View
+        style={[
+          styles.radioOuter,
+
+          selected &&
+            styles.radioOuterActive,
+        ]}
+      >
+        {selected && (
+          <View
+            style={
+              styles.radioInner
+            }
+          />
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+/* =========================================================
+ * SUMMARY ROW
+ * ======================================================= */
+
+function SummaryRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+
+  value?:
+    | number
+    | null;
+
+  strong?: boolean;
+}) {
+  return (
+    <View
+      style={
+        styles.summaryRow
+      }
+    >
+      <Text
+        style={[
+          styles.summaryLabel,
+
+          strong &&
+            styles.summaryStrong,
+        ]}
+      >
+        {label}
+      </Text>
+
+      <Text
+        style={[
+          styles.summaryValue,
+
+          strong &&
+            styles.summaryStrong,
+        ]}
+      >
+        {formatCurrency(
+          value
+        )}
+      </Text>
     </View>
   );
 }
@@ -4029,15 +4919,32 @@ const styles =
 
     container: {
       flex: 1,
-
-      backgroundColor:
-        COLORS.background,
     },
 
-    header: {
-      minHeight: 67,
+    scrollView: {
+      flex: 1,
+    },
 
-      paddingHorizontal: 14,
+    scrollContent: {
+      paddingHorizontal:
+        16,
+
+      paddingTop:
+        14,
+
+      paddingBottom:
+        150,
+    },
+
+    /* =====================================================
+     * HEADER
+     * =================================================== */
+
+    header: {
+      minHeight: 68,
+
+      paddingHorizontal:
+        16,
 
       flexDirection:
         "row",
@@ -4045,14 +4952,14 @@ const styles =
       alignItems:
         "center",
 
-      backgroundColor:
-        COLORS.card,
-
       borderBottomWidth:
-        StyleSheet.hairlineWidth,
+        1,
 
       borderBottomColor:
         COLORS.border,
+
+      backgroundColor:
+        COLORS.card,
     },
 
     backButton: {
@@ -4060,13 +4967,17 @@ const styles =
 
       height: 42,
 
-      borderRadius: 21,
+      borderRadius:
+        21,
 
       alignItems:
         "center",
 
       justifyContent:
         "center",
+
+      backgroundColor:
+        COLORS.graySoft,
     },
 
     headerCenter: {
@@ -4077,24 +4988,25 @@ const styles =
     },
 
     headerEyebrow: {
-      fontSize: 8,
+      fontSize: 10,
 
       fontWeight:
         "800",
 
-      letterSpacing: 1.5,
+      letterSpacing:
+        1.6,
 
       color:
         COLORS.primary,
     },
 
     headerTitle: {
-      marginTop: 1,
+      marginTop: 2,
 
-      fontSize: 19,
+      fontSize: 20,
 
       fontWeight:
-        "900",
+        "800",
 
       color:
         COLORS.text,
@@ -4105,7 +5017,8 @@ const styles =
 
       height: 42,
 
-      borderRadius: 21,
+      borderRadius:
+        21,
 
       alignItems:
         "center",
@@ -4117,30 +5030,45 @@ const styles =
         COLORS.primarySoft,
     },
 
-    scrollView: {
-      flex: 1,
-    },
-
-    scrollContent: {
-      padding: 15,
-
-      paddingBottom: 20,
-    },
+    /* =====================================================
+     * SECTION
+     * =================================================== */
 
     section: {
-      marginBottom: 14,
+      marginBottom:
+        14,
 
-      padding: 16,
+      padding:
+        16,
 
-      borderRadius: 19,
+      borderRadius:
+        18,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.border,
 
       backgroundColor:
         COLORS.card,
 
-      borderWidth: 1,
+      shadowColor:
+        "#000000",
 
-      borderColor:
-        COLORS.border,
+      shadowOpacity:
+        0.025,
+
+      shadowRadius:
+        8,
+
+      shadowOffset: {
+        width: 0,
+
+        height: 3,
+      },
+
+      elevation: 1,
     },
 
     sectionHeading: {
@@ -4148,11 +5076,10 @@ const styles =
         "row",
 
       alignItems:
-        "center",
+        "flex-start",
 
-      gap: 10,
-
-      marginBottom: 14,
+      marginBottom:
+        16,
     },
 
     sectionIcon: {
@@ -4160,7 +5087,10 @@ const styles =
 
       height: 38,
 
-      borderRadius: 12,
+      marginRight: 11,
+
+      borderRadius:
+        12,
 
       alignItems:
         "center",
@@ -4172,75 +5102,102 @@ const styles =
         COLORS.primarySoft,
     },
 
+    sectionHeadingText: {
+      flex: 1,
+    },
+
     sectionTitle: {
-      fontSize: 15,
+      fontSize: 17,
 
       fontWeight:
-        "900",
+        "800",
 
       color:
         COLORS.text,
     },
 
     sectionSubtitle: {
-      marginTop: 3,
+      marginTop: 4,
 
-      fontSize: 11,
+      fontSize: 12.5,
 
-      lineHeight: 16,
+      lineHeight: 18,
 
       color:
         COLORS.textMuted,
     },
 
-    productCard: {
-      padding: 11,
-
-      borderRadius: 16,
-
-      flexDirection:
-        "row",
-
-      backgroundColor:
-        COLORS.graySoft,
-    },
+    /* =====================================================
+     * PRODUCTS
+     * =================================================== */
 
     cartProductCard: {
-      padding: 11,
+      padding:
+        12,
 
-      borderRadius: 16,
+      borderRadius:
+        15,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.border,
+
+      backgroundColor:
+        COLORS.background,
 
       flexDirection:
         "row",
 
-      alignItems:
-        "center",
-
-      backgroundColor:
-        COLORS.graySoft,
+      flexWrap:
+        "wrap",
     },
 
     cartProductCardSpacing: {
-      marginBottom: 10,
+      marginBottom:
+        10,
+    },
+
+    customProductCard: {
+      padding:
+        12,
+
+      borderRadius:
+        15,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.border,
+
+      backgroundColor:
+        COLORS.background,
+
+      flexDirection:
+        "row",
     },
 
     productImage: {
-      width: 82,
+      width: 76,
 
-      height: 82,
+      height: 76,
 
-      borderRadius: 13,
+      borderRadius:
+        13,
 
       backgroundColor:
-        COLORS.primarySoft,
+        COLORS.graySoft,
     },
 
     productImagePlaceholder: {
-      width: 82,
+      width: 76,
 
-      height: 82,
+      height: 76,
 
-      borderRadius: 13,
+      borderRadius:
+        13,
 
       alignItems:
         "center",
@@ -4255,19 +5212,22 @@ const styles =
     productMain: {
       flex: 1,
 
-      marginLeft: 11,
+      minWidth: 140,
+
+      paddingLeft:
+        12,
 
       justifyContent:
         "center",
     },
 
     productName: {
-      fontSize: 14,
+      fontSize: 15,
 
-      lineHeight: 18,
+      lineHeight: 20,
 
       fontWeight:
-        "900",
+        "800",
 
       color:
         COLORS.text,
@@ -4286,21 +5246,21 @@ const styles =
     },
 
     floristName: {
-      flex: 1,
+      flexShrink: 1,
 
-      fontSize: 10,
+      fontSize: 11.5,
 
       color:
         COLORS.textMuted,
     },
 
     productPrice: {
-      marginTop: 5,
+      marginTop: 7,
 
-      fontSize: 14,
+      fontSize: 15,
 
       fontWeight:
-        "900",
+        "800",
 
       color:
         COLORS.primary,
@@ -4309,83 +5269,63 @@ const styles =
     quantityText: {
       marginTop: 2,
 
-      fontSize: 10,
+      fontSize: 11.5,
 
       color:
         COLORS.textMuted,
     },
 
-    cartLineTotal: {
-      marginLeft: 8,
+    lineTotalBox: {
+      width: "100%",
 
-      alignItems:
-        "flex-end",
-    },
+      marginTop: 10,
 
-    cartLineTotalLabel: {
-      fontSize: 9,
+      paddingTop: 10,
 
-      color:
-        COLORS.textMuted,
-    },
+      borderTopWidth:
+        1,
 
-    cartLineTotalValue: {
-      marginTop: 3,
-
-      fontSize: 13,
-
-      fontWeight:
-        "900",
-
-      color:
-        COLORS.primary,
-    },
-
-    selectedProposalBadge: {
-      marginTop: 11,
-
-      padding: 11,
-
-      borderRadius: 13,
+      borderTopColor:
+        COLORS.border,
 
       flexDirection:
         "row",
 
       alignItems:
-        "flex-start",
+        "center",
 
-      gap: 8,
-
-      backgroundColor:
-        COLORS.successSoft,
+      justifyContent:
+        "space-between",
     },
 
-    selectedProposalTitle: {
-      fontSize: 11,
+    lineTotalLabel: {
+      fontSize: 12,
+
+      color:
+        COLORS.textMuted,
+    },
+
+    lineTotalValue: {
+      fontSize: 14,
 
       fontWeight:
         "800",
 
       color:
-        COLORS.success,
+        COLORS.text,
     },
 
-    selectedProposalText: {
-      marginTop: 2,
+    /* =====================================================
+     * BADGES
+     * =================================================== */
 
-      fontSize: 10,
+    infoBadge: {
+      marginTop: 12,
 
-      lineHeight: 15,
+      padding: 12,
 
-      color: "#4D6F5D",
-    },
-
-    cartInfoBadge: {
-      marginTop: 11,
-
-      padding: 11,
-
-      borderRadius: 13,
+      borderRadius:
+        13,
 
       flexDirection:
         "row",
@@ -4399,20 +5339,87 @@ const styles =
         COLORS.blueSoft,
     },
 
-    cartInfoText: {
+    infoBadgeText: {
       flex: 1,
 
-      fontSize: 10,
+      fontSize: 11.5,
 
-      lineHeight: 16,
+      lineHeight: 17,
 
       color:
         COLORS.blue,
     },
 
-    choiceRow: {
-      marginTop: 13,
+    successBadge: {
+      marginTop: 12,
 
+      paddingVertical:
+        10,
+
+      paddingHorizontal:
+        12,
+
+      borderRadius:
+        12,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 7,
+
+      backgroundColor:
+        COLORS.successSoft,
+    },
+
+    successBadgeText: {
+      fontSize: 12,
+
+      fontWeight:
+        "700",
+
+      color:
+        COLORS.success,
+    },
+
+    warningBadge: {
+      marginTop: 4,
+
+      padding: 11,
+
+      borderRadius:
+        12,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "flex-start",
+
+      gap: 8,
+
+      backgroundColor:
+        COLORS.warningSoft,
+    },
+
+    warningText: {
+      flex: 1,
+
+      fontSize: 11.5,
+
+      lineHeight: 17,
+
+      color:
+        COLORS.warning,
+    },
+
+    /* =====================================================
+     * CHOICES
+     * =================================================== */
+
+    choiceRow: {
       flexDirection:
         "row",
 
@@ -4422,22 +5429,22 @@ const styles =
     choiceCard: {
       flex: 1,
 
-      minHeight: 135,
+      minHeight:
+        125,
 
       padding: 13,
 
-      borderRadius: 16,
+      borderRadius:
+        15,
 
-      borderWidth: 1,
+      borderWidth:
+        1.5,
 
       borderColor:
         COLORS.border,
 
       backgroundColor:
-        COLORS.card,
-
-      position:
-        "relative",
+        COLORS.background,
     },
 
     choiceCardActive: {
@@ -4449,11 +5456,12 @@ const styles =
     },
 
     choiceIcon: {
-      width: 42,
+      width: 40,
 
-      height: 42,
+      height: 40,
 
-      borderRadius: 13,
+      borderRadius:
+        12,
 
       alignItems:
         "center",
@@ -4473,23 +5481,23 @@ const styles =
     choiceTitle: {
       marginTop: 10,
 
-      fontSize: 13,
+      fontSize: 14,
 
       fontWeight:
-        "900",
+        "800",
 
       color:
         COLORS.text,
     },
 
-    choiceText: {
+    choiceSubtitle: {
       marginTop: 3,
 
-      paddingRight: 5,
+      paddingRight: 15,
 
-      fontSize: 10,
+      fontSize: 11,
 
-      lineHeight: 14,
+      lineHeight: 15,
 
       color:
         COLORS.textMuted,
@@ -4504,40 +5512,49 @@ const styles =
       right: 10,
     },
 
-    fieldGroup: {
-      marginTop: 12,
+    /* =====================================================
+     * FIELDS
+     * =================================================== */
+
+    field: {
+      marginBottom:
+        13,
     },
 
     fieldLabel: {
-      marginBottom: 6,
+      marginBottom: 7,
 
-      fontSize: 11,
+      fontSize: 12,
 
       fontWeight:
-        "800",
+        "700",
 
       color:
         COLORS.text,
     },
 
     input: {
-      width: "100%",
+      minHeight: 49,
 
-      minHeight: 46,
+      paddingHorizontal:
+        13,
 
-      paddingHorizontal: 13,
+      paddingVertical:
+        11,
 
-      borderWidth: 1,
+      borderRadius:
+        13,
+
+      borderWidth:
+        1,
 
       borderColor:
         COLORS.border,
 
-      borderRadius: 13,
-
       backgroundColor:
-        COLORS.graySoft,
+        COLORS.background,
 
-      fontSize: 13,
+      fontSize: 14,
 
       color:
         COLORS.text,
@@ -4546,10 +5563,16 @@ const styles =
     helperText: {
       marginTop: 5,
 
-      fontSize: 9,
+      marginLeft: 2,
+
+      fontSize: 10.5,
 
       color:
         COLORS.textMuted,
+    },
+
+    notesInput: {
+      minHeight: 105,
     },
 
     twoColumnRow: {
@@ -4559,104 +5582,265 @@ const styles =
       gap: 10,
     },
 
-    halfField: {
+    column: {
       flex: 1,
     },
 
-    locationCard: {
-      marginTop: 14,
+    locationNotice: {
+      marginBottom: 13,
 
-      padding: 13,
+      padding: 11,
 
-      borderRadius: 15,
+      borderRadius:
+        12,
 
-      backgroundColor:
-        COLORS.blueSoft,
-    },
-
-    locationHeader: {
       flexDirection:
         "row",
 
       alignItems:
         "flex-start",
 
-      gap: 9,
-    },
-
-    locationIcon: {
-      width: 36,
-
-      height: 36,
-
-      borderRadius: 11,
-
-      alignItems:
-        "center",
-
-      justifyContent:
-        "center",
+      gap: 8,
 
       backgroundColor:
-        "#FFFFFF",
+        COLORS.blueSoft,
     },
 
-    locationTitle: {
-      fontSize: 12,
+    locationNoticeText: {
+      flex: 1,
 
-      fontWeight:
-        "900",
+      fontSize: 11,
+
+      lineHeight: 16,
 
       color:
         COLORS.blue,
     },
 
-    locationText: {
-      marginTop: 3,
 
-      fontSize: 10,
+    deliveryMapCard: {
+      height: 285,
 
-      lineHeight: 15,
+      marginBottom: 12,
 
-      color: "#54789F",
-    },
-
-    radioCard: {
-      minHeight: 66,
-
-      marginTop: 10,
-
-      padding: 12,
+      borderRadius: 16,
 
       borderWidth: 1,
 
       borderColor:
         COLORS.border,
 
+      overflow: "hidden",
+
+      backgroundColor:
+        COLORS.graySoft,
+    },
+
+    deliveryMap: {
+      ...StyleSheet.absoluteFill,
+    },
+
+    mapHintOverlay: {
+      ...StyleSheet.absoluteFill,
+
+      alignItems: "center",
+
+      justifyContent: "center",
+    },
+
+    mapHintBubble: {
+      maxWidth: 245,
+
+      paddingVertical: 10,
+
+      paddingHorizontal: 13,
+
       borderRadius: 14,
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      gap: 7,
+
+      backgroundColor:
+        "rgba(255,255,255,0.94)",
+
+      shadowColor: "#000000",
+
+      shadowOpacity: 0.12,
+
+      shadowRadius: 7,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 4,
+    },
+
+    mapHintText: {
+      flexShrink: 1,
+
+      fontSize: 11.5,
+
+      lineHeight: 16,
+
+      fontWeight: "700",
+
+      color:
+        COLORS.text,
+    },
+
+    currentLocationButton: {
+      minHeight: 48,
+
+      marginBottom: 12,
+
+      paddingHorizontal: 14,
+
+      borderRadius: 13,
+
+      borderWidth: 1,
+
+      borderColor:
+        COLORS.primary,
+
+      flexDirection: "row",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      gap: 8,
+
+      backgroundColor:
+        COLORS.primarySoft,
+    },
+
+    currentLocationButtonPressed: {
+      opacity: 0.82,
+    },
+
+    currentLocationButtonDisabled: {
+      opacity: 0.6,
+    },
+
+    currentLocationButtonText: {
+      fontSize: 12.5,
+
+      fontWeight: "800",
+
+      color:
+        COLORS.primary,
+    },
+
+    selectedLocationCard: {
+      marginBottom: 12,
+
+      padding: 12,
+
+      borderRadius: 13,
+
+      flexDirection: "row",
+
+      alignItems: "flex-start",
+
+      gap: 9,
+
+      backgroundColor:
+        COLORS.successSoft,
+    },
+
+    selectedLocationTextArea: {
+      flex: 1,
+    },
+
+    selectedLocationTitle: {
+      fontSize: 12.5,
+
+      fontWeight: "800",
+
+      color:
+        COLORS.success,
+    },
+
+    selectedLocationText: {
+      marginTop: 2,
+
+      fontSize: 10.5,
+
+      lineHeight: 15,
+
+      color:
+        COLORS.success,
+    },
+
+    locationErrorCard: {
+      marginBottom: 12,
+
+      padding: 11,
+
+      borderRadius: 12,
+
+      flexDirection: "row",
+
+      alignItems: "flex-start",
+
+      gap: 8,
+
+      backgroundColor:
+        COLORS.dangerSoft,
+    },
+
+    locationErrorText: {
+      flex: 1,
+
+      fontSize: 11,
+
+      lineHeight: 16,
+
+      color:
+        COLORS.danger,
+    },
+
+    /* =====================================================
+     * SCHEDULE SWITCH
+     * =================================================== */
+
+    toggleRow: {
+      padding:
+        13,
+
+      borderRadius:
+        14,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.border,
+
+      backgroundColor:
+        COLORS.background,
 
       flexDirection:
         "row",
 
       alignItems:
         "center",
-
-      gap: 10,
-
-      backgroundColor:
-        COLORS.card,
     },
 
-    radioCardActive: {
-      borderColor:
-        COLORS.primary,
+    toggleTextArea: {
+      flex: 1,
 
-      backgroundColor:
-        COLORS.primarySoft,
+      paddingRight:
+        12,
     },
 
-    radioTitle: {
-      fontSize: 12,
+    toggleTitle: {
+      fontSize: 13,
 
       fontWeight:
         "800",
@@ -4665,129 +5849,102 @@ const styles =
         COLORS.text,
     },
 
-    radioText: {
-      marginTop: 2,
+    toggleSubtitle: {
+      marginTop: 3,
 
-      fontSize: 10,
-
-      color:
-        COLORS.textMuted,
-    },
-
-    scheduleFields: {
-      marginTop: 8,
-    },
-
-    iconInput: {
-      minHeight: 46,
-
-      paddingHorizontal: 12,
-
-      borderWidth: 1,
-
-      borderColor:
-        COLORS.border,
-
-      borderRadius: 13,
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "center",
-
-      gap: 8,
-
-      backgroundColor:
-        COLORS.graySoft,
-    },
-
-    iconTextInput: {
-      flex: 1,
-
-      minHeight: 44,
-
-      fontSize: 13,
-
-      color:
-        COLORS.text,
-    },
-
-    preorderNotice: {
-      marginTop: 12,
-
-      padding: 10,
-
-      borderRadius: 12,
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "flex-start",
-
-      gap: 7,
-
-      backgroundColor:
-        COLORS.warningSoft,
-    },
-
-    preorderNoticeText: {
-      flex: 1,
-
-      fontSize: 10,
+      fontSize: 11,
 
       lineHeight: 15,
 
       color:
-        COLORS.warning,
-    },
-
-    notesInput: {
-      minHeight: 105,
-
-      paddingTop: 12,
-    },
-
-    counterText: {
-      marginTop: 5,
-
-      textAlign:
-        "right",
-
-      fontSize: 9,
-
-      color:
         COLORS.textMuted,
     },
 
-    paymentCard: {
-      marginTop: 10,
+    switchTrack: {
+      width: 46,
 
-      minHeight: 70,
+      height: 27,
+
+      padding: 3,
+
+      borderRadius:
+        15,
+
+      justifyContent:
+        "center",
+
+      backgroundColor:
+        "#D8D2D5",
+    },
+
+    switchTrackActive: {
+      backgroundColor:
+        COLORS.primary,
+    },
+
+    switchThumb: {
+      width: 21,
+
+      height: 21,
+
+      borderRadius:
+        11,
+
+      backgroundColor:
+        "#FFFFFF",
+
+      transform: [
+        {
+          translateX: 0,
+        },
+      ],
+    },
+
+    switchThumbActive: {
+      transform: [
+        {
+          translateX: 19,
+        },
+      ],
+    },
+
+    scheduleFields: {
+      marginTop: 14,
+    },
+
+    /* =====================================================
+     * PAYMENT
+     * =================================================== */
+
+    paymentChoice: {
+      minHeight:
+        76,
+
+      marginBottom:
+        10,
 
       padding: 12,
 
-      borderWidth: 1,
+      borderRadius:
+        14,
+
+      borderWidth:
+        1.5,
 
       borderColor:
         COLORS.border,
 
-      borderRadius: 15,
+      backgroundColor:
+        COLORS.background,
 
       flexDirection:
         "row",
 
       alignItems:
         "center",
-
-      gap: 10,
-
-      backgroundColor:
-        COLORS.card,
     },
 
-    paymentCardActive: {
+    paymentChoiceActive: {
       borderColor:
         COLORS.primary,
 
@@ -4795,19 +5952,16 @@ const styles =
         COLORS.primarySoft,
     },
 
-    paymentCardDisabled: {
-      opacity: 0.6,
-
-      backgroundColor:
-        "#F2F0F1",
-    },
-
     paymentIcon: {
-      width: 41,
+      width: 42,
 
-      height: 41,
+      height: 42,
 
-      borderRadius: 13,
+      marginRight:
+        11,
+
+      borderRadius:
+        13,
 
       alignItems:
         "center",
@@ -4816,49 +5970,291 @@ const styles =
         "center",
 
       backgroundColor:
-        "#FFFFFF",
+        COLORS.primarySoft,
+    },
+
+    paymentIconActive: {
+      backgroundColor:
+        COLORS.primary,
+    },
+
+    paymentMain: {
+      flex: 1,
+
+      paddingRight:
+        8,
     },
 
     paymentTitle: {
-      fontSize: 12,
+      fontSize: 13,
 
       fontWeight:
-        "900",
+        "800",
 
       color:
         COLORS.text,
     },
 
-    paymentText: {
-      marginTop: 2,
+    paymentSubtitle: {
+      marginTop: 3,
 
-      fontSize: 10,
+      fontSize: 10.5,
+
+      lineHeight: 15,
 
       color:
         COLORS.textMuted,
     },
 
-    disabledText: {
-      color: "#989095",
+    radioOuter: {
+      width: 20,
+
+      height: 20,
+
+      borderRadius:
+        10,
+
+      borderWidth:
+        2,
+
+      borderColor:
+        "#C7BEC3",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
     },
 
-    totalCard: {
-      marginBottom: 14,
+    radioOuterActive: {
+      borderColor:
+        COLORS.primary,
+    },
 
-      padding: 16,
+    radioInner: {
+      width: 10,
 
-      borderRadius: 19,
+      height: 10,
 
-      borderWidth: 1,
+      borderRadius: 5,
+
+      backgroundColor:
+        COLORS.primary,
+    },
+
+    /* =====================================================
+     * QUOTE
+     * =================================================== */
+
+    quoteLoading: {
+      minHeight:
+        80,
+
+      borderRadius:
+        14,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 10,
+
+      backgroundColor:
+        COLORS.primarySoft,
+    },
+
+    quoteLoadingText: {
+      maxWidth:
+        "75%",
+
+      fontSize: 12,
+
+      color:
+        COLORS.primary,
+    },
+
+    pendingQuote: {
+      minHeight:
+        76,
+
+      padding: 13,
+
+      borderRadius:
+        14,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 9,
+
+      backgroundColor:
+        COLORS.graySoft,
+    },
+
+    pendingQuoteText: {
+      flex: 1,
+
+      fontSize: 11.5,
+
+      lineHeight: 17,
+
+      color:
+        COLORS.textMuted,
+    },
+
+    pendingQuoteError: {
+      color:
+        COLORS.danger,
+    },
+
+    calculateButton: {
+      minHeight:
+        45,
+
+      marginTop: 10,
+
+      paddingHorizontal:
+        15,
+
+      borderRadius:
+        12,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 7,
+
+      backgroundColor:
+        COLORS.primary,
+    },
+
+    calculateButtonText: {
+      fontSize: 12,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#FFFFFF",
+    },
+
+    shopBreakdownContainer: {
+      marginBottom:
+        11,
+    },
+
+    shopCard: {
+      marginBottom:
+        9,
+
+      padding: 13,
+
+      borderRadius:
+        14,
+
+      borderWidth:
+        1,
 
       borderColor:
         COLORS.border,
 
       backgroundColor:
-        COLORS.card,
+        COLORS.background,
     },
 
-    totalHeader: {
+    shopHeader: {
+      marginBottom:
+        11,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+    },
+
+    shopIcon: {
+      width: 34,
+
+      height: 34,
+
+      marginRight:
+        9,
+
+      borderRadius:
+        10,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      backgroundColor:
+        COLORS.primarySoft,
+    },
+
+    shopHeaderText: {
+      flex: 1,
+    },
+
+    shopName: {
+      fontSize: 13,
+
+      fontWeight:
+        "800",
+
+      color:
+        COLORS.text,
+    },
+
+    shopMeta: {
+      marginTop: 2,
+
+      fontSize: 10.5,
+
+      color:
+        COLORS.textMuted,
+    },
+
+    shopTotalDivider: {
+      height: 1,
+
+      marginVertical: 8,
+
+      backgroundColor:
+        COLORS.border,
+    },
+
+    totalCard: {
+      padding: 14,
+
+      borderRadius:
+        15,
+
+      backgroundColor:
+        COLORS.graySoft,
+    },
+
+    summaryRow: {
+      minHeight:
+        27,
+
       flexDirection:
         "row",
 
@@ -4869,11 +6265,26 @@ const styles =
         "space-between",
     },
 
-    totalTitle: {
-      fontSize: 15,
+    summaryLabel: {
+      fontSize: 12,
+
+      color:
+        COLORS.textMuted,
+    },
+
+    summaryValue: {
+      fontSize: 12,
 
       fontWeight:
-        "900",
+        "700",
+
+      color:
+        COLORS.text,
+    },
+
+    summaryStrong: {
+      fontWeight:
+        "800",
 
       color:
         COLORS.text,
@@ -4882,15 +6293,14 @@ const styles =
     totalDivider: {
       height: 1,
 
-      marginVertical: 12,
+      marginVertical:
+        10,
 
       backgroundColor:
         COLORS.border,
     },
 
-    totalRow: {
-      minHeight: 32,
-
+    grandTotalRow: {
       flexDirection:
         "row",
 
@@ -4903,114 +6313,31 @@ const styles =
       gap: 15,
     },
 
-    totalLabel: {
-      fontSize: 11,
-
-      color:
-        COLORS.textMuted,
-    },
-
-    totalValue: {
-      fontSize: 12,
+    grandTotalLabel: {
+      fontSize: 15,
 
       fontWeight:
-        "800",
+        "900",
 
       color:
         COLORS.text,
     },
 
-    calculatedText: {
-      flexShrink: 1,
+    grandTotalCaption: {
+      maxWidth: 180,
 
-      textAlign:
-        "right",
+      marginTop: 3,
 
       fontSize: 10,
 
-      fontWeight:
-        "700",
-
-      color:
-        COLORS.blue,
-    },
-
-    totalNotice: {
-      marginTop: 11,
-
-      padding: 10,
-
-      borderRadius: 12,
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "flex-start",
-
-      gap: 7,
-
-      backgroundColor:
-        COLORS.blueSoft,
-    },
-
-    totalNoticeText: {
-      flex: 1,
-
-      fontSize: 9,
-
       lineHeight: 14,
-
-      color:
-        COLORS.blue,
-    },
-
-    bottomSpace: {
-      height: 15,
-    },
-
-    checkoutBar: {
-      minHeight: 79,
-
-      paddingHorizontal: 15,
-
-      paddingVertical: 10,
-
-      borderTopWidth:
-        StyleSheet.hairlineWidth,
-
-      borderTopColor:
-        COLORS.border,
-
-      flexDirection:
-        "row",
-
-      alignItems:
-        "center",
-
-      gap: 13,
-
-      backgroundColor:
-        COLORS.card,
-    },
-
-    checkoutTotal: {
-      minWidth: 105,
-
-      maxWidth: 135,
-    },
-
-    checkoutTotalLabel: {
-      fontSize: 9,
 
       color:
         COLORS.textMuted,
     },
 
-    checkoutTotalValue: {
-      marginTop: 2,
-
-      fontSize: 18,
+    grandTotalValue: {
+      fontSize: 21,
 
       fontWeight:
         "900",
@@ -5019,12 +6346,206 @@ const styles =
         COLORS.primary,
     },
 
-    placeOrderButton: {
+    /* =====================================================
+     * PAYMENT STATUS
+     * =================================================== */
+
+    paymentStatusCard: {
+      marginBottom:
+        14,
+
+      padding: 15,
+
+      borderRadius:
+        17,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.border,
+
+      backgroundColor:
+        COLORS.card,
+    },
+
+    paymentStatusHeader: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 10,
+    },
+
+    paymentStatusTitle: {
+      fontSize: 13,
+
+      fontWeight:
+        "800",
+
+      color:
+        COLORS.text,
+    },
+
+    paymentStatusText: {
+      marginTop: 2,
+
+      fontSize: 11.5,
+
+      textTransform:
+        "capitalize",
+
+      color:
+        COLORS.textMuted,
+    },
+
+    checkPaymentButton: {
+      minHeight:
+        43,
+
+      marginTop: 12,
+
+      borderRadius:
+        12,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        COLORS.primary,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 7,
+
+      backgroundColor:
+        COLORS.primarySoft,
+    },
+
+    checkPaymentText: {
+      fontSize: 12,
+
+      fontWeight:
+        "800",
+
+      color:
+        COLORS.primary,
+    },
+
+    /* =====================================================
+     * BOTTOM BAR
+     * =================================================== */
+
+    bottomSpacer: {
+      height: 20,
+    },
+
+    bottomBar: {
+      minHeight: 86,
+
+      paddingHorizontal:
+        16,
+
+      paddingTop:
+        11,
+
+      paddingBottom:
+        Platform.OS ===
+        "ios"
+          ? 14
+          : 11,
+
+      borderTopWidth:
+        1,
+
+      borderTopColor:
+        COLORS.border,
+
+      backgroundColor:
+        COLORS.card,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 12,
+
+      shadowColor:
+        "#000000",
+
+      shadowOpacity:
+        0.05,
+
+      shadowRadius:
+        12,
+
+      shadowOffset: {
+        width: 0,
+
+        height: -3,
+      },
+
+      elevation: 8,
+    },
+
+    bottomTotalArea: {
       flex: 1,
+    },
 
-      minHeight: 50,
+    bottomTotalLabel: {
+      fontSize: 10.5,
 
-      borderRadius: 15,
+      color:
+        COLORS.textMuted,
+    },
+
+    bottomTotal: {
+      marginTop: 1,
+
+      fontSize: 19,
+
+      fontWeight:
+        "900",
+
+      color:
+        COLORS.primary,
+    },
+
+    bottomEstimate: {
+      marginTop: 2,
+
+      fontSize: 9.5,
+
+      color:
+        COLORS.warning,
+    },
+
+    placeOrderButton: {
+      minWidth:
+        180,
+
+      minHeight:
+        52,
+
+      paddingHorizontal:
+        17,
+
+      borderRadius:
+        15,
+
+      backgroundColor:
+        COLORS.primary,
 
       flexDirection:
         "row",
@@ -5036,13 +6557,21 @@ const styles =
         "center",
 
       gap: 8,
-
-      backgroundColor:
-        COLORS.primary,
     },
 
     placeOrderButtonDisabled: {
-      opacity: 0.6,
+      opacity: 0.55,
+    },
+
+    placeOrderButtonPressed: {
+      backgroundColor:
+        COLORS.primaryDark,
+
+      transform: [
+        {
+          scale: 0.985,
+        },
+      ],
     },
 
     placeOrderButtonText: {
@@ -5051,32 +6580,37 @@ const styles =
       fontWeight:
         "900",
 
-      color: "#FFFFFF",
+      color:
+        "#FFFFFF",
     },
+
+    /* =====================================================
+     * STATE
+     * =================================================== */
 
     centerState: {
       flex: 1,
 
-      paddingHorizontal: 30,
+      paddingHorizontal:
+        30,
 
       alignItems:
         "center",
 
       justifyContent:
         "center",
-
-      backgroundColor:
-        COLORS.background,
     },
 
     stateIcon: {
-      width: 72,
+      width: 62,
 
-      height: 72,
+      height: 62,
 
-      marginBottom: 17,
+      marginBottom:
+        18,
 
-      borderRadius: 36,
+      borderRadius:
+        20,
 
       alignItems:
         "center",
@@ -5089,42 +6623,50 @@ const styles =
     },
 
     stateTitle: {
-      marginTop: 10,
+      marginBottom: 7,
 
       fontSize: 19,
 
       fontWeight:
         "900",
 
-      color:
-        COLORS.text,
-
       textAlign:
         "center",
+
+      color:
+        COLORS.text,
     },
 
     stateText: {
-      marginTop: 9,
+      marginTop: 10,
 
-      fontSize: 12,
+      maxWidth: 320,
 
-      lineHeight: 18,
+      fontSize: 13,
 
-      color:
-        COLORS.textMuted,
+      lineHeight: 19,
 
       textAlign:
         "center",
+
+      color:
+        COLORS.textMuted,
     },
 
     retryButton: {
+      minHeight:
+        45,
+
       marginTop: 20,
 
-      minHeight: 44,
+      paddingHorizontal:
+        22,
 
-      paddingHorizontal: 20,
+      borderRadius:
+        13,
 
-      borderRadius: 13,
+      backgroundColor:
+        COLORS.primary,
 
       flexDirection:
         "row",
@@ -5136,9 +6678,6 @@ const styles =
         "center",
 
       gap: 7,
-
-      backgroundColor:
-        COLORS.primary,
     },
 
     retryButtonText: {
@@ -5147,15 +6686,15 @@ const styles =
       fontWeight:
         "800",
 
-      color: "#FFFFFF",
+      color:
+        "#FFFFFF",
     },
 
     backStateButton: {
-      marginTop: 10,
+      marginTop: 13,
 
-      paddingHorizontal: 18,
-
-      paddingVertical: 10,
+      padding:
+        8,
     },
 
     backStateText: {

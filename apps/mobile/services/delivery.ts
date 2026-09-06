@@ -1,4 +1,8 @@
 import {
+  File,
+} from 'expo-file-system';
+
+import {
   apiRequest,
 } from './api';
 
@@ -178,6 +182,55 @@ export type DeliveryCustomer = {
 
 /*
  * =========================================================
+ * ASSIGNED RIDER
+ * =========================================================
+ *
+ * Customer delivery responses populate:
+ *
+ * delivery.rider
+ *   -> Rider profile
+ *      -> owner User
+ *
+ * The customer can use this information
+ * to display the assigned Rider's name
+ * and contact number.
+ * =========================================================
+ */
+
+export type DeliveryRiderOwner = {
+  _id?: string;
+
+  firstName?: string;
+
+  lastName?: string;
+
+  email?: string;
+
+  phoneNumber?: string;
+
+  role?: string;
+
+  verificationStatus?: string;
+};
+
+export type DeliveryRider = {
+  _id: string;
+
+  owner?:
+    | DeliveryRiderOwner
+    | string;
+
+  verificationStatus?:
+    | string
+    | null;
+
+  isActive?: boolean;
+
+  isAvailable?: boolean;
+};
+
+/*
+ * =========================================================
  * DELIVERY
  * =========================================================
  */
@@ -201,7 +254,10 @@ export type Delivery = {
     | DeliveryFlorist
     | string;
 
-  rider?: unknown;
+  rider?:
+  | DeliveryRider
+  | string
+  | null;
 
   riderUser?:
     | string
@@ -835,6 +891,24 @@ type RiderDeliveriesResponse = {
   };
 };
 
+/*
+ * =========================================================
+ * CUSTOMER DELIVERIES RESPONSE
+ * =========================================================
+ */
+
+type CustomerDeliveriesResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    count: number;
+
+    deliveries: Delivery[];
+  };
+};
+
 type DeliveryResponse = {
   success: boolean;
 
@@ -1257,6 +1331,37 @@ export const getRiderDeliveries =
     return response.data;
   };
 
+  /*
+ * =========================================================
+ * CUSTOMER DELIVERY HISTORY / TRACKING DISCOVERY
+ * =========================================================
+ *
+ * GET
+ * /api/v1/deliveries/mine
+ *
+ * Returns every Delivery document belonging
+ * to the authenticated Customer.
+ *
+ * This is used by the Customer mobile module
+ * to connect an Order with its Delivery.
+ * =========================================================
+ */
+
+export const getCustomerDeliveries =
+  async () => {
+    const response =
+      await apiRequest<CustomerDeliveriesResponse>(
+        '/deliveries/mine',
+        {
+          method: 'GET',
+
+          authenticated: true,
+        }
+      );
+
+    return response.data;
+  };
+
 /*
  * =========================================================
  * GET ONE DELIVERY
@@ -1415,35 +1520,69 @@ export const uploadProofOfDelivery =
     payload:
       UploadProofOfDeliveryPayload
   ) => {
+    if (
+      !deliveryId?.trim()
+    ) {
+      throw new Error(
+        'Delivery ID is required.'
+      );
+    }
+
+    const imageUri =
+      payload.image.uri?.trim();
+
+    if (!imageUri) {
+      throw new Error(
+        'Proof of delivery image is required.'
+      );
+    }
+
+    /*
+     * =========================================================
+     * FORM DATA
+     * =========================================================
+     */
+
     const formData =
       new FormData();
 
     /*
-     * React Native file object.
+     * =========================================================
+     * FILE
+     * =========================================================
+     *
+     * Expo SDK 57 uses Expo's WinterCG-compatible fetch.
+     *
+     * The old React Native pattern:
+     *
+     * {
+     *   uri,
+     *   name,
+     *   type
+     * }
+     *
+     * can cause:
+     *
+     * Unsupported FormDataPart implementation
+     *
+     * Create a real Expo File instead.
+     * =========================================================
      */
+
+    const proofFile =
+      new File(
+        imageUri
+      );
 
     formData.append(
       'proofImage',
-      {
-        uri:
-          payload.image.uri,
-
-        name:
-          payload.image.name ||
-          `delivery-proof-${Date.now()}.jpg`,
-
-        type:
-          payload.image.type ||
-          'image/jpeg',
-      } as any
+      proofFile
     );
 
     /*
-     * POD coordinates are optional.
-     *
-     * Backend may use the Rider's most
-     * recently tracked coordinates when
-     * these values are not supplied.
+     * =========================================================
+     * OPTIONAL LOCATION
+     * =========================================================
      */
 
     if (
@@ -1483,12 +1622,16 @@ export const uploadProofOfDelivery =
     }
 
     /*
-     * Do NOT manually specify:
+     * =========================================================
+     * REQUEST
+     * =========================================================
+     *
+     * Do NOT manually set:
      *
      * Content-Type: multipart/form-data
      *
-     * fetch must generate the multipart
-     * boundary automatically.
+     * Expo fetch will create the multipart boundary.
+     * =========================================================
      */
 
     const response =
@@ -1503,9 +1646,11 @@ export const uploadProofOfDelivery =
         }
       );
 
-    return response.data.delivery;
+    return response
+      .data
+      .delivery;
   };
-
+  
 /*
  * =========================================================
  * COMPLETE DELIVERY

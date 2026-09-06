@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import {
+  router,
+  useFocusEffect,
+} from "expo-router";
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -19,20 +21,42 @@ import {
   View,
 } from "react-native";
 
-import { apiRequest } from "../../services/api";
+import {
+  getMyCheckouts,
+  type CheckoutOrder,
+  type CustomerCheckout,
+} from "../../services/checkout";
+
+import {
+  getMyOrders,
+  type CustomerOrder,
+} from "../../services/orders";
+
+import {
+  getOrderReview,
+  type OrderReviewStatus,
+} from "../../services/review";
 
 /*
  * =========================================================
- * API
+ * API IMAGE URL
  * =========================================================
  */
 
 const API_URL =
-  process.env.EXPO_PUBLIC_API_URL || "";
+  process.env.EXPO_PUBLIC_API_URL ||
+  "";
 
-const API_ORIGIN = API_URL
-  .replace(/\/api\/v1\/?$/i, "")
-  .replace(/\/+$/, "");
+const API_ORIGIN =
+  API_URL
+    .replace(
+      /\/api\/v1\/?$/i,
+      ""
+    )
+    .replace(
+      /\/+$/,
+      ""
+    );
 
 /*
  * =========================================================
@@ -40,115 +64,44 @@ const API_ORIGIN = API_URL
  * =========================================================
  */
 
-type OrderStatus =
-  | "pending"
-  | "confirmed"
-  | "preparing"
-  | "ready_for_delivery"
-  | "ready_for_pickup"
-  | "delivered"
-  | "completed"
-  | "cancelled"
-  | string;
-
-type PaymentStatus =
-  | "unpaid"
-  | "pending"
-  | "paid"
-  | "failed"
-  | "refunded"
-  | string;
-
-type Florist = {
-  _id?: string;
-  shopName?: string;
-  shopLogo?: string | null;
-
-  address?: {
-    street?: string;
-    barangay?: string;
-    city?: string;
-    province?: string;
-    postalCode?: string;
-  };
-};
-
-type Order = {
-  _id: string;
-
-  florist?: Florist | string | null;
-
-  sourceType?:
-    | "flower_listing"
-    | "custom_bouquet"
-    | string;
-
-  flower?: string | null;
-
-  customBouquetRequest?: string | null;
-
-  productName?: string;
-
-  productDescription?: string | null;
-
-  inspirationImage?: string | null;
-
-  unitPrice?: number;
-
-  quantity?: number;
-
-  subtotal?: number;
-
-  deliveryFee?: number;
-
-  preOrderFee?: number;
-
-  totalAmount?: number;
-
-  fulfillmentType?:
-    | "delivery"
-    | "pickup"
-    | string;
-
-  requestedDeliveryDate?: string | null;
-
-  requestedDeliveryTimeStart?: string | null;
-
-  requestedDeliveryTimeEnd?: string | null;
-
-  isPreOrder?: boolean;
-
-  paymentMethod?: string;
-
-  paymentStatus?: PaymentStatus;
-
-  orderStatus?: OrderStatus;
-
-  createdAt?: string;
-
-  updatedAt?: string;
-};
-
-type OrdersResponse = {
-  success: boolean;
-
-  message?: string;
-
-  data?: {
-    count?: number;
-    orders?: Order[];
-  };
-};
-
 type FilterType =
   | "all"
   | "active"
   | "completed"
   | "cancelled";
 
+type OrderCategory =
+  | "active"
+  | "completed"
+  | "cancelled";
+
+type CustomerPurchaseEntry =
+  | {
+      type: "checkout";
+
+      id: string;
+
+      createdAt: string;
+
+      category: OrderCategory;
+
+      checkout: CustomerCheckout;
+    }
+  | {
+      type: "order";
+
+      id: string;
+
+      createdAt: string;
+
+      category: OrderCategory;
+
+      order: CustomerOrder;
+    };
+
 /*
  * =========================================================
- * HELPERS
+ * GENERAL HELPERS
  * =========================================================
  */
 
@@ -159,15 +112,20 @@ const resolveImageUrl = (
     return null;
   }
 
-  const value = String(image).trim();
+  const value =
+    String(image).trim();
 
   if (!value) {
     return null;
   }
 
   if (
-    value.startsWith("http://") ||
-    value.startsWith("https://")
+    value.startsWith(
+      "http://"
+    ) ||
+    value.startsWith(
+      "https://"
+    )
   ) {
     return value;
   }
@@ -182,128 +140,874 @@ const resolveImageUrl = (
   )}`;
 };
 
+/*
+ * =========================================================
+ * MONEY
+ * =========================================================
+ */
+
 const formatMoney = (
   amount?: number | null
 ) => {
-  const value = Number(amount);
+  const value =
+    Number(amount);
 
-  if (!Number.isFinite(value)) {
+  if (
+    !Number.isFinite(
+      value
+    )
+  ) {
     return "₱0.00";
   }
 
   return `₱${value.toLocaleString(
     "en-PH",
     {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits:
+        2,
+
+      maximumFractionDigits:
+        2,
     }
   )}`;
 };
+
+/*
+ * =========================================================
+ * DATE
+ * =========================================================
+ */
 
 const formatDate = (
   value?: string | null
 ) => {
   if (!value) {
-    return "Not scheduled";
+    return "No date";
   }
 
-  const date = new Date(value);
+  const date =
+    new Date(value);
 
   if (
-    Number.isNaN(date.getTime())
+    Number.isNaN(
+      date.getTime()
+    )
   ) {
-    return "Not scheduled";
+    return "No date";
   }
 
   return date.toLocaleDateString(
     "en-PH",
     {
       month: "short",
+
       day: "numeric",
+
       year: "numeric",
     }
   );
 };
 
-const formatStatus = (
-  status?: string | null
+const formatDateTime = (
+  value?: string | null
 ) => {
-  if (!status) {
+  if (!value) {
+    return "No date";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "No date";
+  }
+
+  return date.toLocaleString(
+    "en-PH",
+    {
+      month: "short",
+
+      day: "numeric",
+
+      year: "numeric",
+
+      hour: "numeric",
+
+      minute: "2-digit",
+    }
+  );
+};
+
+/*
+ * =========================================================
+ * STATUS
+ * =========================================================
+ */
+
+const formatStatus = (
+  value?: string | null
+) => {
+  if (!value) {
     return "Unknown";
   }
 
-  return status
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
+  return value
+    .replace(
+      /_/g,
+      " "
+    )
+    .replace(
+      /\b\w/g,
+      (letter) =>
+        letter.toUpperCase()
     );
 };
 
-const getFloristName = (
-  florist?: Florist | string | null
-) => {
+/*
+ * =========================================================
+ * CHECKOUT ORDER HELPERS
+ * =========================================================
+ */
+
+const getCheckoutOrders = (
+  checkout: CustomerCheckout
+): CheckoutOrder[] => {
   if (
-    florist &&
-    typeof florist === "object"
+    !Array.isArray(
+      checkout.orders
+    )
   ) {
-    return (
-      florist.shopName ||
-      "FLOGRAM Florist"
-    );
+    return [];
   }
 
-  return "FLOGRAM Florist";
+  return checkout.orders.filter(
+    (
+      order
+    ): order is CheckoutOrder =>
+      Boolean(
+        order &&
+          typeof order ===
+            "object" &&
+          "_id" in order
+      )
+  );
 };
 
+/*
+ * =========================================================
+ * CHECKOUT CHILD ORDER IDS
+ * =========================================================
+ */
+
+const getCheckoutChildOrderIds =
+  (
+    checkout:
+      CustomerCheckout
+  ) => {
+    const ids =
+      new Set<string>();
+
+    /*
+     * Populated checkout.orders
+     */
+
+    if (
+      Array.isArray(
+        checkout.orders
+      )
+    ) {
+      checkout.orders.forEach(
+        (order) => {
+          if (
+            order &&
+            typeof order ===
+              "object" &&
+            order._id
+          ) {
+            ids.add(
+              String(
+                order._id
+              )
+            );
+          }
+        }
+      );
+    }
+
+    /*
+     * Checkout item snapshots also
+     * contain the child Order reference.
+     */
+
+    if (
+      Array.isArray(
+        checkout.items
+      )
+    ) {
+      checkout.items.forEach(
+        (item) => {
+          const order =
+            item.order;
+
+          if (!order) {
+            return;
+          }
+
+          if (
+            typeof order ===
+            "string"
+          ) {
+            ids.add(
+              order
+            );
+
+            return;
+          }
+
+          if (
+            typeof order ===
+              "object" &&
+            order._id
+          ) {
+            ids.add(
+              String(
+                order._id
+              )
+            );
+          }
+        }
+      );
+    }
+
+    return ids;
+  };
+
+/*
+ * =========================================================
+ * CHECKOUT CATEGORY
+ * =========================================================
+ */
+
+const getCheckoutCategory = (
+  checkout: CustomerCheckout
+): OrderCategory => {
+  const orders =
+    getCheckoutOrders(
+      checkout
+    );
+
+  /*
+   * Fallback when child Orders
+   * were not populated.
+   */
+
+  if (
+    orders.length ===
+    0
+  ) {
+    if (
+      checkout.checkoutStatus ===
+      "cancelled"
+    ) {
+      return "cancelled";
+    }
+
+    if (
+      checkout.checkoutStatus ===
+      "completed"
+    ) {
+      return "completed";
+    }
+
+    return "active";
+  }
+
+  const statuses =
+    orders.map(
+      (order) =>
+        order.orderStatus
+    );
+
+  /*
+   * Entire purchase is cancelled
+   * only if every child order is
+   * cancelled.
+   */
+
+  const allCancelled =
+    statuses.every(
+      (status) =>
+        status ===
+        "cancelled"
+    );
+
+  if (allCancelled) {
+    return "cancelled";
+  }
+
+  /*
+   * A delivered Order remains Active
+   * until customer confirms receipt
+   * and it becomes "completed".
+   *
+   * Cancelled children are ignored when
+   * determining whether the remaining
+   * purchase has completed.
+   */
+
+  const nonCancelled =
+    statuses.filter(
+      (status) =>
+        status !==
+        "cancelled"
+    );
+
+  const allCompleted =
+    nonCancelled.length >
+      0 &&
+    nonCancelled.every(
+      (status) =>
+        status ===
+        "completed"
+    );
+
+  if (allCompleted) {
+    return "completed";
+  }
+
+  return "active";
+};
+
+/*
+ * =========================================================
+ * STANDALONE ORDER CATEGORY
+ * =========================================================
+ */
+
+const getStandaloneOrderCategory =
+  (
+    order: CustomerOrder
+  ): OrderCategory => {
+    if (
+      order.orderStatus ===
+      "cancelled"
+    ) {
+      return "cancelled";
+    }
+
+    if (
+      order.orderStatus ===
+      "completed"
+    ) {
+      return "completed";
+    }
+
+    /*
+     * delivered intentionally stays
+     * active until customer confirmation.
+     */
+
+    return "active";
+  };
+
+/*
+ * =========================================================
+ * CHECKOUT DISPLAY STATUS
+ * =========================================================
+ */
+
+const getCheckoutDisplayStatus =
+  (
+    checkout:
+      CustomerCheckout
+  ) => {
+    const orders =
+      getCheckoutOrders(
+        checkout
+      );
+
+    if (
+      orders.length ===
+      0
+    ) {
+      switch (
+        checkout.checkoutStatus
+      ) {
+        case "created":
+          return "Order Placed";
+
+        case "payment_pending":
+          return "Payment Pending";
+
+        case "paid":
+          return "Paid";
+
+        case "completed":
+          return "Completed";
+
+        case "cancelled":
+          return "Cancelled";
+
+        case "failed":
+          return "Payment Failed";
+
+        default:
+          return formatStatus(
+            checkout.checkoutStatus
+          );
+      }
+    }
+
+    const statuses =
+      orders.map(
+        (order) =>
+          order.orderStatus
+      );
+
+    if (
+      statuses.every(
+        (status) =>
+          status ===
+          "cancelled"
+      )
+    ) {
+      return "Cancelled";
+    }
+
+    const nonCancelled =
+      statuses.filter(
+        (status) =>
+          status !==
+          "cancelled"
+      );
+
+    if (
+      nonCancelled.length >
+        0 &&
+      nonCancelled.every(
+        (status) =>
+          status ===
+          "completed"
+      )
+    ) {
+      return "Completed";
+    }
+
+    if (
+      nonCancelled.length >
+        0 &&
+      nonCancelled.every(
+        (status) =>
+          status ===
+            "delivered" ||
+          status ===
+            "completed"
+      )
+    ) {
+      return "Delivered";
+    }
+
+    if (
+      statuses.some(
+        (status) =>
+          status ===
+          "out_for_delivery"
+      )
+    ) {
+      return "Out for Delivery";
+    }
+
+    if (
+      statuses.some(
+        (status) =>
+          status ===
+          "ready_for_delivery"
+      )
+    ) {
+      return "Ready for Delivery";
+    }
+
+    if (
+      statuses.some(
+        (status) =>
+          status ===
+          "ready_for_pickup"
+      )
+    ) {
+      return "Ready for Pickup";
+    }
+
+    if (
+      statuses.some(
+        (status) =>
+          status ===
+          "preparing"
+      )
+    ) {
+      return "Preparing";
+    }
+
+    if (
+      statuses.some(
+        (status) =>
+          status ===
+          "confirmed"
+      )
+    ) {
+      return "Confirmed";
+    }
+
+    if (
+      statuses.some(
+        (status) =>
+          status ===
+          "pending"
+      )
+    ) {
+      return "Pending";
+    }
+
+    return "In Progress";
+  };
+
+/*
+ * =========================================================
+ * STATUS STYLE
+ * =========================================================
+ */
+
 const getStatusStyle = (
-  status?: string
+  category:
+    | OrderCategory
+    | "payment_pending"
+    | "delivered"
+    | "out_for_delivery"
 ) => {
-  switch (status) {
-    case "pending":
-      return {
-        background: "#FFF3DA",
-        text: "#A66D12",
-      };
-
-    case "confirmed":
-      return {
-        background: "#EAF2FF",
-        text: "#3973B8",
-      };
-
-    case "preparing":
-      return {
-        background: "#F4EAFE",
-        text: "#7952A8",
-      };
-
-    case "ready_for_delivery":
-    case "ready_for_pickup":
-      return {
-        background: "#E9F6F3",
-        text: "#378572",
-      };
-
-    case "delivered":
+  switch (category) {
     case "completed":
       return {
-        background: "#E9F7EC",
-        text: "#37834A",
+        backgroundColor:
+          "#E9F7EC",
+
+        textColor:
+          "#37834A",
       };
 
     case "cancelled":
       return {
-        background: "#FDEBEC",
-        text: "#B64E59",
+        backgroundColor:
+          "#FDEBEC",
+
+        textColor:
+          "#B64E59",
+      };
+
+    case "payment_pending":
+      return {
+        backgroundColor:
+          "#FFF3DA",
+
+        textColor:
+          "#A66D12",
+      };
+
+    case "delivered":
+      return {
+        backgroundColor:
+          "#E9F7EC",
+
+        textColor:
+          "#37834A",
+      };
+
+    case "out_for_delivery":
+      return {
+        backgroundColor:
+          "#E9F2FF",
+
+        textColor:
+          "#3F6FA8",
       };
 
     default:
       return {
-        background: "#F0EEEE",
-        text: "#6B6665",
+        backgroundColor:
+          "#F4EAFE",
+
+        textColor:
+          "#7952A8",
       };
   }
 };
+
+/*
+ * =========================================================
+ * CHECKOUT IMAGE
+ * =========================================================
+ */
+
+const getCheckoutImage = (
+  checkout: CustomerCheckout
+) => {
+  const firstItem =
+    checkout.items?.[0];
+
+  if (
+    firstItem
+      ?.inspirationImage
+  ) {
+    return resolveImageUrl(
+      firstItem
+        .inspirationImage
+    );
+  }
+
+  const firstOrder =
+    getCheckoutOrders(
+      checkout
+    )[0];
+
+  return resolveImageUrl(
+    firstOrder
+      ?.inspirationImage
+  );
+};
+
+/*
+ * =========================================================
+ * CHECKOUT SHOPS
+ * =========================================================
+ */
+
+const getShopNames = (
+  checkout: CustomerCheckout
+) => {
+  const shops =
+    checkout.shopBreakdown ||
+    [];
+
+  const names =
+    shops
+      .map(
+        (shop) =>
+          shop.shopName
+      )
+      .filter(Boolean);
+
+  if (
+    names.length ===
+    0
+  ) {
+    return "FLOGRAM Florist";
+  }
+
+  if (
+    names.length ===
+    1
+  ) {
+    return names[0];
+  }
+
+  return `${names[0]} +${
+    names.length - 1
+  } more`;
+};
+
+/*
+ * =========================================================
+ * CHECKOUT QUANTITY
+ * =========================================================
+ */
+
+const getTotalQuantity = (
+  checkout: CustomerCheckout
+) => {
+  if (
+    !Array.isArray(
+      checkout.items
+    )
+  ) {
+    return 0;
+  }
+
+  return checkout.items.reduce(
+    (
+      total,
+      item
+    ) =>
+      total +
+      Number(
+        item.quantity ||
+          0
+      ),
+    0
+  );
+};
+
+/*
+ * =========================================================
+ * CHECKOUT PAYMENT LABEL
+ * =========================================================
+ */
+
+const getCheckoutPaymentLabel =
+  (
+    checkout:
+      CustomerCheckout
+  ) => {
+    switch (
+      checkout.paymentStatus
+    ) {
+      case "paid":
+        return "Paid";
+
+      case "pending":
+        return "Payment Pending";
+
+      case "failed":
+        return "Payment Failed";
+
+      case "refunded":
+        return "Refunded";
+
+      case "unpaid":
+        if (
+          checkout.paymentMethod ===
+          "cash_on_delivery"
+        ) {
+          return "Cash on Delivery";
+        }
+
+        if (
+          checkout.paymentMethod ===
+          "cash_on_pickup"
+        ) {
+          return "Cash on Pickup";
+        }
+
+        return "Unpaid";
+
+      default:
+        return formatStatus(
+          checkout.paymentStatus
+        );
+    }
+  };
+
+/*
+ * =========================================================
+ * STANDALONE FLORIST NAME
+ * =========================================================
+ */
+
+const getStandaloneFloristName =
+  (
+    order: CustomerOrder
+  ) => {
+    const florist =
+      order.florist;
+
+    if (
+      florist &&
+      typeof florist ===
+        "object"
+    ) {
+      return (
+        florist.shopName ||
+        "FLOGRAM Florist"
+      );
+    }
+
+    return "FLOGRAM Florist";
+  };
+
+/*
+ * =========================================================
+ * STANDALONE IMAGE
+ * =========================================================
+ */
+
+const getStandaloneImage = (
+  order: CustomerOrder
+) => {
+  if (
+    order.inspirationImage
+  ) {
+    return resolveImageUrl(
+      order.inspirationImage
+    );
+  }
+
+  if (
+    order.flower &&
+    typeof order.flower ===
+      "object" &&
+    Array.isArray(
+      order.flower.images
+    ) &&
+    order.flower.images
+      .length > 0
+  ) {
+    return resolveImageUrl(
+      order.flower.images[0]
+    );
+  }
+
+  return null;
+};
+
+/*
+ * =========================================================
+ * STANDALONE PAYMENT LABEL
+ * =========================================================
+ */
+
+const getStandalonePaymentLabel =
+  (
+    order: CustomerOrder
+  ) => {
+    switch (
+      order.paymentStatus
+    ) {
+      case "paid":
+        return "Paid";
+
+      case "pending":
+        return "Payment Pending";
+
+      case "failed":
+        return "Payment Failed";
+
+      case "refunded":
+        return "Refunded";
+
+      case "unpaid":
+        if (
+          order.paymentMethod ===
+          "cash_on_delivery"
+        ) {
+          return "Cash on Delivery";
+        }
+
+        if (
+          order.paymentMethod ===
+          "cash_on_pickup"
+        ) {
+          return "Cash on Pickup";
+        }
+
+        return "Unpaid";
+
+      default:
+        return formatStatus(
+          order.paymentStatus
+        );
+    }
+  };
 
 /*
  * =========================================================
@@ -313,19 +1017,42 @@ const getStatusStyle = (
 
 export default function CustomerOrdersScreen() {
   const [
+    checkouts,
+    setCheckouts,
+  ] = useState<
+    CustomerCheckout[]
+  >([]);
+
+  const [
     orders,
     setOrders,
-  ] = useState<Order[]>([]);
+  ] = useState<
+    CustomerOrder[]
+  >([]);
+
+  const [
+    reviewByOrderId,
+    setReviewByOrderId,
+  ] = useState<
+    Record<
+      string,
+      OrderReviewStatus
+    >
+  >({});
 
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] = useState(
+    true
+  );
 
   const [
     refreshing,
     setRefreshing,
-  ] = useState(false);
+  ] = useState(
+    false
+  );
 
   const [
     errorMessage,
@@ -335,59 +1062,162 @@ export default function CustomerOrdersScreen() {
   const [
     selectedFilter,
     setSelectedFilter,
-  ] = useState<FilterType>("all");
+  ] =
+    useState<FilterType>(
+      "all"
+    );
 
   /*
    * =======================================================
-   * LOAD ORDERS
+   * LOAD PURCHASES
    * =======================================================
    */
 
-  const loadOrders = useCallback(
-    async (
-      showLoader = true
-    ) => {
-      try {
-        if (showLoader) {
-          setLoading(true);
-        }
+  const loadPurchases =
+    useCallback(
+      async (
+        showLoader =
+          true
+      ) => {
+        try {
+          if (
+            showLoader
+          ) {
+            setLoading(
+              true
+            );
+          }
 
-        setErrorMessage("");
-
-        const response =
-          await apiRequest<OrdersResponse>(
-            "/orders/mine",
-            {
-              authenticated: true,
-            }
+          setErrorMessage(
+            ""
           );
 
-        setOrders(
-          response.data?.orders || []
-        );
-      } catch (error) {
-        console.error(
-          "Failed to load orders:",
+          const [
+            checkoutResult,
+            orderResult,
+          ] =
+            await Promise.all([
+              getMyCheckouts(),
+
+              getMyOrders(),
+            ]);
+
+          const safeCheckouts =
+            Array.isArray(
+              checkoutResult
+            )
+              ? checkoutResult
+              : [];
+
+          const safeOrders =
+            Array.isArray(
+              orderResult
+            )
+              ? orderResult
+              : [];
+
+          setCheckouts(
+            safeCheckouts
+          );
+
+          setOrders(
+            safeOrders
+          );
+
+          const completedOrders =
+            safeOrders.filter(
+              (order) =>
+                order.orderStatus ===
+                "completed"
+            );
+
+          if (
+            completedOrders.length ===
+            0
+          ) {
+            setReviewByOrderId(
+              {}
+            );
+          } else {
+            const reviewResults =
+              await Promise.allSettled(
+                completedOrders.map(
+                  async (order) => {
+                    const reviewStatus =
+                      await getOrderReview(
+                        order._id
+                      );
+
+                    return {
+                      orderId:
+                        order._id,
+                      reviewStatus,
+                    };
+                  }
+                )
+              );
+
+            const reviewLookup:
+              Record<
+                string,
+                OrderReviewStatus
+              > = {};
+
+            reviewResults.forEach(
+              (result) => {
+                if (
+                  result.status ===
+                  "fulfilled"
+                ) {
+                  reviewLookup[
+                    result.value.orderId
+                  ] =
+                    result.value.reviewStatus;
+                }
+              }
+            );
+
+            setReviewByOrderId(
+              reviewLookup
+            );
+          }
+        } catch (
           error
-        );
+        ) {
+          console.error(
+            "Failed to load customer purchases:",
+            error
+          );
 
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Unable to load your orders."
-        );
-      } finally {
-        if (showLoader) {
-          setLoading(false);
+          setErrorMessage(
+            error instanceof
+              Error
+              ? error.message
+              : "Unable to load your orders."
+          );
+        } finally {
+          if (
+            showLoader
+          ) {
+            setLoading(
+              false
+            );
+          }
         }
-      }
-    },
-    []
-  );
+      },
+      []
+    );
 
-  useEffect(() => {
-    void loadOrders();
-  }, [loadOrders]);
+  /*
+   * Reload whenever the customer
+   * returns to this screen.
+   */
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadPurchases();
+    }, [loadPurchases])
+  );
 
   /*
    * =======================================================
@@ -396,81 +1226,303 @@ export default function CustomerOrdersScreen() {
    */
 
   const handleRefresh =
-    useCallback(async () => {
-      try {
-        setRefreshing(true);
+    useCallback(
+      async () => {
+        try {
+          setRefreshing(
+            true
+          );
 
-        await loadOrders(false);
-      } finally {
-        setRefreshing(false);
-      }
-    }, [loadOrders]);
+          await loadPurchases(
+            false
+          );
+        } finally {
+          setRefreshing(
+            false
+          );
+        }
+      },
+      [loadPurchases]
+    );
 
   /*
    * =======================================================
-   * FILTER
+   * GROUPED CHILD IDS
    * =======================================================
    */
 
-  const filteredOrders =
+  const groupedOrderIds =
     useMemo(() => {
-      switch (selectedFilter) {
-        case "active":
-          return orders.filter(
-            (order) =>
-              ![
-                "completed",
-                "cancelled",
-              ].includes(
-                order.orderStatus || ""
+      const result =
+        new Set<string>();
+
+      checkouts.forEach(
+        (checkout) => {
+          const ids =
+            getCheckoutChildOrderIds(
+              checkout
+            );
+
+          ids.forEach(
+            (id) => {
+              result.add(
+                id
+              );
+            }
+          );
+        }
+      );
+
+      return result;
+    }, [checkouts]);
+
+  /*
+   * =======================================================
+   * STANDALONE ORDERS
+   * =======================================================
+   */
+
+  const standaloneOrders =
+    useMemo(
+      () =>
+        orders.filter(
+          (order) =>
+            !groupedOrderIds.has(
+              String(
+                order._id
               )
-          );
+            )
+        ),
+      [
+        orders,
+        groupedOrderIds,
+      ]
+    );
 
-        case "completed":
-          return orders.filter(
-            (order) =>
-              [
-                "delivered",
-                "completed",
-              ].includes(
-                order.orderStatus || ""
-              )
-          );
+  /*
+   * =======================================================
+   * MERGED PURCHASE FEED
+   * =======================================================
+   */
 
-        case "cancelled":
-          return orders.filter(
-            (order) =>
-              order.orderStatus ===
-              "cancelled"
-          );
+  const purchases =
+    useMemo<
+      CustomerPurchaseEntry[]
+    >(() => {
+      const entries:
+        CustomerPurchaseEntry[] =
+        [];
 
-        default:
-          return orders;
-      }
+      checkouts.forEach(
+        (checkout) => {
+          entries.push({
+            type:
+              "checkout",
+
+            id:
+              checkout._id,
+
+            createdAt:
+              checkout.createdAt,
+
+            category:
+              getCheckoutCategory(
+                checkout
+              ),
+
+            checkout,
+          });
+        }
+      );
+
+      standaloneOrders.forEach(
+        (order) => {
+          entries.push({
+            type:
+              "order",
+
+            id:
+              order._id,
+
+            createdAt:
+              order.createdAt ||
+              "",
+
+            category:
+              getStandaloneOrderCategory(
+                order
+              ),
+
+            order,
+          });
+        }
+      );
+
+      return entries.sort(
+        (
+          a,
+          b
+        ) => {
+          const aTime =
+            new Date(
+              a.createdAt
+            ).getTime();
+
+          const bTime =
+            new Date(
+              b.createdAt
+            ).getTime();
+
+          const safeA =
+            Number.isFinite(
+              aTime
+            )
+              ? aTime
+              : 0;
+
+          const safeB =
+            Number.isFinite(
+              bTime
+            )
+              ? bTime
+              : 0;
+
+          return (
+            safeB -
+            safeA
+          );
+        }
+      );
     }, [
-      orders,
+      checkouts,
+      standaloneOrders,
+    ]);
+
+  /*
+   * =======================================================
+   * FILTERED PURCHASES
+   * =======================================================
+   */
+
+  const filteredPurchases =
+    useMemo(() => {
+      if (
+        selectedFilter ===
+        "all"
+      ) {
+        return purchases;
+      }
+
+      return purchases.filter(
+        (entry) =>
+          entry.category ===
+          selectedFilter
+      );
+    }, [
+      purchases,
       selectedFilter,
     ]);
 
   /*
    * =======================================================
-   * OPEN DETAILS
+   * COUNTS
    * =======================================================
    */
 
-  const openOrder = useCallback(
-    (orderId: string) => {
-      router.push({
-        pathname:
-          "/(customer)/customer-order-details",
+  const filterCounts =
+    useMemo(() => {
+      let active = 0;
 
-        params: {
-          orderId,
-        },
-      } as never);
-    },
-    []
-  );
+      let completed = 0;
+
+      let cancelled = 0;
+
+      purchases.forEach(
+        (entry) => {
+          if (
+            entry.category ===
+            "active"
+          ) {
+            active += 1;
+          }
+
+          if (
+            entry.category ===
+            "completed"
+          ) {
+            completed +=
+              1;
+          }
+
+          if (
+            entry.category ===
+            "cancelled"
+          ) {
+            cancelled +=
+              1;
+          }
+        }
+      );
+
+      return {
+        all:
+          purchases.length,
+
+        active,
+
+        completed,
+
+        cancelled,
+      };
+    }, [purchases]);
+
+  /*
+   * =======================================================
+   * OPEN GROUPED CHECKOUT
+   * =======================================================
+   */
+
+  const openCheckout =
+    useCallback(
+      (
+        checkoutId:
+          string
+      ) => {
+        router.push({
+          pathname:
+            "/(customer)/customer-order-details",
+
+          params: {
+            checkoutId,
+          },
+        } as never);
+      },
+      []
+    );
+
+  /*
+   * =======================================================
+   * OPEN STANDALONE ORDER
+   * =======================================================
+   */
+
+  const openOrder =
+    useCallback(
+      (
+        orderId:
+          string
+      ) => {
+        router.push({
+          pathname:
+            "/(customer)/customer-order-details",
+
+          params: {
+            orderId,
+          },
+        } as never);
+      },
+      []
+    );
 
   /*
    * =======================================================
@@ -481,7 +1533,9 @@ export default function CustomerOrdersScreen() {
   if (loading) {
     return (
       <SafeAreaView
-        style={styles.safeArea}
+        style={
+          styles.safeArea
+        }
       >
         <StatusBar
           barStyle="dark-content"
@@ -499,9 +1553,12 @@ export default function CustomerOrdersScreen() {
           />
 
           <Text
-            style={styles.loadingText}
+            style={
+              styles.loadingText
+            }
           >
-            Loading your orders...
+            Loading your
+            orders...
           </Text>
         </View>
       </SafeAreaView>
@@ -516,7 +1573,9 @@ export default function CustomerOrdersScreen() {
 
   return (
     <SafeAreaView
-      style={styles.safeArea}
+      style={
+        styles.safeArea
+      }
     >
       <StatusBar
         barStyle="dark-content"
@@ -524,14 +1583,18 @@ export default function CustomerOrdersScreen() {
       />
 
       <View
-        style={styles.screen}
+        style={
+          styles.screen
+        }
       >
         {/*
          * HEADER
          */}
 
         <View
-          style={styles.header}
+          style={
+            styles.header
+          }
         >
           <Pressable
             style={
@@ -566,18 +1629,30 @@ export default function CustomerOrdersScreen() {
                 styles.headerSubtitle
               }
             >
-              {orders.length}{" "}
-              {orders.length === 1
-                ? "order"
-                : "orders"}
+              {
+                purchases.length
+              }{" "}
+              {purchases.length ===
+              1
+                ? "purchase"
+                : "purchases"}
             </Text>
           </View>
 
-          <View
+          <Pressable
             style={
               styles.headerButton
             }
-          />
+            onPress={() =>
+              void loadPurchases()
+            }
+          >
+            <Ionicons
+              name="refresh-outline"
+              size={20}
+              color="#77706E"
+            />
+          </Pressable>
         </View>
 
         {/*
@@ -600,6 +1675,9 @@ export default function CustomerOrdersScreen() {
           >
             <FilterButton
               title="All"
+              count={
+                filterCounts.all
+              }
               active={
                 selectedFilter ===
                 "all"
@@ -613,6 +1691,9 @@ export default function CustomerOrdersScreen() {
 
             <FilterButton
               title="Active"
+              count={
+                filterCounts.active
+              }
               active={
                 selectedFilter ===
                 "active"
@@ -626,6 +1707,9 @@ export default function CustomerOrdersScreen() {
 
             <FilterButton
               title="Completed"
+              count={
+                filterCounts.completed
+              }
               active={
                 selectedFilter ===
                 "completed"
@@ -639,6 +1723,9 @@ export default function CustomerOrdersScreen() {
 
             <FilterButton
               title="Cancelled"
+              count={
+                filterCounts.cancelled
+              }
               active={
                 selectedFilter ===
                 "cancelled"
@@ -657,7 +1744,9 @@ export default function CustomerOrdersScreen() {
          */}
 
         <ScrollView
-          style={styles.scrollView}
+          style={
+            styles.scrollView
+          }
           contentContainerStyle={
             styles.scrollContent
           }
@@ -666,7 +1755,9 @@ export default function CustomerOrdersScreen() {
           }
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
+              refreshing={
+                refreshing
+              }
               onRefresh={
                 handleRefresh
               }
@@ -699,8 +1790,8 @@ export default function CustomerOrdersScreen() {
                     styles.errorTitle
                   }
                 >
-                  Unable to load
-                  orders
+                  Unable to
+                  load orders
                 </Text>
 
                 <Text
@@ -708,13 +1799,15 @@ export default function CustomerOrdersScreen() {
                     styles.errorText
                   }
                 >
-                  {errorMessage}
+                  {
+                    errorMessage
+                  }
                 </Text>
               </View>
 
               <Pressable
                 onPress={() =>
-                  void loadOrders()
+                  void loadPurchases()
                 }
               >
                 <Ionicons
@@ -727,92 +1820,67 @@ export default function CustomerOrdersScreen() {
           ) : null}
 
           {!errorMessage &&
-          filteredOrders.length ===
+          filteredPurchases.length ===
             0 ? (
-            <View
-              style={
-                styles.emptyContainer
+            <EmptyState
+              hasOrders={
+                purchases.length >
+                0
               }
-            >
-              <View
-                style={
-                  styles.emptyIcon
-                }
-              >
-                <Ionicons
-                  name="receipt-outline"
-                  size={54}
-                  color="#D85D7A"
-                />
-              </View>
-
-              <Text
-                style={
-                  styles.emptyTitle
-                }
-              >
-                {orders.length === 0
-                  ? "No orders yet"
-                  : "No matching orders"}
-              </Text>
-
-              <Text
-                style={
-                  styles.emptyDescription
-                }
-              >
-                {orders.length === 0
-                  ? "Your flower orders will appear here after checkout."
-                  : "There are no orders under this category."}
-              </Text>
-
-              {orders.length ===
-              0 ? (
-                <Pressable
-                  style={
-                    styles.discoverButton
-                  }
-                  onPress={() =>
-                    router.push(
-                      "/(customer)/customer-discover" as never
-                    )
-                  }
-                >
-                  <Ionicons
-                    name="flower-outline"
-                    size={18}
-                    color="#FFFFFF"
-                  />
-
-                  <Text
-                    style={
-                      styles.discoverButtonText
-                    }
-                  >
-                    Discover Flowers
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
+              selectedFilter={
+                selectedFilter
+              }
+            />
           ) : (
-            filteredOrders.map(
-              (order) => (
-                <OrderCard
-                  key={order._id}
-                  order={order}
-                  onPress={() =>
-                    openOrder(
-                      order._id
-                    )
-                  }
-                />
-              )
+            filteredPurchases.map(
+              (entry) => {
+                if (
+                  entry.type ===
+                  "checkout"
+                ) {
+                  return (
+                    <CheckoutCard
+                      key={`checkout-${entry.id}`}
+                      checkout={
+                        entry.checkout
+                      }
+                      reviewByOrderId={
+                        reviewByOrderId
+                      }
+                      onPress={() =>
+                        openCheckout(
+                          entry.id
+                        )
+                      }
+                    />
+                  );
+                }
+
+                return (
+                  <StandaloneOrderCard
+                    key={`order-${entry.id}`}
+                    order={
+                      entry.order
+                    }
+                    reviewStatus={
+                      reviewByOrderId[
+                        entry.id
+                      ]
+                    }
+                    onPress={() =>
+                      openOrder(
+                        entry.id
+                      )
+                    }
+                  />
+                );
+              }
             )
           )}
 
           <View
             style={{
-              height: 25,
+              height: 30,
             }}
           />
         </ScrollView>
@@ -829,11 +1897,16 @@ export default function CustomerOrdersScreen() {
 
 function FilterButton({
   title,
+  count,
   active,
   onPress,
 }: {
   title: string;
+
+  count: number;
+
   active: boolean;
+
   onPress: () => void;
 }) {
   return (
@@ -844,7 +1917,9 @@ function FilterButton({
         active &&
           styles.filterButtonActive,
       ]}
-      onPress={onPress}
+      onPress={
+        onPress
+      }
     >
       <Text
         style={[
@@ -855,6 +1930,8 @@ function FilterButton({
         ]}
       >
         {title}
+
+        {` (${count})`}
       </Text>
     </Pressable>
   );
@@ -862,36 +1939,279 @@ function FilterButton({
 
 /*
  * =========================================================
- * ORDER CARD
+ * EMPTY STATE
  * =========================================================
  */
 
-function OrderCard({
-  order,
+function EmptyState({
+  hasOrders,
+  selectedFilter,
+}: {
+  hasOrders: boolean;
+
+  selectedFilter:
+    FilterType;
+}) {
+  const getMessage =
+    () => {
+      if (!hasOrders) {
+        return {
+          title:
+            "No orders yet",
+
+          description:
+            "Your flower purchases and custom bouquet orders will appear here.",
+        };
+      }
+
+      if (
+        selectedFilter ===
+        "active"
+      ) {
+        return {
+          title:
+            "No active orders",
+
+          description:
+            "You currently have no orders being prepared, delivered, or waiting for confirmation.",
+        };
+      }
+
+      if (
+        selectedFilter ===
+        "completed"
+      ) {
+        return {
+          title:
+            "No completed orders",
+
+          description:
+            "Orders you have confirmed as received will appear here.",
+        };
+      }
+
+      if (
+        selectedFilter ===
+        "cancelled"
+      ) {
+        return {
+          title:
+            "No cancelled orders",
+
+          description:
+            "You currently have no cancelled purchases.",
+        };
+      }
+
+      return {
+        title:
+          "No matching orders",
+
+        description:
+          "There are no purchases under this category.",
+      };
+    };
+
+  const message =
+    getMessage();
+
+  return (
+    <View
+      style={
+        styles.emptyContainer
+      }
+    >
+      <View
+        style={
+          styles.emptyIcon
+        }
+      >
+        <Ionicons
+          name="receipt-outline"
+          size={54}
+          color="#D85D7A"
+        />
+      </View>
+
+      <Text
+        style={
+          styles.emptyTitle
+        }
+      >
+        {message.title}
+      </Text>
+
+      <Text
+        style={
+          styles.emptyDescription
+        }
+      >
+        {
+          message.description
+        }
+      </Text>
+
+      {!hasOrders ? (
+        <Pressable
+          style={
+            styles.discoverButton
+          }
+          onPress={() =>
+            router.push(
+              "/(customer)/customer-discover" as never
+            )
+          }
+        >
+          <Ionicons
+            name="flower-outline"
+            size={18}
+            color="#FFFFFF"
+          />
+
+          <Text
+            style={
+              styles.discoverButtonText
+            }
+          >
+            Discover Flowers
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/*
+ * =========================================================
+ * CHECKOUT CARD
+ * =========================================================
+ */
+
+function CheckoutCard({
+  checkout,
+  reviewByOrderId,
   onPress,
 }: {
-  order: Order;
-  onPress: () => void;
+  checkout:
+    CustomerCheckout;
+
+  reviewByOrderId:
+    Record<
+      string,
+      OrderReviewStatus
+    >;
+
+  onPress:
+    () => void;
 }) {
-  const imageUrl =
-    resolveImageUrl(
-      order.inspirationImage
+  const category =
+    getCheckoutCategory(
+      checkout
+    );
+
+  const statusText =
+    getCheckoutDisplayStatus(
+      checkout
     );
 
   const statusStyle =
     getStatusStyle(
-      order.orderStatus
+      checkout.paymentStatus ===
+        "pending" &&
+        category ===
+          "active"
+        ? "payment_pending"
+        : statusText ===
+            "Out for Delivery"
+          ? "out_for_delivery"
+          : statusText ===
+              "Delivered"
+            ? "delivered"
+            : category
     );
+
+  const imageUrl =
+    getCheckoutImage(
+      checkout
+    );
+
+  const shopName =
+    getShopNames(
+      checkout
+    );
+
+  const totalQuantity =
+    getTotalQuantity(
+      checkout
+    );
+
+  const itemCount =
+    checkout.items
+      ?.length || 0;
+
+  const shopCount =
+    checkout.shopBreakdown
+      ?.length || 0;
+
+  const paymentLabel =
+    getCheckoutPaymentLabel(
+      checkout
+    );
+
+  const completedOrders =
+    getCheckoutOrders(
+      checkout
+    ).filter(
+      (order) =>
+        order.orderStatus ===
+        "completed"
+    );
+
+  const reviewedCount =
+    completedOrders.filter(
+      (order) =>
+        reviewByOrderId[
+          String(
+            order._id
+          )
+        ]?.reviewed ===
+        true
+    ).length;
+
+  const pendingReviewCount =
+    completedOrders.filter(
+      (order) => {
+        const reviewStatus =
+          reviewByOrderId[
+            String(
+              order._id
+            )
+          ];
+
+        return (
+          reviewStatus?.canReview ===
+            true &&
+          reviewStatus.reviewed !==
+            true
+        );
+      }
+    ).length;
+
+  const allCompletedReviewed =
+    completedOrders.length >
+      0 &&
+    reviewedCount ===
+      completedOrders.length;
 
   return (
     <Pressable
-      style={styles.orderCard}
-      onPress={onPress}
+      style={
+        styles.orderCard
+      }
+      onPress={
+        onPress
+      }
     >
-      {/*
-       * TOP
-       */}
-
       <View
         style={
           styles.orderTop
@@ -903,8 +2223,521 @@ function OrderCard({
               styles.orderReferenceLabel
             }
           >
-            ORDER
+            PURCHASE
           </Text>
+
+          <Text
+            style={
+              styles.orderReference
+            }
+          >
+            #
+            {checkout._id
+              .slice(-8)
+              .toUpperCase()}
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.statusBadge,
+
+            {
+              backgroundColor:
+                statusStyle.backgroundColor,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+
+              {
+                color:
+                  statusStyle.textColor,
+              },
+            ]}
+          >
+            {
+              statusText
+            }
+          </Text>
+        </View>
+      </View>
+
+      <View
+        style={
+          styles.cardDivider
+        }
+      />
+
+      <View
+        style={
+          styles.productRow
+        }
+      >
+        <View
+          style={
+            styles.imageContainer
+          }
+        >
+          {imageUrl ? (
+            <Image
+              source={{
+                uri:
+                  imageUrl,
+              }}
+              style={
+                styles.productImage
+              }
+            />
+          ) : (
+            <View
+              style={
+                styles.imagePlaceholder
+              }
+            >
+              <Ionicons
+                name="flower-outline"
+                size={29}
+                color="#D89AAA"
+              />
+            </View>
+          )}
+
+          {itemCount >
+          1 ? (
+            <View
+              style={
+                styles.imageCountBadge
+              }
+            >
+              <Text
+                style={
+                  styles.imageCountText
+                }
+              >
+                +
+                {itemCount -
+                  1}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View
+          style={
+            styles.productDetails
+          }
+        >
+          <Text
+            style={
+              styles.floristName
+            }
+            numberOfLines={
+              1
+            }
+          >
+            {
+              shopName
+            }
+          </Text>
+
+          <Text
+            style={
+              styles.productName
+            }
+            numberOfLines={
+              2
+            }
+          >
+            {itemCount ===
+            1
+              ? checkout
+                  .items?.[0]
+                  ?.productName ||
+                "Flower Order"
+              : `${itemCount} flower items`}
+          </Text>
+
+          <View
+            style={
+              styles.purchaseSummaryRow
+            }
+          >
+            <Text
+              style={
+                styles.quantity
+              }
+            >
+              Qty:{" "}
+              {
+                totalQuantity
+              }
+            </Text>
+
+            {shopCount >
+            0 ? (
+              <>
+                <View
+                  style={
+                    styles.summaryDot
+                  }
+                />
+
+                <Text
+                  style={
+                    styles.quantity
+                  }
+                >
+                  {
+                    shopCount
+                  }{" "}
+                  {shopCount ===
+                  1
+                    ? "shop"
+                    : "shops"}
+                </Text>
+              </>
+            ) : null}
+          </View>
+        </View>
+
+        <View
+          style={
+            styles.priceContainer
+          }
+        >
+          <Text
+            style={
+              styles.price
+            }
+          >
+            {formatMoney(
+              checkout.totalAmount
+            )}
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color="#B2AAA8"
+          />
+        </View>
+      </View>
+
+      <View
+        style={
+          styles.infoContainer
+        }
+      >
+        <View
+          style={
+            styles.infoRow
+          }
+        >
+          <Ionicons
+            name={
+              checkout.fulfillmentType ===
+              "pickup"
+                ? "storefront-outline"
+                : "bicycle-outline"
+            }
+            size={16}
+            color="#8C8280"
+          />
+
+          <Text
+            style={
+              styles.infoText
+            }
+          >
+            {checkout.fulfillmentType ===
+            "pickup"
+              ? "Pickup"
+              : "Delivery"}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.infoRow
+          }
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={16}
+            color="#8C8280"
+          />
+
+          <Text
+            style={
+              styles.infoText
+            }
+          >
+            {checkout.isPreOrder &&
+            checkout.requestedDeliveryDate
+              ? formatDate(
+                  checkout.requestedDeliveryDate
+                )
+              : formatDate(
+                  checkout.createdAt
+                )}
+          </Text>
+        </View>
+      </View>
+
+      {checkout.isPreOrder &&
+      checkout.requestedDeliveryTimeStart &&
+      checkout.requestedDeliveryTimeEnd ? (
+        <View
+          style={
+            styles.scheduleBox
+          }
+        >
+          <Ionicons
+            name="time-outline"
+            size={16}
+            color="#A66D12"
+          />
+
+          <Text
+            style={
+              styles.scheduleText
+            }
+          >
+            Scheduled{" "}
+            {formatDate(
+              checkout.requestedDeliveryDate
+            )}{" "}
+            •{" "}
+            {
+              checkout.requestedDeliveryTimeStart
+            }{" "}
+            -{" "}
+            {
+              checkout.requestedDeliveryTimeEnd
+            }
+          </Text>
+        </View>
+      ) : null}
+
+      <View
+        style={
+          styles.paymentRow
+        }
+      >
+        <View>
+          <Text
+            style={
+              styles.paymentLabel
+            }
+          >
+            Payment
+          </Text>
+
+          {checkout.paidAt ? (
+            <Text
+              style={
+                styles.paymentDate
+              }
+            >
+              Paid{" "}
+              {formatDateTime(
+                checkout.paidAt
+              )}
+            </Text>
+          ) : null}
+        </View>
+
+        <Text
+          style={[
+            styles.paymentStatus,
+
+            checkout.paymentStatus ===
+              "paid" &&
+              styles.paymentPaid,
+
+            checkout.paymentStatus ===
+              "failed" &&
+              styles.paymentFailed,
+          ]}
+        >
+          {
+            paymentLabel
+          }
+        </Text>
+      </View>
+
+      {category ===
+        "completed" &&
+      completedOrders.length >
+        0 ? (
+        <View
+          style={
+            allCompletedReviewed
+              ? styles.reviewedNotice
+              : styles.reviewNotice
+          }
+        >
+          <Ionicons
+            name={
+              allCompletedReviewed
+                ? "checkmark-circle"
+                : "star-outline"
+            }
+            size={17}
+            color={
+              allCompletedReviewed
+                ? "#3D8750"
+                : "#B74964"
+            }
+          />
+
+          <Text
+            style={
+              allCompletedReviewed
+                ? styles.reviewedNoticeText
+                : styles.reviewNoticeText
+            }
+          >
+            {allCompletedReviewed
+              ? completedOrders.length ===
+                1
+                ? "Reviewed"
+                : `All ${completedOrders.length} orders reviewed`
+              : pendingReviewCount >
+                  0
+                ? `${pendingReviewCount} ${
+                    pendingReviewCount ===
+                    1
+                      ? "order is"
+                      : "orders are"
+                  } ready for review`
+                : "Open purchase to view review status"}
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={
+              allCompletedReviewed
+                ? "#3D8750"
+                : "#B74964"
+            }
+          />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/*
+ * =========================================================
+ * STANDALONE ORDER CARD
+ * =========================================================
+ */
+
+function StandaloneOrderCard({
+  order,
+  reviewStatus,
+  onPress,
+}: {
+  order: CustomerOrder;
+
+  reviewStatus?:
+    OrderReviewStatus;
+
+  onPress:
+    () => void;
+}) {
+  const category =
+    getStandaloneOrderCategory(
+      order
+    );
+
+  const imageUrl =
+    getStandaloneImage(
+      order
+    );
+
+  const paymentLabel =
+    getStandalonePaymentLabel(
+      order
+    );
+
+  const statusStyle =
+    getStatusStyle(
+      order.orderStatus ===
+        "out_for_delivery"
+        ? "out_for_delivery"
+        : order.orderStatus ===
+            "delivered"
+          ? "delivered"
+          : order.paymentStatus ===
+                "pending" &&
+              category ===
+                "active"
+            ? "payment_pending"
+            : category
+    );
+
+  const isReviewed =
+    reviewStatus?.reviewed ===
+    true;
+
+  const canReview =
+    order.orderStatus ===
+      "completed" &&
+    reviewStatus?.canReview ===
+      true &&
+    !isReviewed;
+
+  return (
+    <Pressable
+      style={
+        styles.orderCard
+      }
+      onPress={
+        onPress
+      }
+    >
+      <View
+        style={
+          styles.orderTop
+        }
+      >
+        <View>
+          <View
+            style={
+              styles.referenceTitleRow
+            }
+          >
+            <Text
+              style={
+                styles.orderReferenceLabel
+              }
+            >
+              ORDER
+            </Text>
+
+            {order.sourceType ===
+            "custom_bouquet" ? (
+              <View
+                style={
+                  styles.customBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.customBadgeText
+                  }
+                >
+                  CUSTOM
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
           <Text
             style={
@@ -924,7 +2757,7 @@ function OrderCard({
 
             {
               backgroundColor:
-                statusStyle.background,
+                statusStyle.backgroundColor,
             },
           ]}
         >
@@ -934,7 +2767,7 @@ function OrderCard({
 
               {
                 color:
-                  statusStyle.text,
+                  statusStyle.textColor,
               },
             ]}
           >
@@ -951,10 +2784,6 @@ function OrderCard({
         }
       />
 
-      {/*
-       * PRODUCT
-       */}
-
       <View
         style={
           styles.productRow
@@ -968,7 +2797,8 @@ function OrderCard({
           {imageUrl ? (
             <Image
               source={{
-                uri: imageUrl,
+                uri:
+                  imageUrl,
               }}
               style={
                 styles.productImage
@@ -998,10 +2828,12 @@ function OrderCard({
             style={
               styles.floristName
             }
-            numberOfLines={1}
+            numberOfLines={
+              1
+            }
           >
-            {getFloristName(
-              order.florist
+            {getStandaloneFloristName(
+              order
             )}
           </Text>
 
@@ -1009,20 +2841,51 @@ function OrderCard({
             style={
               styles.productName
             }
-            numberOfLines={2}
-          >
-            {order.productName ||
-              "Bouquet Order"}
-          </Text>
-
-          <Text
-            style={
-              styles.quantity
+            numberOfLines={
+              2
             }
           >
-            Qty:{" "}
-            {order.quantity || 1}
+            {order.productName ||
+              (order.sourceType ===
+              "custom_bouquet"
+                ? "Custom Bouquet"
+                : "Flower Order")}
           </Text>
+
+          <View
+            style={
+              styles.purchaseSummaryRow
+            }
+          >
+            <Text
+              style={
+                styles.quantity
+              }
+            >
+              Qty:{" "}
+              {order.quantity ||
+                1}
+            </Text>
+
+            {order.sourceType ===
+            "custom_bouquet" ? (
+              <>
+                <View
+                  style={
+                    styles.summaryDot
+                  }
+                />
+
+                <Text
+                  style={
+                    styles.quantity
+                  }
+                >
+                  Custom Bouquet
+                </Text>
+              </>
+            ) : null}
+          </View>
         </View>
 
         <View
@@ -1048,17 +2911,15 @@ function OrderCard({
         </View>
       </View>
 
-      {/*
-       * INFO
-       */}
-
       <View
         style={
           styles.infoContainer
         }
       >
         <View
-          style={styles.infoRow}
+          style={
+            styles.infoRow
+          }
         >
           <Ionicons
             name={
@@ -1084,7 +2945,9 @@ function OrderCard({
         </View>
 
         <View
-          style={styles.infoRow}
+          style={
+            styles.infoRow
+          }
         >
           <Ionicons
             name="calendar-outline"
@@ -1109,9 +2972,30 @@ function OrderCard({
         </View>
       </View>
 
-      {/*
-       * PAYMENT
-       */}
+      {order.orderStatus ===
+      "delivered" ? (
+        <View
+          style={
+            styles.receivedNotice
+          }
+        >
+          <Ionicons
+            name="checkmark-circle-outline"
+            size={17}
+            color="#3D8750"
+          />
+
+          <Text
+            style={
+              styles.receivedNoticeText
+            }
+          >
+            Delivered — open
+            this order to
+            confirm receipt.
+          </Text>
+        </View>
+      ) : null}
 
       <View
         style={
@@ -1133,13 +3017,66 @@ function OrderCard({
             order.paymentStatus ===
               "paid" &&
               styles.paymentPaid,
+
+            order.paymentStatus ===
+              "failed" &&
+              styles.paymentFailed,
           ]}
         >
-          {formatStatus(
-            order.paymentStatus
-          )}
+          {
+            paymentLabel
+          }
         </Text>
       </View>
+
+      {order.orderStatus ===
+        "completed" ? (
+        <View
+          style={
+            isReviewed
+              ? styles.reviewedNotice
+              : styles.reviewNotice
+          }
+        >
+          <Ionicons
+            name={
+              isReviewed
+                ? "checkmark-circle"
+                : "star-outline"
+            }
+            size={17}
+            color={
+              isReviewed
+                ? "#3D8750"
+                : "#B74964"
+            }
+          />
+
+          <Text
+            style={
+              isReviewed
+                ? styles.reviewedNoticeText
+                : styles.reviewNoticeText
+            }
+          >
+            {isReviewed
+              ? "Reviewed · Tap to view review"
+              : canReview
+                ? "Leave a Review"
+                : "Open order to view review status"}
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={
+              isReviewed
+                ? "#3D8750"
+                : "#B74964"
+            }
+          />
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -1154,73 +3091,117 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
+
       backgroundColor:
         "#FFFFFF",
     },
 
     screen: {
       flex: 1,
+
       backgroundColor:
         "#FAF8F7",
     },
 
+    /*
+     * HEADER
+     */
+
     header: {
       minHeight: 72,
-      paddingHorizontal: 15,
+
+      paddingHorizontal:
+        15,
+
       backgroundColor:
         "#FFFFFF",
-      flexDirection: "row",
-      alignItems: "center",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       borderBottomWidth:
         StyleSheet.hairlineWidth,
+
       borderBottomColor:
         "#EAE4E2",
     },
 
     headerButton: {
       width: 42,
+
       height: 42,
-      alignItems: "center",
+
+      alignItems:
+        "center",
+
       justifyContent:
         "center",
     },
 
     headerCenter: {
       flex: 1,
-      alignItems: "center",
+
+      alignItems:
+        "center",
     },
 
     headerTitle: {
       fontSize: 20,
-      fontWeight: "800",
-      color: "#2F2A29",
+
+      fontWeight:
+        "800",
+
+      color:
+        "#2F2A29",
     },
 
     headerSubtitle: {
       marginTop: 1,
+
       fontSize: 11,
-      color: "#958D8B",
+
+      color:
+        "#958D8B",
     },
+
+    /*
+     * FILTER
+     */
 
     filterWrapper: {
       backgroundColor:
         "#FFFFFF",
+
       borderBottomWidth:
         StyleSheet.hairlineWidth,
+
       borderBottomColor:
         "#EDE8E6",
     },
 
     filterContainer: {
-      paddingHorizontal: 16,
-      paddingVertical: 11,
+      paddingHorizontal:
+        16,
+
+      paddingVertical:
+        11,
+
       gap: 8,
     },
 
     filterButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal:
+        16,
+
+      paddingVertical:
+        8,
+
+      borderRadius:
+        20,
+
       backgroundColor:
         "#F4F0EF",
     },
@@ -1232,13 +3213,22 @@ const styles =
 
     filterText: {
       fontSize: 12,
-      fontWeight: "700",
-      color: "#726B69",
+
+      fontWeight:
+        "700",
+
+      color:
+        "#726B69",
     },
 
     filterTextActive: {
-      color: "#FFFFFF",
+      color:
+        "#FFFFFF",
     },
+
+    /*
+     * SCROLL
+     */
 
     scrollView: {
       flex: 1,
@@ -1248,30 +3238,53 @@ const styles =
       padding: 15,
     },
 
+    /*
+     * LOADING
+     */
+
     centerContainer: {
       flex: 1,
-      alignItems: "center",
+
+      alignItems:
+        "center",
+
       justifyContent:
         "center",
+
       backgroundColor:
         "#FAF8F7",
     },
 
     loadingText: {
       marginTop: 12,
+
       fontSize: 13,
-      color: "#867E7C",
+
+      color:
+        "#8D8583",
     },
 
+    /*
+     * ERROR
+     */
+
     errorCard: {
+      marginBottom: 14,
+
       padding: 14,
-      marginBottom: 12,
-      borderRadius: 14,
+
+      borderRadius:
+        14,
+
       backgroundColor:
-        "#FFF0F3",
-      flexDirection: "row",
+        "#FFF2F4",
+
+      flexDirection:
+        "row",
+
       alignItems:
         "flex-start",
+
       gap: 10,
     },
 
@@ -1281,226 +3294,693 @@ const styles =
 
     errorTitle: {
       fontSize: 13,
-      fontWeight: "800",
-      color: "#A9495B",
+
+      fontWeight:
+        "800",
+
+      color:
+        "#B85166",
     },
 
     errorText: {
       marginTop: 2,
-      fontSize: 12,
-      lineHeight: 17,
-      color: "#9B6973",
+
+      fontSize: 10,
+
+      lineHeight: 15,
+
+      color:
+        "#A06F78",
     },
 
+    /*
+     * EMPTY
+     */
+
     emptyContainer: {
-      paddingTop: 110,
-      paddingHorizontal: 30,
-      alignItems: "center",
+      paddingTop: 70,
+
+      paddingHorizontal:
+        25,
+
+      alignItems:
+        "center",
     },
 
     emptyIcon: {
-      width: 105,
-      height: 105,
-      borderRadius: 53,
-      alignItems: "center",
+      width: 100,
+
+      height: 100,
+
+      borderRadius:
+        50,
+
+      backgroundColor:
+        "#FFF1F5",
+
+      alignItems:
+        "center",
+
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0F4",
     },
 
     emptyTitle: {
       marginTop: 20,
-      fontSize: 20,
-      fontWeight: "800",
-      color: "#302C2B",
+
+      fontSize: 18,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#3A3432",
+
+      textAlign:
+        "center",
     },
 
     emptyDescription: {
       marginTop: 7,
-      fontSize: 13,
-      lineHeight: 20,
-      color: "#908886",
-      textAlign: "center",
+
+      maxWidth: 290,
+
+      fontSize: 12,
+
+      lineHeight: 18,
+
+      color:
+        "#918987",
+
+      textAlign:
+        "center",
     },
 
     discoverButton: {
-      marginTop: 22,
-      minHeight: 46,
-      paddingHorizontal: 20,
-      borderRadius: 14,
+      minHeight: 45,
+
+      marginTop: 19,
+
+      paddingHorizontal:
+        18,
+
+      borderRadius:
+        14,
+
       backgroundColor:
         "#D85D7A",
-      flexDirection: "row",
-      alignItems: "center",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       justifyContent:
         "center",
+
       gap: 7,
     },
 
     discoverButtonText: {
-      fontSize: 13,
-      fontWeight: "800",
-      color: "#FFFFFF",
+      fontSize: 12,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#FFFFFF",
     },
 
+    /*
+     * ORDER CARD
+     */
+
     orderCard: {
-      marginBottom: 12,
-      padding: 15,
-      borderRadius: 18,
+      marginBottom: 13,
+
+      padding: 14,
+
+      borderRadius:
+        18,
+
       backgroundColor:
         "#FFFFFF",
+
       borderWidth: 1,
+
       borderColor:
         "#ECE6E4",
     },
 
     orderTop: {
-      flexDirection: "row",
+      flexDirection:
+        "row",
+
       justifyContent:
         "space-between",
-      alignItems: "center",
+
+      alignItems:
+        "flex-start",
+
+      gap: 10,
     },
 
     orderReferenceLabel: {
-      fontSize: 9,
-      fontWeight: "700",
-      color: "#A39B99",
-      letterSpacing: 0.7,
+      fontSize: 8,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        1,
+
+      color:
+        "#A49C99",
     },
 
     orderReference: {
       marginTop: 2,
-      fontSize: 13,
-      fontWeight: "800",
-      color: "#494341",
+
+      fontSize: 11,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#59514F",
+    },
+
+    referenceTitleRow: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 6,
+    },
+
+    customBadge: {
+      paddingHorizontal:
+        6,
+
+      paddingVertical:
+        2,
+
+      borderRadius:
+        6,
+
+      backgroundColor:
+        "#F4E8FA",
+    },
+
+    customBadgeText: {
+      fontSize: 7,
+
+      fontWeight:
+        "900",
+
+      color:
+        "#7E4E99",
     },
 
     statusBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 12,
+      paddingHorizontal:
+        9,
+
+      paddingVertical:
+        5,
+
+      borderRadius:
+        10,
     },
 
     statusText: {
-      fontSize: 10,
-      fontWeight: "800",
+      fontSize: 9,
+
+      fontWeight:
+        "800",
     },
 
     cardDivider: {
       height: 1,
+
+      marginVertical:
+        12,
+
       backgroundColor:
-        "#EFEAE8",
-      marginVertical: 12,
+        "#F0EBE9",
     },
 
+    /*
+     * PRODUCT
+     */
+
     productRow: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
     },
 
     imageContainer: {
-      width: 74,
-      height: 74,
-      borderRadius: 13,
-      overflow: "hidden",
+      width: 72,
+
+      height: 72,
+
+      borderRadius:
+        14,
+
+      overflow:
+        "hidden",
+
       backgroundColor:
-        "#F8EFF1",
+        "#F9F0F2",
+
+      position:
+        "relative",
     },
 
     productImage: {
-      width: "100%",
-      height: "100%",
+      width:
+        "100%",
+
+      height:
+        "100%",
     },
 
     imagePlaceholder: {
       flex: 1,
-      alignItems: "center",
+
+      alignItems:
+        "center",
+
       justifyContent:
         "center",
+
       backgroundColor:
-        "#FBEEF1",
+        "#FAEDF0",
+    },
+
+    imageCountBadge: {
+      position:
+        "absolute",
+
+      right: 5,
+
+      bottom: 5,
+
+      minWidth: 25,
+
+      height: 22,
+
+      paddingHorizontal:
+        5,
+
+      borderRadius:
+        11,
+
+      backgroundColor:
+        "rgba(45,40,39,0.78)",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+    },
+
+    imageCountText: {
+      fontSize: 9,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#FFFFFF",
     },
 
     productDetails: {
       flex: 1,
-      marginLeft: 12,
+
+      marginLeft: 11,
+
+      marginRight: 8,
     },
 
     floristName: {
       fontSize: 10,
-      fontWeight: "700",
-      color: "#D05A75",
+
+      fontWeight:
+        "700",
+
+      color:
+        "#D05A75",
     },
 
     productName: {
       marginTop: 3,
+
       fontSize: 14,
+
       lineHeight: 18,
-      fontWeight: "800",
-      color: "#373130",
+
+      fontWeight:
+        "800",
+
+      color:
+        "#373130",
+    },
+
+    purchaseSummaryRow: {
+      marginTop: 6,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      flexWrap:
+        "wrap",
+
+      gap: 5,
     },
 
     quantity: {
-      marginTop: 5,
-      fontSize: 11,
-      color: "#8F8684",
+      fontSize: 9,
+
+      color:
+        "#918987",
+    },
+
+    summaryDot: {
+      width: 3,
+
+      height: 3,
+
+      borderRadius:
+        2,
+
+      backgroundColor:
+        "#BAB1AF",
     },
 
     priceContainer: {
       alignItems:
         "flex-end",
-      gap: 8,
-    },
 
-    price: {
-      fontSize: 14,
-      fontWeight: "900",
-      color: "#D15471",
-    },
-
-    infoContainer: {
-      marginTop: 13,
-      paddingTop: 11,
-      borderTopWidth: 1,
-      borderTopColor:
-        "#F0EBE9",
-      flexDirection: "row",
-      gap: 18,
-    },
-
-    infoRow: {
-      flexDirection: "row",
-      alignItems: "center",
       gap: 5,
     },
 
-    infoText: {
-      fontSize: 11,
-      fontWeight: "600",
-      color: "#7E7674",
+    price: {
+      fontSize: 13,
+
+      fontWeight:
+        "900",
+
+      color:
+        "#D15471",
     },
+
+    /*
+     * INFO
+     */
+
+    infoContainer: {
+      marginTop: 12,
+
+      paddingHorizontal:
+        10,
+
+      paddingVertical:
+        9,
+
+      borderRadius:
+        11,
+
+      backgroundColor:
+        "#FAF8F7",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "space-between",
+
+      gap: 10,
+    },
+
+    infoRow: {
+      flex: 1,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 6,
+    },
+
+    infoText: {
+      flex: 1,
+
+      fontSize: 10,
+
+      color:
+        "#7C7472",
+    },
+
+    /*
+     * PREORDER
+     */
+
+    scheduleBox: {
+      marginTop: 11,
+
+      paddingHorizontal:
+        11,
+
+      paddingVertical:
+        9,
+
+      borderRadius:
+        10,
+
+      backgroundColor:
+        "#FFF8E9",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 7,
+    },
+
+    scheduleText: {
+      flex: 1,
+
+      fontSize: 10,
+
+      lineHeight: 15,
+
+      fontWeight:
+        "600",
+
+      color:
+        "#8E681F",
+    },
+
+    /*
+     * DELIVERED NOTICE
+     */
+
+    receivedNotice: {
+      marginTop: 11,
+
+      paddingHorizontal:
+        11,
+
+      paddingVertical:
+        9,
+
+      borderRadius:
+        10,
+
+      backgroundColor:
+        "#EDF8F0",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 7,
+    },
+
+    receivedNoticeText: {
+      flex: 1,
+
+      fontSize: 10,
+
+      lineHeight: 15,
+
+      fontWeight:
+        "700",
+
+      color:
+        "#477C54",
+    },
+
+    /*
+     * REVIEW
+     */
+
+    reviewNotice: {
+      marginTop: 11,
+
+      paddingHorizontal:
+        11,
+
+      paddingVertical:
+        9,
+
+      borderRadius:
+        10,
+
+      backgroundColor:
+        "#FFF0F4",
+
+      borderWidth: 1,
+
+      borderColor:
+        "#F3D6DE",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 7,
+    },
+
+    reviewNoticeText: {
+      flex: 1,
+
+      fontSize: 10,
+
+      lineHeight: 15,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#B74964",
+    },
+
+    reviewedNotice: {
+      marginTop: 11,
+
+      paddingHorizontal:
+        11,
+
+      paddingVertical:
+        9,
+
+      borderRadius:
+        10,
+
+      backgroundColor:
+        "#EDF8F0",
+
+      borderWidth: 1,
+
+      borderColor:
+        "#D1EAD7",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 7,
+    },
+
+    reviewedNoticeText: {
+      flex: 1,
+
+      fontSize: 10,
+
+      lineHeight: 15,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#3D8750",
+    },
+
+    /*
+     * PAYMENT
+     */
 
     paymentRow: {
       marginTop: 11,
-      flexDirection: "row",
+
+      flexDirection:
+        "row",
+
       justifyContent:
         "space-between",
-      alignItems: "center",
+
+      alignItems:
+        "center",
     },
 
     paymentLabel: {
       fontSize: 11,
-      color: "#A09896",
+
+      color:
+        "#A09896",
+    },
+
+    paymentDate: {
+      marginTop: 2,
+
+      fontSize: 9,
+
+      color:
+        "#A79E9C",
     },
 
     paymentStatus: {
       fontSize: 11,
-      fontWeight: "800",
-      color: "#A8732A",
+
+      fontWeight:
+        "800",
+
+      color:
+        "#A8732A",
     },
 
     paymentPaid: {
-      color: "#3D8A56",
+      color:
+        "#3D8A56",
+    },
+
+    paymentFailed: {
+      color:
+        "#B84B5A",
     },
   });

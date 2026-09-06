@@ -3083,7 +3083,7 @@ const styles =
     },
 
     map: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
 
     riderMarkerOuter: {

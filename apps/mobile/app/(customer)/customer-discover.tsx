@@ -22,72 +22,28 @@ import {
 
 import {
   router,
+  useLocalSearchParams,
 } from 'expo-router';
+
+import * as ImagePicker from 'expo-image-picker';
 
 import {
   Ionicons,
 } from '@expo/vector-icons';
 
 import {
-  apiRequest,
-} from '../../services/api';
-
-/*
- * =========================================================
- * TYPES
- * =========================================================
- */
-
-type FloristAddress = {
-  street?: string;
-  barangay?: string;
-  city?: string;
-  province?: string;
-  postalCode?: string;
-};
-
-type FlowerFlorist = {
-  _id: string;
-  shopName: string;
-  address?: FloristAddress;
-};
-
-type FlowerListing = {
-  _id: string;
-  seller: string;
-  florist: FlowerFlorist | null;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  occasion: string[];
-  flowerTypes: string[];
-  colors: string[];
-  images: string[];
-  isAvailable: boolean;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type PublicFlowersResponse = {
-  success: boolean;
-  message: string;
-
-  data: {
-    count: number;
-    flowers: FlowerListing[];
-  };
-};
+  getPublicFlowers,
+  getFlowerImageUrl,
+  formatFlowerPrice,
+  searchFlowersByImage,
+  type FlowerListing,
+} from '../../services/flower';
 
 /*
  * =========================================================
  * CONSTANTS
  * =========================================================
  */
-
-const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? '';
 
 const PRICE_OPTIONS = [
   {
@@ -127,50 +83,6 @@ const PRICE_OPTIONS = [
  * =========================================================
  */
 
-const getServerUrl = () => {
-  return API_URL.replace(
-    /\/api\/v1\/?$/,
-    ''
-  );
-};
-
-const getImageUrl = (
-  imagePath?: string | null
-) => {
-  if (!imagePath) {
-    return null;
-  }
-
-  if (
-    imagePath.startsWith('http://') ||
-    imagePath.startsWith('https://')
-  ) {
-    return imagePath;
-  }
-
-  const serverUrl =
-    getServerUrl();
-
-  const normalizedPath =
-    imagePath.startsWith('/')
-      ? imagePath
-      : `/${imagePath}`;
-
-  return `${serverUrl}${normalizedPath}`;
-};
-
-const formatPrice = (
-  price: number
-) => {
-  return `₱${price.toLocaleString(
-    'en-PH',
-    {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }
-  )}`;
-};
-
 const pluralizeFlowerType = (
   value: string
 ) => {
@@ -192,6 +104,11 @@ const pluralizeFlowerType = (
  */
 
 export default function CustomerDiscoverScreen() {
+  const params =
+    useLocalSearchParams<{
+      action?: string;
+    }>();
+
   const [
     flowers,
     setFlowers,
@@ -201,10 +118,12 @@ export default function CustomerDiscoverScreen() {
     );
 
   /*
-   * Unfiltered listings are also kept so
-   * available filter choices can be derived
-   * from real Seller listings.
+   * Complete marketplace listing set.
+   *
+   * Used to derive actual filter options
+   * from Seller listings.
    */
+
   const [
     marketplaceFlowers,
     setMarketplaceFlowers,
@@ -275,6 +194,32 @@ export default function CustomerDiscoverScreen() {
 
   /*
    * =========================================================
+   * IMAGE SEARCH STATE
+   * =========================================================
+   */
+
+  const [
+    imageSearching,
+    setImageSearching,
+  ] =
+    useState(false);
+
+  const [
+    imageSearchActive,
+    setImageSearchActive,
+  ] =
+    useState(false);
+
+  const [
+    selectedSearchImage,
+    setSelectedSearchImage,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  /*
+   * =========================================================
    * FETCH FLOWERS
    * =========================================================
    */
@@ -291,92 +236,19 @@ export default function CustomerDiscoverScreen() {
           maxPrice?: number;
         }
       ) => {
-        const params =
-          new URLSearchParams();
-
-        if (
-          options?.search?.trim()
-        ) {
-          params.append(
-            'search',
-            options.search.trim()
-          );
-        }
-
-        if (
-          options?.flowerType &&
-          options.flowerType !==
-            'All'
-        ) {
-          params.append(
-            'flowerType',
-            options.flowerType
-          );
-        }
-
-        if (
-          options?.occasion
-        ) {
-          params.append(
-            'occasion',
-            options.occasion
-          );
-        }
-
-        if (
-          options?.color
-        ) {
-          params.append(
-            'color',
-            options.color
-          );
-        }
-
-        if (
-          options?.minPrice !==
-          undefined
-        ) {
-          params.append(
-            'minPrice',
-            String(
-              options.minPrice
-            )
-          );
-        }
-
-        if (
-          options?.maxPrice !==
-          undefined
-        ) {
-          params.append(
-            'maxPrice',
-            String(
-              options.maxPrice
-            )
-          );
-        }
-
-        const query =
-          params.toString();
-
         const response =
-          await apiRequest<PublicFlowersResponse>(
-            query
-              ? `/flowers?${query}`
-              : '/flowers',
-            {
-              method: 'GET',
-            }
+          await getPublicFlowers(
+            options ?? {}
           );
 
-        return response.data.flowers;
+        return response.flowers;
       },
       []
     );
 
   /*
    * =========================================================
-   * INITIAL LOAD
+   * LOAD DISCOVER
    * =========================================================
    */
 
@@ -387,22 +259,60 @@ export default function CustomerDiscoverScreen() {
       ) => {
         try {
           if (isRefresh) {
-            setRefreshing(true);
+            setRefreshing(
+              true
+            );
           } else {
-            setLoading(true);
+            setLoading(
+              true
+            );
           }
 
-          setError(null);
+          setError(
+            null
+          );
 
           const result =
             await fetchFlowers();
 
-          setFlowers(result);
+          setFlowers(
+            result
+          );
 
           setMarketplaceFlowers(
             result
           );
-        } catch (loadError) {
+
+          if (isRefresh) {
+            setImageSearchActive(
+              false
+            );
+
+            setSelectedSearchImage(
+              null
+            );
+
+            setSearch('');
+
+            setSelectedFlowerType(
+              'All'
+            );
+
+            setSelectedOccasion(
+              null
+            );
+
+            setSelectedColor(
+              null
+            );
+
+            setSelectedPriceIndex(
+              0
+            );
+          }
+        } catch (
+          loadError
+        ) {
           console.error(
             'Discover Error:',
             loadError
@@ -414,16 +324,31 @@ export default function CustomerDiscoverScreen() {
               : 'Unable to load flowers.'
           );
         } finally {
-          setLoading(false);
-          setRefreshing(false);
+          setLoading(
+            false
+          );
+
+          setRefreshing(
+            false
+          );
         }
       },
-      [fetchFlowers]
+      [
+        fetchFlowers,
+      ]
     );
 
+  /*
+   * =========================================================
+   * INITIAL LOAD
+   * =========================================================
+   */
+
   useEffect(() => {
-    loadDiscover();
-  }, [loadDiscover]);
+    void loadDiscover();
+  }, [
+    loadDiscover,
+  ]);
 
   /*
    * =========================================================
@@ -448,8 +373,11 @@ export default function CustomerDiscoverScreen() {
 
       return [
         'All',
+
         ...Array.from(
-          new Set(values)
+          new Set(
+            values
+          )
         ),
       ];
     }, [
@@ -478,7 +406,9 @@ export default function CustomerDiscoverScreen() {
           .filter(Boolean);
 
       return Array.from(
-        new Set(values)
+        new Set(
+          values
+        )
       );
     }, [
       marketplaceFlowers,
@@ -496,7 +426,8 @@ export default function CustomerDiscoverScreen() {
         marketplaceFlowers
           .flatMap(
             (flower) =>
-              flower.colors ?? []
+              flower.colors ??
+              []
           )
           .map(
             (value) =>
@@ -505,7 +436,9 @@ export default function CustomerDiscoverScreen() {
           .filter(Boolean);
 
       return Array.from(
-        new Set(values)
+        new Set(
+          values
+        )
       );
     }, [
       marketplaceFlowers,
@@ -513,7 +446,7 @@ export default function CustomerDiscoverScreen() {
 
   /*
    * =========================================================
-   * APPLY ALL FILTERS
+   * APPLY FILTERS
    * =========================================================
    */
 
@@ -528,8 +461,26 @@ export default function CustomerDiscoverScreen() {
       }
     ) => {
       try {
-        setLoading(true);
-        setError(null);
+        setLoading(
+          true
+        );
+
+        setError(
+          null
+        );
+
+        /*
+         * Normal filtering leaves
+         * image-search mode.
+         */
+
+        setImageSearchActive(
+          false
+        );
+
+        setSelectedSearchImage(
+          null
+        );
 
         const effectiveSearch =
           overrides?.search ??
@@ -583,7 +534,9 @@ export default function CustomerDiscoverScreen() {
               price.maxPrice,
           });
 
-        setFlowers(result);
+        setFlowers(
+          result
+        );
       } catch (
         filterError
       ) {
@@ -598,13 +551,15 @@ export default function CustomerDiscoverScreen() {
             : 'Unable to filter flowers.'
         );
       } finally {
-        setLoading(false);
+        setLoading(
+          false
+        );
       }
     };
 
   /*
    * =========================================================
-   * SEARCH
+   * TEXT SEARCH
    * =========================================================
    */
 
@@ -662,13 +617,15 @@ export default function CustomerDiscoverScreen() {
 
   /*
    * =========================================================
-   * APPLY ADVANCED FILTER
+   * APPLY ADVANCED FILTERS
    * =========================================================
    */
 
   const handleApplyAdvancedFilters =
     async () => {
-      setFilterVisible(false);
+      setFilterVisible(
+        false
+      );
 
       await applyFilters();
     };
@@ -699,26 +656,50 @@ export default function CustomerDiscoverScreen() {
         0
       );
 
-      setFilterVisible(false);
+      setImageSearchActive(
+        false
+      );
+
+      setSelectedSearchImage(
+        null
+      );
+
+      setFilterVisible(
+        false
+      );
 
       try {
-        setLoading(true);
-        setError(null);
+        setLoading(
+          true
+        );
+
+        setError(
+          null
+        );
 
         const result =
           await fetchFlowers();
 
-        setFlowers(result);
+        setFlowers(
+          result
+        );
       } catch (
         resetError
       ) {
+        console.error(
+          'Reset Discover Error:',
+          resetError
+        );
+
         setError(
           resetError instanceof Error
             ? resetError.message
             : 'Unable to reset filters.'
         );
       } finally {
-        setLoading(false);
+        setLoading(
+          false
+        );
       }
     };
 
@@ -744,22 +725,300 @@ export default function CustomerDiscoverScreen() {
 
   /*
    * =========================================================
-   * IMAGE SEARCH
+   * RUN IMAGE SEARCH
    * =========================================================
-   *
-   * Backend support already exists.
-   * We will connect Expo Image Picker
-   * when we implement image search.
+   */
+
+  const runImageSearch =
+    useCallback(
+      async (
+        imageUri: string
+      ) => {
+        try {
+          setImageSearching(
+            true
+          );
+
+          setError(
+            null
+          );
+
+          const result =
+            await searchFlowersByImage(
+              {
+                uri:
+                  imageUri,
+              },
+              10
+            );
+
+          setFlowers(
+            result.flowers
+          );
+
+          setSelectedSearchImage(
+            imageUri
+          );
+
+          setImageSearchActive(
+            true
+          );
+
+          /*
+           * Clear normal filters because
+           * these results now come from
+           * visual similarity.
+           */
+
+          setSearch('');
+
+          setSelectedFlowerType(
+            'All'
+          );
+
+          setSelectedOccasion(
+            null
+          );
+
+          setSelectedColor(
+            null
+          );
+
+          setSelectedPriceIndex(
+            0
+          );
+        } catch (
+          imageSearchError
+        ) {
+          console.error(
+            'Flower Image Search Error:',
+            imageSearchError
+          );
+
+          Alert.alert(
+            'Image Search Failed',
+            imageSearchError instanceof Error
+              ? imageSearchError.message
+              : 'Unable to search using this image.'
+          );
+        } finally {
+          setImageSearching(
+            false
+          );
+        }
+      },
+      []
+    );
+
+  /*
+   * =========================================================
+   * IMAGE SEARCH SOURCE
    * =========================================================
    */
 
   const handleImageSearch =
-    () => {
+    useCallback(() => {
+      if (imageSearching) {
+        return;
+      }
+
       Alert.alert(
-        'Image Search',
-        'Image-based bouquet search will be connected to the existing FLOGRAM image-search backend.'
+        'Search by Image',
+        'Choose how you want to provide a bouquet image.',
+        [
+          {
+            text:
+              'Take Photo',
+
+            onPress:
+              async () => {
+                try {
+                  const permission =
+                    await ImagePicker
+                      .requestCameraPermissionsAsync();
+
+                  if (
+                    !permission.granted
+                  ) {
+                    Alert.alert(
+                      'Camera Permission',
+                      'Camera permission is required to take a bouquet photo.'
+                    );
+
+                    return;
+                  }
+
+                  const result =
+                    await ImagePicker
+                      .launchCameraAsync({
+                        mediaTypes: [
+                          'images',
+                        ],
+
+                        allowsEditing:
+                          false,
+
+                        quality:
+                          0.85,
+                      });
+
+                  if (
+                    result.canceled ||
+                    !result.assets?.[0]
+                  ) {
+                    return;
+                  }
+
+                  await runImageSearch(
+                    result.assets[0]
+                      .uri
+                  );
+                } catch (
+                  cameraError
+                ) {
+                  console.error(
+                    'Camera Error:',
+                    cameraError
+                  );
+
+                  Alert.alert(
+                    'Camera Error',
+                    cameraError instanceof Error
+                      ? cameraError.message
+                      : 'Unable to open the camera.'
+                  );
+                }
+              },
+          },
+
+          {
+            text:
+              'Choose from Gallery',
+
+            onPress:
+              async () => {
+                try {
+                  const permission =
+                    await ImagePicker
+                      .requestMediaLibraryPermissionsAsync();
+
+                  if (
+                    !permission.granted
+                  ) {
+                    Alert.alert(
+                      'Photo Permission',
+                      'Photo library permission is required to choose a bouquet image.'
+                    );
+
+                    return;
+                  }
+
+                  const result =
+                    await ImagePicker
+                      .launchImageLibraryAsync({
+                        mediaTypes: [
+                          'images',
+                        ],
+
+                        allowsEditing:
+                          false,
+
+                        quality:
+                          0.85,
+                      });
+
+                  if (
+                    result.canceled ||
+                    !result.assets?.[0]
+                  ) {
+                    return;
+                  }
+
+                  await runImageSearch(
+                    result.assets[0]
+                      .uri
+                  );
+                } catch (
+                  galleryError
+                ) {
+                  console.error(
+                    'Gallery Error:',
+                    galleryError
+                  );
+
+                  Alert.alert(
+                    'Photo Error',
+                    galleryError instanceof Error
+                      ? galleryError.message
+                      : 'Unable to open your photo library.'
+                  );
+                }
+              },
+          },
+
+          {
+            text:
+              'Cancel',
+
+            style:
+              'cancel',
+          },
+        ]
       );
-    };
+    }, [
+      imageSearching,
+      runImageSearch,
+    ]);
+
+  /*
+   * =========================================================
+   * DASHBOARD ACTION
+   * =========================================================
+   *
+   * Dashboard can navigate here using:
+   *
+   * action=filter
+   *
+   * or
+   *
+   * action=image-search
+   * =========================================================
+   */
+
+  useEffect(() => {
+    if (
+      params.action ===
+      'filter'
+    ) {
+      setFilterVisible(
+        true
+      );
+
+      return;
+    }
+
+    if (
+      params.action ===
+      'image-search'
+    ) {
+      const timer =
+        setTimeout(
+          () => {
+            handleImageSearch();
+          },
+          250
+        );
+
+      return () => {
+        clearTimeout(
+          timer
+        );
+      };
+    }
+  }, [
+    params.action,
+    handleImageSearch,
+  ]);
 
   /*
    * =========================================================
@@ -915,7 +1174,9 @@ export default function CustomerDiscoverScreen() {
                 style={
                   styles.searchInput
                 }
-                value={search}
+                value={
+                  search
+                }
                 onChangeText={
                   setSearch
                 }
@@ -934,7 +1195,7 @@ export default function CustomerDiscoverScreen() {
                   onPress={() => {
                     setSearch('');
 
-                    applyFilters({
+                    void applyFilters({
                       search: '',
                     });
                   }}
@@ -954,13 +1215,23 @@ export default function CustomerDiscoverScreen() {
                 onPress={
                   handleImageSearch
                 }
+                disabled={
+                  imageSearching
+                }
                 hitSlop={8}
               >
-                <Ionicons
-                  name="camera-outline"
-                  size={20}
-                  color="#DE628F"
-                />
+                {imageSearching ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#DE628F"
+                  />
+                ) : (
+                  <Ionicons
+                    name="camera-outline"
+                    size={20}
+                    color="#DE628F"
+                  />
+                )}
               </Pressable>
             </View>
 
@@ -1039,7 +1310,7 @@ export default function CustomerDiscoverScreen() {
                           styles.typeChipActive,
                       ]}
                       onPress={() =>
-                        handleFlowerType(
+                        void handleFlowerType(
                           flowerType
                         )
                       }
@@ -1133,7 +1404,7 @@ export default function CustomerDiscoverScreen() {
                             styles.occasionChipActive,
                         ]}
                         onPress={() =>
-                          handleOccasion(
+                          void handleOccasion(
                             occasion
                           )
                         }
@@ -1173,6 +1444,78 @@ export default function CustomerDiscoverScreen() {
           )}
 
           {/* ================================================
+              IMAGE SEARCH PREVIEW
+          ================================================ */}
+
+          {imageSearchActive &&
+            selectedSearchImage && (
+            <View
+              style={
+                styles.imageSearchCard
+              }
+            >
+              <Image
+                source={{
+                  uri:
+                    selectedSearchImage,
+                }}
+                style={
+                  styles.imageSearchPreview
+                }
+                resizeMode="cover"
+              />
+
+              <View
+                style={
+                  styles.imageSearchInfo
+                }
+              >
+                <Text
+                  style={
+                    styles.imageSearchEyebrow
+                  }
+                >
+                  IMAGE SEARCH
+                </Text>
+
+                <Text
+                  style={
+                    styles.imageSearchTitle
+                  }
+                >
+                  Similar bouquets
+                </Text>
+
+                <Text
+                  style={
+                    styles.imageSearchDescription
+                  }
+                >
+                  Results are ranked by
+                  visual similarity to your
+                  selected image.
+                </Text>
+              </View>
+
+              <Pressable
+                style={
+                  styles.imageSearchClose
+                }
+                onPress={() =>
+                  void handleResetFilters()
+                }
+                hitSlop={8}
+              >
+                <Ionicons
+                  name="close"
+                  size={18}
+                  color="#7A7276"
+                />
+              </Pressable>
+            </View>
+          )}
+
+          {/* ================================================
               RESULTS HEADER
           ================================================ */}
 
@@ -1187,16 +1530,18 @@ export default function CustomerDiscoverScreen() {
                   styles.resultsTitle
                 }
               >
-                {search.trim()
-                  ? 'Search Results'
-                  : selectedOccasion
-                    ? `${selectedOccasion} Flowers`
-                    : selectedFlowerType !==
-                        'All'
-                      ? pluralizeFlowerType(
-                          selectedFlowerType
-                        )
-                      : 'All Bouquets'}
+                {imageSearchActive
+                  ? 'Similar Bouquets'
+                  : search.trim()
+                    ? 'Search Results'
+                    : selectedOccasion
+                      ? `${selectedOccasion} Flowers`
+                      : selectedFlowerType !==
+                          'All'
+                        ? pluralizeFlowerType(
+                            selectedFlowerType
+                          )
+                        : 'All Bouquets'}
               </Text>
 
               <Text
@@ -1213,11 +1558,12 @@ export default function CustomerDiscoverScreen() {
               </Text>
             </View>
 
-            {activeFilterCount >
-              0 && (
+            {(activeFilterCount >
+              0 ||
+              imageSearchActive) && (
               <Pressable
-                onPress={
-                  handleResetFilters
+                onPress={() =>
+                  void handleResetFilters()
                 }
                 hitSlop={8}
               >
@@ -1260,10 +1606,51 @@ export default function CustomerDiscoverScreen() {
             )}
 
           {/* ================================================
+              IMAGE SEARCH LOADING
+          ================================================ */}
+
+          {imageSearching && (
+            <View
+              style={
+                styles.imageSearchingCard
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color="#DF628F"
+              />
+
+              <View
+                style={
+                  styles.imageSearchingInfo
+                }
+              >
+                <Text
+                  style={
+                    styles.imageSearchingTitle
+                  }
+                >
+                  Searching similar bouquets
+                </Text>
+
+                <Text
+                  style={
+                    styles.imageSearchingText
+                  }
+                >
+                  Comparing your image with
+                  available FLOGRAM listings...
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* ================================================
               ERROR
           ================================================ */}
 
           {!loading &&
+            !imageSearching &&
             error && (
               <View
                 style={
@@ -1304,7 +1691,7 @@ export default function CustomerDiscoverScreen() {
                     styles.retryButton
                   }
                   onPress={() =>
-                    loadDiscover()
+                    void loadDiscover()
                   }
                 >
                   <Text
@@ -1323,6 +1710,7 @@ export default function CustomerDiscoverScreen() {
           ================================================ */}
 
           {!loading &&
+            !imageSearching &&
             !error &&
             flowers.length ===
               0 && (
@@ -1337,7 +1725,11 @@ export default function CustomerDiscoverScreen() {
                   }
                 >
                   <Ionicons
-                    name="search-outline"
+                    name={
+                      imageSearchActive
+                        ? 'camera-outline'
+                        : 'search-outline'
+                    }
                     size={29}
                     color="#DF628F"
                   />
@@ -1348,7 +1740,9 @@ export default function CustomerDiscoverScreen() {
                     styles.messageTitle
                   }
                 >
-                  No flowers found
+                  {imageSearchActive
+                    ? 'No similar bouquets found'
+                    : 'No flowers found'}
                 </Text>
 
                 <Text
@@ -1356,29 +1750,46 @@ export default function CustomerDiscoverScreen() {
                     styles.messageDescription
                   }
                 >
-                  Try another
-                  search term or
-                  change your
-                  filters.
+                  {imageSearchActive
+                    ? 'No bouquet reached the required visual similarity. Try another bouquet image.'
+                    : 'Try another search term or change your filters.'}
                 </Text>
 
-                <Pressable
-                  style={
-                    styles.retryButton
-                  }
-                  onPress={
-                    handleResetFilters
-                  }
-                >
-                  <Text
+                {imageSearchActive ? (
+                  <Pressable
                     style={
-                      styles.retryButtonText
+                      styles.retryButton
+                    }
+                    onPress={
+                      handleImageSearch
                     }
                   >
-                    Show All
-                    Flowers
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={
+                        styles.retryButtonText
+                      }
+                    >
+                      Try Another Image
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={
+                      styles.retryButton
+                    }
+                    onPress={() =>
+                      void handleResetFilters()
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.retryButtonText
+                      }
+                    >
+                      Show All Flowers
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
 
@@ -1387,6 +1798,7 @@ export default function CustomerDiscoverScreen() {
           ================================================ */}
 
           {!error &&
+            !imageSearching &&
             flowers.length >
               0 && (
               <View
@@ -1399,7 +1811,7 @@ export default function CustomerDiscoverScreen() {
                     flower
                   ) => {
                     const imageUrl =
-                      getImageUrl(
+                      getFlowerImageUrl(
                         flower
                           .images?.[0]
                       );
@@ -1458,6 +1870,8 @@ export default function CustomerDiscoverScreen() {
                             </View>
                           )}
 
+                          {/* AVAILABILITY */}
+
                           <View
                             style={
                               styles.availableBadge
@@ -1477,6 +1891,34 @@ export default function CustomerDiscoverScreen() {
                               Available
                             </Text>
                           </View>
+
+                          {/* IMAGE MATCH */}
+
+                          {imageSearchActive &&
+                            flower.similarityPercentage !==
+                              undefined && (
+                              <View
+                                style={
+                                  styles.similarityBadge
+                                }
+                              >
+                                <Ionicons
+                                  name="sparkles-outline"
+                                  size={9}
+                                  color="#D95E8A"
+                                />
+
+                                <Text
+                                  style={
+                                    styles.similarityText
+                                  }
+                                >
+                                  {flower.similarityPercentage}%
+                                  {' '}
+                                  match
+                                </Text>
+                              </View>
+                            )}
                         </View>
 
                         {/* PRODUCT INFO */}
@@ -1541,7 +1983,7 @@ export default function CustomerDiscoverScreen() {
                                 styles.productPrice
                               }
                             >
-                              {formatPrice(
+                              {formatFlowerPrice(
                                 flower.price
                               )}
                             </Text>
@@ -1609,7 +2051,7 @@ export default function CustomerDiscoverScreen() {
             </Text>
           </Pressable>
 
-          {/* DISCOVER ACTIVE */}
+          {/* DISCOVER */}
 
           <Pressable
             style={
@@ -2031,8 +2473,8 @@ export default function CustomerDiscoverScreen() {
                   style={
                     styles.resetButton
                   }
-                  onPress={
-                    handleResetFilters
+                  onPress={() =>
+                    void handleResetFilters()
                   }
                 >
                   <Text
@@ -2048,8 +2490,8 @@ export default function CustomerDiscoverScreen() {
                   style={
                     styles.applyButton
                   }
-                  onPress={
-                    handleApplyAdvancedFilters
+                  onPress={() =>
+                    void handleApplyAdvancedFilters()
                   }
                 >
                   <Text
@@ -2133,6 +2575,38 @@ const styles =
       fontSize: 10,
     },
 
+    imageSearchingCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor:
+        '#FFF7FA',
+      borderWidth: 1,
+      borderColor:
+        '#F4DDE6',
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      gap: 12,
+      marginBottom: 14,
+    },
+
+    imageSearchingInfo: {
+      flex: 1,
+    },
+
+    imageSearchingTitle: {
+      color: '#4B4146',
+      fontSize: 11,
+      fontWeight: '800',
+    },
+
+    imageSearchingText: {
+      color: '#9A8F95',
+      fontSize: 9,
+      lineHeight: 13,
+      marginTop: 2,
+    },
+
     /*
      * =======================================================
      * HEADER
@@ -2193,6 +2667,11 @@ const styles =
 
     cameraButton: {
       marginLeft: 8,
+      minWidth: 24,
+      minHeight: 24,
+      alignItems: 'center',
+      justifyContent:
+        'center',
     },
 
     filterButton: {
@@ -2290,7 +2769,7 @@ const styles =
 
     /*
      * =======================================================
-     * OCCASIONS
+     * OCCASION
      * =======================================================
      */
 
@@ -2365,6 +2844,71 @@ const styles =
 
     /*
      * =======================================================
+     * IMAGE SEARCH
+     * =======================================================
+     */
+
+    imageSearchCard: {
+      marginTop: 6,
+      marginBottom: 8,
+      padding: 12,
+      borderRadius: 18,
+      backgroundColor:
+        '#FFF7FA',
+      borderWidth: 1,
+      borderColor:
+        '#F4DDE6',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+
+    imageSearchPreview: {
+      width: 72,
+      height: 72,
+      borderRadius: 14,
+      backgroundColor:
+        '#F1ECEE',
+    },
+
+    imageSearchInfo: {
+      flex: 1,
+    },
+
+    imageSearchEyebrow: {
+      fontSize: 8,
+      fontWeight: '800',
+      letterSpacing: 0.9,
+      color: '#D95E8A',
+      marginBottom: 3,
+    },
+
+    imageSearchTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: '#3F383B',
+    },
+
+    imageSearchDescription: {
+      marginTop: 3,
+      fontSize: 9,
+      lineHeight: 13,
+      color: '#8A8185',
+    },
+
+    imageSearchClose: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent:
+        'center',
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    /*
+     * =======================================================
      * RESULTS
      * =======================================================
      */
@@ -2398,7 +2942,7 @@ const styles =
 
     /*
      * =======================================================
-     * PRODUCTS
+     * PRODUCT GRID
      * =======================================================
      */
 
@@ -2485,6 +3029,26 @@ const styles =
       color: '#627066',
       fontSize: 7,
       fontWeight: '700',
+    },
+
+    similarityBadge: {
+      position: 'absolute',
+      right: 8,
+      top: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      backgroundColor:
+        'rgba(255,255,255,0.94)',
+      borderRadius: 10,
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+    },
+
+    similarityText: {
+      color: '#B95779',
+      fontSize: 7,
+      fontWeight: '800',
     },
 
     productInfo: {
@@ -2680,7 +3244,7 @@ const styles =
     },
 
     modalBackdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor:
         'rgba(42,32,37,0.35)',
     },

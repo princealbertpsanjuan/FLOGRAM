@@ -26,64 +26,109 @@ app.use(morgan("dev"));
 
 /*
  * =========================================================
- * JSON BODY PARSER
+ * PAYMONGO RAW BODY HANDLING
  * =========================================================
  *
- * IMPORTANT FOR PAYMONGO:
+ * PayMongo webhook signatures must be verified against
+ * the EXACT bytes received from PayMongo.
  *
- * PayMongo webhook signatures must be verified
- * against the ORIGINAL raw request body.
+ * Only these two routes use express.raw().
  *
- * The verify callback runs before express.json()
- * converts the request into a JavaScript object.
- *
- * FLOGRAM currently has two PayMongo webhook routes:
- *
- * 1. Legacy / single-order payment webhook
- *    /api/v1/payments/webhook/paymongo
- *
- * 2. Grouped / cart checkout webhook
- *    /api/v1/checkout/webhook/paymongo
- *
- * Both must preserve the original raw JSON bytes.
+ * All other FLOGRAM routes continue using express.json().
  * =========================================================
  */
-app.use(
+
+const payMongoWebhookPaths = [
+  "/api/v1/payments/webhook/paymongo",
+  "/api/v1/checkout/webhook/paymongo",
+];
+
+/*
+ * IMPORTANT:
+ *
+ * type: () => true
+ *
+ * forces Express to preserve the request as a Buffer
+ * regardless of PayMongo's Content-Type header.
+ *
+ * This is safe here because this parser is only executed
+ * for the two exact webhook paths above.
+ */
+const payMongoRawParser =
+  express.raw({
+    type: () => true,
+    limit: "10mb",
+  });
+
+const normalJsonParser =
   express.json({
     limit: "10mb",
+  });
 
-    verify: (
+app.use(
+  (
+    req,
+    res,
+    next
+  ) => {
+    const requestPath =
+      String(
+        req.originalUrl || ""
+      ).split("?")[0];
+
+    const isPayMongoWebhook =
+      payMongoWebhookPaths.includes(
+        requestPath
+      );
+
+    if (
+      isPayMongoWebhook
+    ) {
+      return payMongoRawParser(
+        req,
+        res,
+        (
+          error
+        ) => {
+          if (error) {
+            return next(
+              error
+            );
+          }
+
+          /*
+           * express.raw() should now make
+           * req.body a Buffer.
+           */
+          if (
+            Buffer.isBuffer(
+              req.body
+            )
+          ) {
+            req.rawBody =
+              Buffer.from(
+                req.body
+              );
+          }
+
+          return next();
+        }
+      );
+    }
+
+    return normalJsonParser(
       req,
       res,
-      buffer
-    ) => {
-      const payMongoWebhookPaths = [
-        "/api/v1/payments/webhook/paymongo",
-        "/api/v1/checkout/webhook/paymongo",
-      ];
-
-      /*
-       * originalUrl may include a query string,
-       * so compare only the pathname portion.
-       */
-      const requestPath =
-        String(
-          req.originalUrl || ""
-        ).split("?")[0];
-
-      if (
-        payMongoWebhookPaths.includes(
-          requestPath
-        )
-      ) {
-        req.rawBody =
-          Buffer.from(
-            buffer
-          );
-      }
-    },
-  })
+      next
+    );
+  }
 );
+
+/*
+ * =========================================================
+ * URL ENCODED BODY
+ * =========================================================
+ */
 
 app.use(
   express.urlencoded({
@@ -91,6 +136,12 @@ app.use(
     limit: "10mb",
   })
 );
+
+/*
+ * =========================================================
+ * COOKIES
+ * =========================================================
+ */
 
 app.use(
   cookieParser()
@@ -100,16 +151,8 @@ app.use(
  * =========================================================
  * SERVE UPLOADED FILES
  * =========================================================
- *
- * Example:
- *
- * uploads/flowers/example.jpg
- *
- * becomes:
- *
- * http://localhost:5000/uploads/flowers/example.jpg
- * =========================================================
  */
+
 app.use(
   "/uploads",
   express.static(
@@ -125,17 +168,21 @@ app.use(
  * ROOT
  * =========================================================
  */
+
 app.get(
   "/",
   (
     req,
     res
   ) => {
-    res.status(200).json({
-      success: true,
-      message:
-        "Welcome to the FLOGRAM API.",
-    });
+    return res
+      .status(200)
+      .json({
+        success: true,
+
+        message:
+          "Welcome to the FLOGRAM API.",
+      });
   }
 );
 
@@ -144,6 +191,7 @@ app.get(
  * API
  * =========================================================
  */
+
 app.use(
   "/api/v1",
   apiRouter
@@ -153,10 +201,8 @@ app.use(
  * =========================================================
  * ERROR HANDLING
  * =========================================================
- *
- * These must stay after all valid routes.
- * =========================================================
  */
+
 app.use(
   notFound
 );

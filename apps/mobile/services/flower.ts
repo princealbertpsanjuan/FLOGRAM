@@ -1,4 +1,8 @@
 import {
+  File,
+} from 'expo-file-system';
+
+import {
   apiRequest,
 } from './api';
 
@@ -66,6 +70,17 @@ export type FlowerListing = {
   createdAt: string;
 
   updatedAt: string;
+
+  /*
+   * Image-search results only.
+   *
+   * Normal GET /flowers responses
+   * do not need these values.
+   */
+
+  similarity?: number;
+
+  similarityPercentage?: number;
 };
 
 /*
@@ -92,7 +107,17 @@ export type FlowerFilters = {
 
 /*
  * =========================================================
- * API RESPONSE
+ * IMAGE SEARCH IMAGE
+ * =========================================================
+ */
+
+export type FlowerImageSearchImage = {
+  uri: string;
+};
+
+/*
+ * =========================================================
+ * PUBLIC FLOWERS RESPONSE
  * =========================================================
  */
 
@@ -108,6 +133,12 @@ type PublicFlowersResponse = {
   };
 };
 
+/*
+ * =========================================================
+ * SINGLE FLOWER RESPONSE
+ * =========================================================
+ */
+
 type FlowerResponse = {
   success: boolean;
 
@@ -115,6 +146,26 @@ type FlowerResponse = {
 
   data: {
     flower: FlowerListing;
+  };
+};
+
+/*
+ * =========================================================
+ * IMAGE SEARCH RESPONSE
+ * =========================================================
+ */
+
+type FlowerImageSearchResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    model: string;
+
+    count: number;
+
+    flowers: FlowerListing[];
   };
 };
 
@@ -130,12 +181,20 @@ const buildFlowerQuery = (
   const params =
     new URLSearchParams();
 
+  /*
+   * SEARCH
+   */
+
   if (filters.search?.trim()) {
     params.append(
       'search',
       filters.search.trim()
     );
   }
+
+  /*
+   * CATEGORY
+   */
 
   if (filters.category?.trim()) {
     params.append(
@@ -144,12 +203,20 @@ const buildFlowerQuery = (
     );
   }
 
+  /*
+   * OCCASION
+   */
+
   if (filters.occasion?.trim()) {
     params.append(
       'occasion',
       filters.occasion.trim()
     );
   }
+
+  /*
+   * FLOWER TYPE
+   */
 
   if (filters.flowerType?.trim()) {
     params.append(
@@ -158,6 +225,10 @@ const buildFlowerQuery = (
     );
   }
 
+  /*
+   * COLOR
+   */
+
   if (filters.color?.trim()) {
     params.append(
       'color',
@@ -165,21 +236,33 @@ const buildFlowerQuery = (
     );
   }
 
+  /*
+   * MINIMUM PRICE
+   */
+
   if (
     filters.minPrice !== undefined
   ) {
     params.append(
       'minPrice',
-      String(filters.minPrice)
+      String(
+        filters.minPrice
+      )
     );
   }
+
+  /*
+   * MAXIMUM PRICE
+   */
 
   if (
     filters.maxPrice !== undefined
   ) {
     params.append(
       'maxPrice',
-      String(filters.maxPrice)
+      String(
+        filters.maxPrice
+      )
     );
   }
 
@@ -195,6 +278,20 @@ const buildFlowerQuery = (
  * =========================================================
  * GET ALL PUBLIC / AVAILABLE FLOWERS
  * =========================================================
+ *
+ * GET
+ * /api/v1/flowers
+ *
+ * Supported filters:
+ *
+ * search
+ * category
+ * occasion
+ * flowerType
+ * color
+ * minPrice
+ * maxPrice
+ * =========================================================
  */
 
 export const getPublicFlowers =
@@ -202,7 +299,9 @@ export const getPublicFlowers =
     filters: FlowerFilters = {}
   ) => {
     const query =
-      buildFlowerQuery(filters);
+      buildFlowerQuery(
+        filters
+      );
 
     const response =
       await apiRequest<PublicFlowersResponse>(
@@ -219,22 +318,167 @@ export const getPublicFlowers =
  * =========================================================
  * GET ONE PUBLIC FLOWER
  * =========================================================
+ *
+ * GET
+ * /api/v1/flowers/:flowerId
+ * =========================================================
  */
 
 export const getFlowerById =
   async (
     flowerId: string
   ) => {
+    if (!flowerId?.trim()) {
+      throw new Error(
+        'Flower ID is required.'
+      );
+    }
+
     const response =
       await apiRequest<FlowerResponse>(
-        `/flowers/${flowerId}`,
+        `/flowers/${encodeURIComponent(
+          flowerId.trim()
+        )}`,
         {
           method: 'GET',
         }
       );
 
-    return response.data
+    return response
+      .data
       .flower;
+  };
+
+/*
+ * =========================================================
+ * SEARCH FLOWERS BY IMAGE
+ * =========================================================
+ *
+ * POST
+ * /api/v1/flowers/image-search
+ *
+ * Content-Type:
+ * multipart/form-data
+ *
+ * Required backend field:
+ *
+ * image
+ *
+ * Backend:
+ *
+ * Customer image
+ *      ↓
+ * AI image embedding
+ *      ↓
+ * Compare with Flower.imageEmbedding
+ *      ↓
+ * Rank by cosine similarity
+ *      ↓
+ * Return similar bouquets
+ *
+ * IMPORTANT:
+ *
+ * Expo SDK 57 uses a real File object
+ * for multipart file uploads.
+ *
+ * Do NOT use:
+ *
+ * {
+ *   uri,
+ *   name,
+ *   type
+ * }
+ *
+ * because that may produce:
+ *
+ * Unsupported FormDataPart implementation
+ *
+ * Also do NOT manually set:
+ *
+ * Content-Type: multipart/form-data
+ *
+ * fetch must generate the multipart
+ * boundary automatically.
+ * =========================================================
+ */
+
+export const searchFlowersByImage =
+  async (
+    image: FlowerImageSearchImage,
+    limit = 10
+  ) => {
+    const imageUri =
+      image.uri?.trim();
+
+    if (!imageUri) {
+      throw new Error(
+        'Search image is required.'
+      );
+    }
+
+    /*
+     * -----------------------------------------------------
+     * SAFE RESULT LIMIT
+     * -----------------------------------------------------
+     */
+
+    const safeLimit =
+      Math.min(
+        Math.max(
+          Number(limit) || 10,
+          1
+        ),
+        20
+      );
+
+    /*
+     * -----------------------------------------------------
+     * MULTIPART DATA
+     * -----------------------------------------------------
+     */
+
+    const formData =
+      new FormData();
+
+    /*
+     * -----------------------------------------------------
+     * EXPO FILE
+     * -----------------------------------------------------
+     */
+
+    const imageFile =
+      new File(
+        imageUri
+      );
+
+    /*
+     * Must match the backend:
+     *
+     * flowerUpload.single("image")
+     */
+
+    formData.append(
+      'image',
+      imageFile
+    );
+
+    /*
+     * -----------------------------------------------------
+     * REQUEST
+     * -----------------------------------------------------
+     */
+
+    const response =
+      await apiRequest<FlowerImageSearchResponse>(
+        `/flowers/image-search?limit=${safeLimit}`,
+        {
+          method: 'POST',
+
+          body: formData,
+        }
+      );
+
+    return response.data;
   };
 
 /*
@@ -267,6 +511,7 @@ export const getFlowerImageUrl = (
   /*
    * Already a complete remote URL.
    */
+
   if (
     imagePath.startsWith(
       'http://'
@@ -287,13 +532,14 @@ export const getFlowerImageUrl = (
   }
 
   /*
-   * Removes:
+   * Remove:
    *
    * /api/v1
    *
-   * so the static /uploads route
-   * can be reached correctly.
+   * so static /uploads can be
+   * requested directly.
    */
+
   const serverUrl =
     apiUrl.replace(
       /\/api\/v1\/?$/,
@@ -317,7 +563,9 @@ export const getFlowerImageUrl = (
 export const formatFlowerPrice = (
   price: number
 ) => {
-  return `₱${price.toLocaleString(
+  return `₱${Number(
+    price || 0
+  ).toLocaleString(
     'en-PH'
   )}`;
 };

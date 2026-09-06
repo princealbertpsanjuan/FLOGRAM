@@ -2669,7 +2669,7 @@ const styles =
     },
 
     unavailableOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
 
       backgroundColor:
         "rgba(70, 55, 58, 0.38)",

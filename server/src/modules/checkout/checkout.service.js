@@ -2825,10 +2825,10 @@ export const createCheckoutPayMongoSession =
  */
 
 export const processCheckoutPayMongoWebhook =
-  async (
+  async ({
     rawBody,
-    signatureHeader
-  ) => {
+    signatureHeader,
+  }) => {
     /*
      * =====================================================
      * VERIFY SIGNATURE

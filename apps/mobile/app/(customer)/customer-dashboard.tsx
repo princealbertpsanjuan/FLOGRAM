@@ -1,13 +1,13 @@
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import {
   useCallback,
   useEffect,
   useMemo,
   useState,
-} from 'react';
-
+} from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -17,22 +17,33 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
+} from "react-native";
 
-import { router } from 'expo-router';
-
-import { Ionicons } from '@expo/vector-icons';
-
-import { apiRequest } from '../../services/api';
+import { apiRequest } from "../../services/api";
 
 import {
   getStoredUser,
   type AuthUser,
-} from '../../services/auth';
+} from "../../services/auth";
 
 import {
   getNotifications,
-} from '../../services/notification';
+} from "../../services/notification";
+
+import {
+  getMyCheckouts,
+  type CustomerCheckout,
+} from "../../services/checkout";
+
+import {
+  getMyOrders,
+  type CustomerOrder,
+} from "../../services/orders";
+
+import {
+  getCustomerDeliveries,
+  type Delivery,
+} from "../../services/delivery";
 
 /*
  * =========================================================
@@ -56,31 +67,76 @@ type FlowerFlorist = {
 
 type FlowerListing = {
   _id: string;
+
   seller: string;
-  florist: FlowerFlorist | null;
+
+  florist:
+    | FlowerFlorist
+    | null;
+
   name: string;
+
   description: string;
+
   price: number;
+
   category: string;
+
   occasion: string[];
+
   flowerTypes: string[];
+
   colors: string[];
+
   images: string[];
+
   isAvailable: boolean;
+
   isActive: boolean;
+
   createdAt: string;
+
   updatedAt: string;
 };
 
 type PublicFlowersResponse = {
   success: boolean;
+
   message: string;
 
   data: {
     count: number;
-    flowers: FlowerListing[];
+
+    flowers:
+      FlowerListing[];
   };
 };
+
+type PurchaseEntry =
+  | {
+      kind:
+        "checkout";
+
+      id: string;
+
+      createdAt:
+        string;
+
+      checkout:
+        CustomerCheckout;
+    }
+  | {
+      kind:
+        "order";
+
+      id: string;
+
+      createdAt:
+        string;
+
+      order:
+        CustomerOrder;
+    };
 
 /*
  * =========================================================
@@ -89,33 +145,48 @@ type PublicFlowersResponse = {
  */
 
 const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? '';
+  process.env
+    .EXPO_PUBLIC_API_URL ??
+  "";
 
-const DEFAULT_PRODUCT_LIMIT = 4;
+const DEFAULT_PRODUCT_LIMIT =
+  4;
 
 /*
  * =========================================================
- * HELPERS
+ * SERVER URL
  * =========================================================
  */
 
 const getServerUrl = () => {
   return API_URL.replace(
     /\/api\/v1\/?$/,
-    ''
+    ""
   );
 };
 
+/*
+ * =========================================================
+ * IMAGE
+ * =========================================================
+ */
+
 const getImageUrl = (
-  imagePath?: string | null
+  imagePath?:
+    | string
+    | null
 ) => {
   if (!imagePath) {
     return null;
   }
 
   if (
-    imagePath.startsWith('http://') ||
-    imagePath.startsWith('https://')
+    imagePath.startsWith(
+      "http://"
+    ) ||
+    imagePath.startsWith(
+      "https://"
+    )
   ) {
     return imagePath;
   }
@@ -124,39 +195,249 @@ const getImageUrl = (
     getServerUrl();
 
   const normalizedPath =
-    imagePath.startsWith('/')
+    imagePath.startsWith("/")
       ? imagePath
       : `/${imagePath}`;
 
   return `${serverUrl}${normalizedPath}`;
 };
 
+/*
+ * =========================================================
+ * MONEY
+ * =========================================================
+ */
+
 const formatPrice = (
   price: number
 ) => {
-  return `₱${price.toLocaleString(
-    'en-PH',
+  return `₱${Number(
+    price || 0
+  ).toLocaleString(
+    "en-PH",
     {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
+      minimumFractionDigits:
+        0,
+
+      maximumFractionDigits:
+        2,
     }
   )}`;
 };
+
+/*
+ * =========================================================
+ * STATUS
+ * =========================================================
+ */
+
+const formatStatus = (
+  status?:
+    | string
+    | null
+) => {
+  if (!status) {
+    return "Pending";
+  }
+
+  return status
+    .replace(
+      /_/g,
+      " "
+    )
+    .replace(
+      /\b\w/g,
+      (letter) =>
+        letter.toUpperCase()
+    );
+};
+
+const getOrderStatusMeta = (
+  status?:
+    | string
+    | null
+) => {
+  switch (status) {
+    case "pending":
+      return {
+        label:
+          "Pending",
+
+        icon:
+          "time-outline" as const,
+
+        background:
+          "#FFF5DD",
+
+        foreground:
+          "#A67118",
+      };
+
+    case "confirmed":
+      return {
+        label:
+          "Confirmed",
+
+        icon:
+          "checkmark-circle-outline" as const,
+
+        background:
+          "#EDF4FF",
+
+        foreground:
+          "#4676AD",
+      };
+
+    case "preparing":
+      return {
+        label:
+          "Preparing",
+
+        icon:
+          "flower-outline" as const,
+
+        background:
+          "#F3EDFC",
+
+        foreground:
+          "#7955A5",
+      };
+
+    case "ready_for_delivery":
+      return {
+        label:
+          "Ready for Delivery",
+
+        icon:
+          "bicycle-outline" as const,
+
+        background:
+          "#EAF7F3",
+
+        foreground:
+          "#398474",
+      };
+
+    case "ready_for_pickup":
+      return {
+        label:
+          "Ready for Pickup",
+
+        icon:
+          "storefront-outline" as const,
+
+        background:
+          "#EAF7F3",
+
+        foreground:
+          "#398474",
+      };
+
+    case "out_for_delivery":
+      return {
+        label:
+          "Out for Delivery",
+
+        icon:
+          "navigate-outline" as const,
+
+        background:
+          "#EAF2FF",
+
+        foreground:
+          "#4473A8",
+      };
+
+    case "delivered":
+      return {
+        label:
+          "Delivered",
+
+        icon:
+          "checkmark-circle-outline" as const,
+
+        background:
+          "#EBF7ED",
+
+        foreground:
+          "#438351",
+      };
+
+    case "completed":
+      return {
+        label:
+          "Completed",
+
+        icon:
+          "checkmark-done-circle-outline" as const,
+
+        background:
+          "#EBF7ED",
+
+        foreground:
+          "#438351",
+      };
+
+    case "cancelled":
+      return {
+        label:
+          "Cancelled",
+
+        icon:
+          "close-circle-outline" as const,
+
+        background:
+          "#FDECEE",
+
+        foreground:
+          "#B7515E",
+      };
+
+    default:
+      return {
+        label:
+          formatStatus(
+            status
+          ),
+
+        icon:
+          "information-circle-outline" as const,
+
+        background:
+          "#F2EEEE",
+
+        foreground:
+          "#706867",
+      };
+  }
+};
+
+/*
+ * =========================================================
+ * GREETING
+ * =========================================================
+ */
 
 const getGreeting = () => {
   const hour =
     new Date().getHours();
 
   if (hour < 12) {
-    return 'Good morning';
+    return "Good morning";
   }
 
   if (hour < 18) {
-    return 'Good afternoon';
+    return "Good afternoon";
   }
 
-  return 'Good evening';
+  return "Good evening";
 };
+
+/*
+ * =========================================================
+ * OCCASION
+ * =========================================================
+ */
 
 const getOccasionIcon = (
   occasion: string
@@ -165,38 +446,52 @@ const getOccasionIcon = (
     occasion.toLowerCase();
 
   if (
-    value.includes('birthday')
+    value.includes(
+      "birthday"
+    )
   ) {
-    return 'gift-outline';
+    return "gift-outline";
   }
 
   if (
-    value.includes('valentine') ||
-    value.includes('anniversary') ||
-    value.includes('romance')
+    value.includes(
+      "valentine"
+    ) ||
+    value.includes(
+      "anniversary"
+    ) ||
+    value.includes(
+      "romance"
+    )
   ) {
-    return 'heart-outline';
+    return "heart-outline";
   }
 
   if (
-    value.includes('wedding')
+    value.includes(
+      "wedding"
+    )
   ) {
-    return 'flower-outline';
+    return "flower-outline";
   }
 
   if (
-    value.includes('sympathy')
+    value.includes(
+      "sympathy"
+    )
   ) {
-    return 'leaf-outline';
+    return "leaf-outline";
   }
 
   if (
-    value.includes('congratulation')
+    value.includes(
+      "congratulation"
+    )
   ) {
-    return 'ribbon-outline';
+    return "ribbon-outline";
   }
 
-  return 'flower-outline';
+  return "flower-outline";
 };
 
 const pluralizeFlowerType = (
@@ -205,12 +500,362 @@ const pluralizeFlowerType = (
   if (
     value
       .toLowerCase()
-      .endsWith('s')
+      .endsWith("s")
   ) {
     return value;
   }
 
   return `${value}s`;
+};
+
+/*
+ * =========================================================
+ * PURCHASE HELPERS
+ * =========================================================
+ */
+
+const getCheckoutOrderId = (
+  order:
+    | unknown
+    | string
+) => {
+  if (
+    typeof order ===
+    "string"
+  ) {
+    return order;
+  }
+
+  if (
+    order &&
+    typeof order ===
+      "object" &&
+    "_id" in order
+  ) {
+    const value =
+      (
+        order as {
+          _id?: unknown;
+        }
+      )._id;
+
+    return typeof value ===
+      "string"
+      ? value
+      : "";
+  }
+
+  return "";
+};
+
+const getCheckoutOrderStatus = (
+  order:
+    | unknown
+    | string
+) => {
+  if (
+    !order ||
+    typeof order !==
+      "object" ||
+    !(
+      "orderStatus" in
+      order
+    )
+  ) {
+    return "";
+  }
+
+  const value =
+    (
+      order as {
+        orderStatus?:
+          unknown;
+      }
+    ).orderStatus;
+
+  return typeof value ===
+    "string"
+      ? value
+      : "";
+};
+
+const getCheckoutCategory = (
+  checkout:
+    CustomerCheckout
+) => {
+  const statuses =
+    (
+      checkout.orders ||
+      []
+    )
+      .map(
+        getCheckoutOrderStatus
+      )
+      .filter(Boolean);
+
+  if (
+    statuses.length ===
+    0
+  ) {
+    if (
+      checkout.checkoutStatus ===
+        "cancelled" ||
+      checkout.checkoutStatus ===
+        "failed"
+    ) {
+      return "cancelled";
+    }
+
+    if (
+      checkout.checkoutStatus ===
+        "completed"
+    ) {
+      return "completed";
+    }
+
+    return "active";
+  }
+
+  const allCancelled =
+    statuses.every(
+      (status) =>
+        status ===
+        "cancelled"
+    );
+
+  if (allCancelled) {
+    return "cancelled";
+  }
+
+  const nonCancelled =
+    statuses.filter(
+      (status) =>
+        status !==
+        "cancelled"
+    );
+
+  const allCompleted =
+    nonCancelled.length >
+      0 &&
+    nonCancelled.every(
+      (status) =>
+        status ===
+        "completed"
+    );
+
+  if (allCompleted) {
+    return "completed";
+  }
+
+  return "active";
+};
+
+const getCheckoutDisplayStatus = (
+  checkout:
+    CustomerCheckout
+) => {
+  const statuses =
+    (
+      checkout.orders ||
+      []
+    )
+      .map(
+        getCheckoutOrderStatus
+      )
+      .filter(Boolean);
+
+  if (
+    statuses.length ===
+    0
+  ) {
+    return formatStatus(
+      checkout.checkoutStatus
+    );
+  }
+
+  if (
+    statuses.some(
+      (status) =>
+        status ===
+        "out_for_delivery"
+    )
+  ) {
+    return "Out for Delivery";
+  }
+
+  if (
+    statuses.some(
+      (status) =>
+        status ===
+        "ready_for_delivery"
+    )
+  ) {
+    return "Ready for Delivery";
+  }
+
+  if (
+    statuses.some(
+      (status) =>
+        status ===
+        "ready_for_pickup"
+    )
+  ) {
+    return "Ready for Pickup";
+  }
+
+  if (
+    statuses.some(
+      (status) =>
+        status ===
+        "preparing"
+    )
+  ) {
+    return "Preparing";
+  }
+
+  if (
+    statuses.some(
+      (status) =>
+        status ===
+        "confirmed"
+    )
+  ) {
+    return "Confirmed";
+  }
+
+  if (
+    statuses.some(
+      (status) =>
+        status ===
+        "pending"
+    )
+  ) {
+    return "Pending";
+  }
+
+  if (
+    statuses.some(
+      (status) =>
+        status ===
+        "delivered"
+    )
+  ) {
+    return "Delivered";
+  }
+
+  if (
+    statuses.every(
+      (status) =>
+        status ===
+        "completed"
+    )
+  ) {
+    return "Completed";
+  }
+
+  if (
+    statuses.every(
+      (status) =>
+        status ===
+        "cancelled"
+    )
+  ) {
+    return "Cancelled";
+  }
+
+  return "Active";
+};
+
+const getCheckoutPrimaryOrderStatus =
+  (
+    checkout:
+      CustomerCheckout
+  ) => {
+    const statuses =
+      (
+        checkout.orders ||
+        []
+      )
+        .map(
+          getCheckoutOrderStatus
+        )
+        .filter(Boolean);
+
+    const priority = [
+      "out_for_delivery",
+
+      "ready_for_delivery",
+
+      "ready_for_pickup",
+
+      "preparing",
+
+      "confirmed",
+
+      "pending",
+
+      "delivered",
+
+      "completed",
+
+      "cancelled",
+    ];
+
+    for (
+      const status of
+        priority
+    ) {
+      if (
+        statuses.includes(
+          status
+        )
+      ) {
+        return status;
+      }
+    }
+
+    return checkout.checkoutStatus;
+  };
+
+const getOrderCategory = (
+  order: CustomerOrder
+) => {
+  if (
+    order.orderStatus ===
+    "cancelled"
+  ) {
+    return "cancelled";
+  }
+
+  /*
+   * Delivered deliberately remains active
+   * until the customer confirms receipt and
+   * the Order becomes completed.
+   */
+  if (
+    order.orderStatus ===
+    "completed"
+  ) {
+    return "completed";
+  }
+
+  return "active";
+};
+
+const getDeliveryOrderId = (
+  delivery: Delivery
+) => {
+  if (
+    typeof delivery.order ===
+    "string"
+  ) {
+    return delivery.order;
+  }
+
+  return (
+    delivery.order?._id ||
+    ""
+  );
 };
 
 /*
@@ -245,6 +890,33 @@ export default function CustomerDashboardScreen() {
     );
 
   const [
+    checkouts,
+    setCheckouts,
+  ] =
+    useState<
+      CustomerCheckout[]
+    >([]);
+
+  const [
+    customerOrders,
+    setCustomerOrders,
+  ] =
+    useState<
+      CustomerOrder[]
+    >([]);
+
+  const [
+    deliveryByOrderId,
+    setDeliveryByOrderId,
+  ] =
+    useState<
+      Record<
+        string,
+        Delivery
+      >
+    >({});
+
+  const [
     unreadCount,
     setUnreadCount,
   ] =
@@ -266,73 +938,81 @@ export default function CustomerDashboardScreen() {
     error,
     setError,
   ] =
-    useState<string | null>(
-      null
-    );
+    useState<
+      string | null
+    >(null);
 
   const [
     search,
     setSearch,
   ] =
-    useState('');
+    useState("");
 
   const [
     selectedFlowerType,
     setSelectedFlowerType,
   ] =
-    useState('All');
+    useState("All");
 
   const [
     selectedOccasion,
     setSelectedOccasion,
   ] =
-    useState<string | null>(
-      null
-    );
+    useState<
+      string | null
+    >(null);
 
   /*
-   * =========================================================
+   * =======================================================
    * FETCH FLOWERS
-   * =========================================================
+   * =======================================================
    */
 
   const fetchFlowers =
     useCallback(
       async (
         options?: {
-          search?: string;
-          flowerType?: string;
-          occasion?: string;
+          search?:
+            string;
+
+          flowerType?:
+            string;
+
+          occasion?:
+            string;
         }
       ) => {
         const params =
           new URLSearchParams();
 
         if (
-          options?.search?.trim()
+          options?.search
+            ?.trim()
         ) {
           params.append(
-            'search',
+            "search",
             options.search.trim()
           );
         }
 
         if (
-          options?.flowerType &&
+          options
+            ?.flowerType &&
           options.flowerType !==
-            'All'
+            "All"
         ) {
           params.append(
-            'flowerType',
+            "flowerType",
             options.flowerType
           );
         }
 
         if (
-          options?.occasion
+          options
+            ?.occasion
         ) {
           params.append(
-            'occasion',
+            "occasion",
             options.occasion
           );
         }
@@ -344,48 +1024,199 @@ export default function CustomerDashboardScreen() {
           await apiRequest<PublicFlowersResponse>(
             query
               ? `/flowers?${query}`
-              : '/flowers',
+              : "/flowers",
             {
-              method: 'GET',
+              method:
+                "GET",
             }
           );
 
-        return response.data.flowers;
+        return response
+          .data
+          .flowers;
       },
       []
     );
 
   /*
-   * =========================================================
+   * =======================================================
+   * LOAD PURCHASES
+   * =======================================================
+   */
+
+  const loadPurchases =
+    useCallback(
+      async () => {
+        /*
+         * Orders are important to Home,
+         * but they must not prevent flowers
+         * from loading if one endpoint fails.
+         */
+
+        try {
+          const [
+            checkoutData,
+            orderData,
+          ] =
+            await Promise.all(
+              [
+                getMyCheckouts(),
+
+                getMyOrders(),
+              ]
+            );
+
+          setCheckouts(
+            Array.isArray(
+              checkoutData
+            )
+              ? checkoutData
+              : []
+          );
+
+          setCustomerOrders(
+            Array.isArray(
+              orderData
+            )
+              ? orderData
+              : []
+          );
+        } catch (
+          purchaseError
+        ) {
+          console.warn(
+            "Unable to load current orders:",
+            purchaseError
+          );
+
+          setCheckouts(
+            []
+          );
+
+          setCustomerOrders(
+            []
+          );
+        }
+
+        /*
+         * Delivery lookup is separate so
+         * an unavailable delivery endpoint
+         * never breaks the dashboard.
+         */
+
+        try {
+          const result =
+            await getCustomerDeliveries();
+
+          const deliveries =
+            Array.isArray(
+              result.deliveries
+            )
+              ? result.deliveries
+              : [];
+
+          const lookup:
+            Record<
+              string,
+              Delivery
+            > = {};
+
+          deliveries.forEach(
+            (
+              delivery
+            ) => {
+              const orderId =
+                getDeliveryOrderId(
+                  delivery
+                );
+
+              if (
+                !orderId
+              ) {
+                return;
+              }
+
+              const existing =
+                lookup[
+                  orderId
+                ];
+
+              if (
+                !existing ||
+                existing.status ===
+                  "cancelled"
+              ) {
+                lookup[
+                  orderId
+                ] =
+                  delivery;
+              }
+            }
+          );
+
+          setDeliveryByOrderId(
+            lookup
+          );
+        } catch (
+          deliveryError
+        ) {
+          console.warn(
+            "Unable to load customer deliveries:",
+            deliveryError
+          );
+
+          setDeliveryByOrderId(
+            {}
+          );
+        }
+      },
+      []
+    );
+
+  /*
+   * =======================================================
    * LOAD HOME DATA
-   * =========================================================
+   * =======================================================
    */
 
   const loadHomeData =
     useCallback(
       async (
-        isRefresh = false
+        isRefresh =
+          false
       ) => {
         try {
-          if (isRefresh) {
-            setRefreshing(true);
+          if (
+            isRefresh
+          ) {
+            setRefreshing(
+              true
+            );
           } else {
-            setLoading(true);
+            setLoading(
+              true
+            );
           }
 
-          setError(null);
+          setError(
+            null
+          );
 
           /*
            * CUSTOMER
            */
+
           const storedUser =
             await getStoredUser();
 
-          setUser(storedUser);
+          setUser(
+            storedUser
+          );
 
           /*
            * FLOWERS
            */
+
           const flowerData =
             await fetchFlowers();
 
@@ -398,55 +1229,317 @@ export default function CustomerDashboardScreen() {
           );
 
           /*
-           * NOTIFICATIONS
-           *
-           * Failure here should not stop
-           * the entire Home page.
+           * CURRENT PURCHASE
            */
+
+          await loadPurchases();
+
+          /*
+           * NOTIFICATIONS
+           */
+
           try {
             const notificationData =
               await getNotifications();
 
             setUnreadCount(
-              notificationData.unreadCount
+              notificationData
+                .unreadCount
             );
           } catch (
             notificationError
           ) {
             console.warn(
-              'Unable to load notification count:',
+              "Unable to load notification count:",
               notificationError
             );
 
-            setUnreadCount(0);
+            setUnreadCount(
+              0
+            );
           }
-        } catch (loadError) {
+        } catch (
+          loadError
+        ) {
           console.error(
-            'Customer Home Error:',
+            "Customer Home Error:",
             loadError
           );
 
           setError(
-            loadError instanceof Error
+            loadError instanceof
+              Error
               ? loadError.message
-              : 'Unable to load flowers right now.'
+              : "Unable to load flowers right now."
           );
         } finally {
-          setLoading(false);
-          setRefreshing(false);
+          setLoading(
+            false
+          );
+
+          setRefreshing(
+            false
+          );
         }
       },
-      [fetchFlowers]
+      [
+        fetchFlowers,
+        loadPurchases,
+      ]
     );
 
   useEffect(() => {
-    loadHomeData();
+    void loadHomeData();
   }, [loadHomeData]);
 
   /*
-   * =========================================================
-   * REAL FLOWER TYPES
-   * =========================================================
+   * =======================================================
+   * PURCHASE DEDUPLICATION
+   * =======================================================
+   */
+
+  const groupedOrderIds =
+    useMemo(() => {
+      const ids =
+        new Set<string>();
+
+      checkouts.forEach(
+        (
+          checkout
+        ) => {
+          (
+            checkout.orders ||
+            []
+          ).forEach(
+            (order) => {
+              const id =
+                getCheckoutOrderId(
+                  order
+                );
+
+              if (id) {
+                ids.add(
+                  id
+                );
+              }
+            }
+          );
+
+          (
+            checkout.items ||
+            []
+          ).forEach(
+            (item) => {
+              const id =
+                getCheckoutOrderId(
+                  item.order
+                );
+
+              if (id) {
+                ids.add(
+                  id
+                );
+              }
+            }
+          );
+        }
+      );
+
+      return ids;
+    }, [
+      checkouts,
+    ]);
+
+  /*
+   * =======================================================
+   * CURRENT PURCHASE
+   * =======================================================
+   */
+
+  const currentPurchase =
+    useMemo<
+      PurchaseEntry | null
+    >(() => {
+      const entries:
+        PurchaseEntry[] =
+        [];
+
+      checkouts.forEach(
+        (
+          checkout
+        ) => {
+          if (
+            getCheckoutCategory(
+              checkout
+            ) !==
+            "active"
+          ) {
+            return;
+          }
+
+          entries.push({
+            kind:
+              "checkout",
+
+            id:
+              checkout._id,
+
+            createdAt:
+              checkout.createdAt ||
+              "",
+
+            checkout,
+          });
+        }
+      );
+
+      customerOrders.forEach(
+        (
+          order
+        ) => {
+          if (
+            groupedOrderIds.has(
+              order._id
+            )
+          ) {
+            return;
+          }
+
+          if (
+            getOrderCategory(
+              order
+            ) !==
+            "active"
+          ) {
+            return;
+          }
+
+          entries.push({
+            kind:
+              "order",
+
+            id:
+              order._id,
+
+            createdAt:
+              order.createdAt ||
+              "",
+
+            order,
+          });
+        }
+      );
+
+      entries.sort(
+        (
+          first,
+          second
+        ) =>
+          new Date(
+            second.createdAt
+          ).getTime() -
+          new Date(
+            first.createdAt
+          ).getTime()
+      );
+
+      return (
+        entries[0] ||
+        null
+      );
+    }, [
+      checkouts,
+      customerOrders,
+      groupedOrderIds,
+    ]);
+
+  /*
+   * =======================================================
+   * CURRENT PURCHASE DELIVERY
+   * =======================================================
+   */
+
+  const currentPurchaseDelivery =
+    useMemo<
+      Delivery | null
+    >(() => {
+      if (
+        !currentPurchase
+      ) {
+        return null;
+      }
+
+      if (
+        currentPurchase.kind ===
+        "order"
+      ) {
+        return (
+          deliveryByOrderId[
+            currentPurchase
+              .order._id
+          ] ||
+          null
+        );
+      }
+
+      const linkedDeliveries =
+        (
+          currentPurchase
+            .checkout
+            .orders ||
+          []
+        )
+          .map(
+            (order) => {
+              const id =
+                getCheckoutOrderId(
+                  order
+                );
+
+              return id
+                ? deliveryByOrderId[
+                    id
+                  ]
+                : undefined;
+            }
+          )
+          .filter(
+            (
+              delivery
+            ): delivery is Delivery =>
+              Boolean(
+                delivery &&
+                  delivery.status !==
+                    "cancelled"
+              )
+          );
+
+      /*
+       * Direct Track Delivery from the
+       * dashboard is only used when one
+       * child delivery is unambiguous.
+       *
+       * Multiple child deliveries must
+       * be chosen from Order Details.
+       */
+
+      if (
+        linkedDeliveries.length ===
+        1
+      ) {
+        return linkedDeliveries[0];
+      }
+
+      return null;
+    }, [
+      currentPurchase,
+      deliveryByOrderId,
+    ]);
+
+  /*
+   * =======================================================
+   * FLOWER TYPES
+   * =======================================================
    */
 
   const flowerTypes =
@@ -455,32 +1548,40 @@ export default function CustomerDashboardScreen() {
         marketplaceFlowers
           .flatMap(
             (flower) =>
-              flower.flowerTypes ??
+              flower
+                .flowerTypes ??
               []
           )
           .map(
             (type) =>
               type.trim()
           )
-          .filter(Boolean);
+          .filter(
+            Boolean
+          );
 
       const unique =
         Array.from(
-          new Set(values)
+          new Set(
+            values
+          )
         );
 
       return [
-        'All',
-        ...unique.slice(0, 5),
+        "All",
+        ...unique.slice(
+          0,
+          5
+        ),
       ];
     }, [
       marketplaceFlowers,
     ]);
 
   /*
-   * =========================================================
-   * REAL OCCASIONS
-   * =========================================================
+   * =======================================================
+   * OCCASIONS
+   * =======================================================
    */
 
   const occasions =
@@ -489,17 +1590,23 @@ export default function CustomerDashboardScreen() {
         marketplaceFlowers
           .flatMap(
             (flower) =>
-              flower.occasion ?? []
+              flower
+                .occasion ??
+              []
           )
           .map(
             (occasion) =>
               occasion.trim()
           )
-          .filter(Boolean);
+          .filter(
+            Boolean
+          );
 
       const unique =
         Array.from(
-          new Set(values)
+          new Set(
+            values
+          )
         );
 
       return unique.slice(
@@ -511,9 +1618,9 @@ export default function CustomerDashboardScreen() {
     ]);
 
   /*
-   * =========================================================
+   * =======================================================
    * DISPLAY DATA
-   * =========================================================
+   * =======================================================
    */
 
   const displayedFlowers =
@@ -524,184 +1631,607 @@ export default function CustomerDashboardScreen() {
 
   const firstName =
     user?.firstName ||
-    'Customer';
+    "Customer";
 
   const greeting =
     getGreeting();
 
   /*
-   * =========================================================
+   * =======================================================
    * SEARCH
-   * =========================================================
+   * =======================================================
    */
 
   const handleSearch =
-    async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    useCallback(
+      async () => {
+        try {
+          setLoading(
+            true
+          );
 
-        const result =
-          await fetchFlowers({
-            search,
+          setError(
+            null
+          );
 
-            flowerType:
-              selectedFlowerType,
+          const result =
+            await fetchFlowers({
+              search,
 
-            occasion:
-              selectedOccasion ??
-              undefined,
-          });
+              flowerType:
+                selectedFlowerType,
 
-        setFlowers(result);
-      } catch (
-        searchError
-      ) {
-        setError(
-          searchError instanceof Error
-            ? searchError.message
-            : 'Unable to search flowers.'
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+              occasion:
+                selectedOccasion ??
+                undefined,
+            });
+
+          setFlowers(
+            result
+          );
+        } catch (
+          searchError
+        ) {
+          setError(
+            searchError instanceof
+              Error
+              ? searchError.message
+              : "Unable to search flowers."
+          );
+        } finally {
+          setLoading(
+            false
+          );
+        }
+      },
+      [
+        fetchFlowers,
+        search,
+        selectedFlowerType,
+        selectedOccasion,
+      ]
+    );
 
   /*
-   * =========================================================
+   * =======================================================
+   * CLEAR SEARCH
+   * =======================================================
+   */
+
+  const handleClearSearch =
+    useCallback(
+      async () => {
+        try {
+          setSearch(
+            ""
+          );
+
+          setLoading(
+            true
+          );
+
+          setError(
+            null
+          );
+
+          const result =
+            await fetchFlowers({
+              flowerType:
+                selectedFlowerType,
+
+              occasion:
+                selectedOccasion ??
+                undefined,
+            });
+
+          setFlowers(
+            result
+          );
+        } catch (
+          clearError
+        ) {
+          setError(
+            clearError instanceof
+              Error
+              ? clearError.message
+              : "Unable to reset the search."
+          );
+        } finally {
+          setLoading(
+            false
+          );
+        }
+      },
+      [
+        fetchFlowers,
+        selectedFlowerType,
+        selectedOccasion,
+      ]
+    );
+
+  /*
+   * =======================================================
    * FLOWER TYPE FILTER
-   * =========================================================
+   * =======================================================
    */
 
   const handleFlowerType =
-    async (
-      flowerType: string
-    ) => {
-      try {
-        setSelectedFlowerType(
-          flowerType
-        );
+    useCallback(
+      async (
+        flowerType:
+          string
+      ) => {
+        try {
+          setSelectedFlowerType(
+            flowerType
+          );
 
-        setSelectedOccasion(
-          null
-        );
+          setSelectedOccasion(
+            null
+          );
 
-        setLoading(true);
-        setError(null);
+          setLoading(
+            true
+          );
 
-        const result =
-          await fetchFlowers({
-            search,
-            flowerType,
-          });
+          setError(
+            null
+          );
 
-        setFlowers(result);
-      } catch (
-        filterError
-      ) {
-        setError(
-          filterError instanceof Error
-            ? filterError.message
-            : 'Unable to filter flowers.'
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+          const result =
+            await fetchFlowers({
+              search,
+
+              flowerType,
+            });
+
+          setFlowers(
+            result
+          );
+        } catch (
+          filterError
+        ) {
+          setError(
+            filterError instanceof
+              Error
+              ? filterError.message
+              : "Unable to filter flowers."
+          );
+        } finally {
+          setLoading(
+            false
+          );
+        }
+      },
+      [
+        fetchFlowers,
+        search,
+      ]
+    );
 
   /*
-   * =========================================================
+   * =======================================================
    * OCCASION FILTER
-   * =========================================================
+   * =======================================================
    */
 
   const handleOccasion =
-    async (
-      occasion: string
-    ) => {
-      try {
-        setSelectedOccasion(
-          occasion
-        );
+    useCallback(
+      async (
+        occasion:
+          string
+      ) => {
+        try {
+          /*
+           * Pressing the selected occasion
+           * again resets that occasion.
+           */
 
-        setSelectedFlowerType(
-          'All'
-        );
+          if (
+            selectedOccasion ===
+            occasion
+          ) {
+            setSelectedOccasion(
+              null
+            );
 
-        setLoading(true);
-        setError(null);
+            setSelectedFlowerType(
+              "All"
+            );
 
-        const result =
-          await fetchFlowers({
-            search,
-            occasion,
-          });
+            setLoading(
+              true
+            );
 
-        setFlowers(result);
-      } catch (
-        filterError
-      ) {
-        setError(
-          filterError instanceof Error
-            ? filterError.message
-            : 'Unable to filter flowers.'
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+            const resetResult =
+              await fetchFlowers({
+                search,
+              });
 
-  /*
-   * =========================================================
-   * DISCOVER NAVIGATION
-   * =========================================================
-   */
+            setFlowers(
+              resetResult
+            );
 
-  const handleViewAll = () => {
-    router.push(
-      '/(customer)/customer-discover'
-    );
-  };
+            return;
+          }
 
-  /*
-   * =========================================================
-   * TEMPORARY FEATURES
-   * =========================================================
-   */
+          setSelectedOccasion(
+            occasion
+          );
 
-  const handleTemporaryNavigation = (
-    screen: string
-  ) => {
-    Alert.alert(
-      screen,
-      `${screen} will be connected when we implement that Customer feature.`
-    );
-  };
+          setSelectedFlowerType(
+            "All"
+          );
 
-  /*
-   * =========================================================
-   * PRODUCT DETAILS
-   * =========================================================
-   */
+          setLoading(
+            true
+          );
 
-  const handleFlowerPress = (
-    flower: FlowerListing
-  ) => {
-    router.push({
-      pathname:
-        '/(customer)/customer-product-details',
+          setError(
+            null
+          );
 
-      params: {
-        flowerId:
-          flower._id,
+          const result =
+            await fetchFlowers({
+              search,
+
+              occasion,
+            });
+
+          setFlowers(
+            result
+          );
+        } catch (
+          filterError
+        ) {
+          setError(
+            filterError instanceof
+              Error
+              ? filterError.message
+              : "Unable to filter flowers."
+          );
+        } finally {
+          setLoading(
+            false
+          );
+        }
       },
-    });
-  };
+      [
+        fetchFlowers,
+        search,
+        selectedOccasion,
+      ]
+    );
 
   /*
-   * =========================================================
+   * =======================================================
+   * NAVIGATION
+   * =======================================================
+   */
+
+  const handleViewAll =
+    useCallback(() => {
+      router.push(
+        "/(customer)/customer-discover"
+      );
+    }, []);
+
+const handleImageSearch =
+  useCallback(() => {
+    router.push(
+      "/(customer)/customer-discover?action=image-search"
+    );
+  }, []);
+
+const handleAdvancedFilters =
+  useCallback(() => {
+    router.push(
+      "/(customer)/customer-discover?action=filter"
+    );
+  }, []);
+
+const handleOrdersPress =
+  useCallback(() => {
+    router.push(
+      "/(customer)/customer-orders"
+    );
+  }, []);
+
+  /*
+   * =======================================================
+   * CURRENT PURCHASE NAVIGATION
+   * =======================================================
+   */
+
+  const handleCurrentPurchasePress =
+    useCallback(() => {
+      if (
+        !currentPurchase
+      ) {
+        handleOrdersPress();
+
+        return;
+      }
+
+      if (
+        currentPurchase.kind ===
+        "checkout"
+      ) {
+        router.push({
+          pathname:
+            "/(customer)/customer-order-details",
+
+          params: {
+            checkoutId:
+              currentPurchase
+                .checkout._id,
+          },
+        } as never);
+
+        return;
+      }
+
+      router.push({
+        pathname:
+          "/(customer)/customer-order-details",
+
+        params: {
+          orderId:
+            currentPurchase
+              .order._id,
+        },
+      } as never);
+    }, [
+      currentPurchase,
+      handleOrdersPress,
+    ]);
+
+  const handleTrackCurrentPurchase =
+    useCallback(() => {
+      if (
+        !currentPurchase ||
+        !currentPurchaseDelivery
+      ) {
+        handleCurrentPurchasePress();
+
+        return;
+      }
+
+      let linkedOrderId =
+        "";
+
+      if (
+        currentPurchase.kind ===
+        "order"
+      ) {
+        linkedOrderId =
+          currentPurchase
+            .order._id;
+      } else {
+        linkedOrderId =
+          getDeliveryOrderId(
+            currentPurchaseDelivery
+          );
+      }
+
+      router.push({
+        pathname:
+          "/(customer)/customer-tracking",
+
+        params: {
+          deliveryId:
+            currentPurchaseDelivery._id,
+
+          ...(linkedOrderId
+            ? {
+                orderId:
+                  linkedOrderId,
+              }
+            : {}),
+        },
+      } as never);
+    }, [
+      currentPurchase,
+      currentPurchaseDelivery,
+      handleCurrentPurchasePress,
+    ]);
+
+  /*
+   * =======================================================
+   * PRODUCT DETAILS
+   * =======================================================
+   */
+
+  const handleFlowerPress =
+    useCallback(
+      (
+        flower:
+          FlowerListing
+      ) => {
+        router.push({
+          pathname:
+            "/(customer)/customer-product-details",
+
+          params: {
+            flowerId:
+              flower._id,
+          },
+        });
+      },
+      []
+    );
+
+  /*
+   * =======================================================
+   * CURRENT PURCHASE PRESENTATION
+   * =======================================================
+   */
+
+  const currentPurchasePresentation =
+    useMemo(() => {
+      if (
+        !currentPurchase
+      ) {
+        return null;
+      }
+
+      if (
+        currentPurchase.kind ===
+        "order"
+      ) {
+        const order =
+          currentPurchase.order;
+
+        const status =
+          getOrderStatusMeta(
+            order.orderStatus
+          );
+
+        const floristName =
+          order.florist &&
+          typeof order.florist ===
+            "object"
+            ? order.florist
+                .shopName ||
+              "FLOGRAM Florist"
+            : "FLOGRAM Florist";
+
+        return {
+          title:
+            order.productName ||
+            "Flower Order",
+
+          subtitle:
+            floristName,
+
+          reference:
+            `#${order._id
+              .slice(-8)
+              .toUpperCase()}`,
+
+          status:
+            status.label,
+
+          statusIcon:
+            status.icon,
+
+          statusBackground:
+            status.background,
+
+          statusForeground:
+            status.foreground,
+
+          total:
+            Number(
+              order.totalAmount ||
+                0
+            ),
+
+          itemCount:
+            1,
+
+          orderCount:
+            1,
+
+          isGrouped:
+            false,
+
+          isDelivered:
+            order.orderStatus ===
+            "delivered",
+        };
+      }
+
+      const checkout =
+        currentPurchase.checkout;
+
+      const primaryStatus =
+        getCheckoutPrimaryOrderStatus(
+          checkout
+        );
+
+      const status =
+        getOrderStatusMeta(
+          primaryStatus
+        );
+
+      const firstItem =
+        checkout.items?.[0];
+
+      const title =
+        checkout.items.length >
+        1
+          ? `${firstItem?.productName || "Flower Order"} + ${
+              checkout.items.length -
+              1
+            } more`
+          : firstItem
+              ?.productName ||
+            "Flower Purchase";
+
+      return {
+        title,
+
+        subtitle:
+          checkout.shopBreakdown
+            ?.length ===
+          1
+            ? checkout
+                .shopBreakdown[0]
+                ?.shopName ||
+              "FLOGRAM Florist"
+            : `${checkout.shopBreakdown?.length || 0} florists`,
+
+        reference:
+          `#${checkout._id
+            .slice(-8)
+            .toUpperCase()}`,
+
+        status:
+          getCheckoutDisplayStatus(
+            checkout
+          ),
+
+        statusIcon:
+          status.icon,
+
+        statusBackground:
+          status.background,
+
+        statusForeground:
+          status.foreground,
+
+        total:
+          Number(
+            checkout.totalAmount ||
+              0
+          ),
+
+        itemCount:
+          checkout.items
+            ?.length ||
+          0,
+
+        orderCount:
+          checkout.orders
+            ?.length ||
+          0,
+
+        isGrouped:
+          true,
+
+        isDelivered:
+          primaryStatus ===
+          "delivered",
+      };
+    }, [
+      currentPurchase,
+    ]);
+
+  /*
+   * =======================================================
    * INITIAL LOADING
-   * =========================================================
+   * =======================================================
    */
 
   if (
@@ -733,17 +2263,21 @@ export default function CustomerDashboardScreen() {
   }
 
   /*
-   * =========================================================
+   * =======================================================
    * RENDER
-   * =========================================================
+   * =======================================================
    */
 
   return (
     <SafeAreaView
-      style={styles.container}
+      style={
+        styles.container
+      }
     >
       <View
-        style={styles.screen}
+        style={
+          styles.screen
+        }
       >
         <ScrollView
           style={
@@ -762,18 +2296,22 @@ export default function CustomerDashboardScreen() {
                 refreshing
               }
               onRefresh={() =>
-                loadHomeData(true)
+                void loadHomeData(
+                  true
+                )
               }
               tintColor="#E55B8E"
               colors={[
-                '#E55B8E',
+                "#E55B8E",
               ]}
             />
           }
         >
-          {/* ================================================
-              HEADER
-          ================================================ */}
+          {/*
+           * =====================================================
+           * HEADER
+           * =====================================================
+           */}
 
           <View
             style={
@@ -802,53 +2340,80 @@ export default function CustomerDashboardScreen() {
                   style={
                     styles.userName
                   }
-                  numberOfLines={1}
+                  numberOfLines={
+                    1
+                  }
                 >
-                  {firstName}
+                  {
+                    firstName
+                  }
                 </Text>
               </View>
 
-              <Pressable
+              <View
                 style={
-                  styles.headerIconButton
-                }
-                onPress={() =>
-                  router.push(
-                    '/(customer)/customer-notifications'
-                  )
+                  styles.headerActions
                 }
               >
-                <Ionicons
-                  name="notifications-outline"
-                  size={21}
-                  color="#DF628F"
-                />
+                <Pressable
+                  style={
+                    styles.headerIconButton
+                  }
+                  onPress={
+                    handleOrdersPress
+                  }
+                >
+                  <Ionicons
+                    name="receipt-outline"
+                    size={20}
+                    color="#DF628F"
+                  />
+                </Pressable>
 
-                {unreadCount >
-                  0 && (
-                  <View
-                    style={
-                      styles.notificationBadge
-                    }
-                  >
-                    <Text
+                <Pressable
+                  style={
+                    styles.headerIconButton
+                  }
+                  onPress={() =>
+                    router.push(
+                      "/(customer)/customer-notifications"
+                    )
+                  }
+                >
+                  <Ionicons
+                    name="notifications-outline"
+                    size={21}
+                    color="#DF628F"
+                  />
+
+                  {unreadCount >
+                  0 ? (
+                    <View
                       style={
-                        styles.notificationBadgeText
+                        styles.notificationBadge
                       }
                     >
-                      {unreadCount >
-                      99
-                        ? '99+'
-                        : unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
+                      <Text
+                        style={
+                          styles.notificationBadgeText
+                        }
+                      >
+                        {unreadCount >
+                        99
+                          ? "99+"
+                          : unreadCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </View>
             </View>
 
-            {/* ==============================================
-                SEARCH
-            ============================================== */}
+            {/*
+             * ===================================================
+             * SEARCH
+             * ===================================================
+             */}
 
             <View
               style={
@@ -872,22 +2437,24 @@ export default function CustomerDashboardScreen() {
                   }
                   placeholder="Search flowers, bouquets..."
                   placeholderTextColor="#B6AFB3"
-                  value={search}
+                  value={
+                    search
+                  }
                   onChangeText={
                     setSearch
                   }
                   returnKeyType="search"
-                  onSubmitEditing={
-                    handleSearch
+                  onSubmitEditing={() =>
+                    void handleSearch()
                   }
                 />
 
                 {search.length >
-                  0 && (
+                0 ? (
                   <Pressable
                     hitSlop={8}
                     onPress={() =>
-                      setSearch('')
+                      void handleClearSearch()
                     }
                   >
                     <Ionicons
@@ -896,17 +2463,15 @@ export default function CustomerDashboardScreen() {
                       color="#C8C1C5"
                     />
                   </Pressable>
-                )}
+                ) : null}
 
                 <Pressable
                   style={
                     styles.cameraButton
                   }
                   hitSlop={8}
-                  onPress={() =>
-                    handleTemporaryNavigation(
-                      'Image Search'
-                    )
+                  onPress={
+                    handleImageSearch
                   }
                 >
                   <Ionicons
@@ -921,10 +2486,8 @@ export default function CustomerDashboardScreen() {
                 style={
                   styles.filterButton
                 }
-                onPress={() =>
-                  handleTemporaryNavigation(
-                    'Advanced Filters'
-                  )
+                onPress={
+                  handleAdvancedFilters
                 }
               >
                 <Ionicons
@@ -936,9 +2499,11 @@ export default function CustomerDashboardScreen() {
             </View>
           </View>
 
-          {/* ================================================
-              HERO
-          ================================================ */}
+          {/*
+           * =====================================================
+           * HERO
+           * =====================================================
+           */}
 
           <View
             style={
@@ -976,7 +2541,8 @@ export default function CustomerDashboardScreen() {
                   styles.bannerTitle
                 }
               >
-                Say it with{'\n'}
+                Say it with
+                {"\n"}
                 Fresh Flowers
               </Text>
 
@@ -1017,12 +2583,350 @@ export default function CustomerDashboardScreen() {
             </View>
           </View>
 
-          {/* ================================================
-              FLOWER TYPES
-          ================================================ */}
+          {/*
+           * =====================================================
+           * CURRENT ORDER
+           * =====================================================
+           */}
+
+          <View
+            style={
+              styles.currentSectionHeader
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.currentSectionTitle
+                }
+              >
+                Current Order
+              </Text>
+
+              <Text
+                style={
+                  styles.currentSectionSubtitle
+                }
+              >
+                Your latest active
+                purchase
+              </Text>
+            </View>
+
+            <Pressable
+              hitSlop={8}
+              onPress={
+                handleOrdersPress
+              }
+            >
+              <Text
+                style={
+                  styles.viewAllText
+                }
+              >
+                My Orders
+              </Text>
+            </Pressable>
+          </View>
+
+          {currentPurchase &&
+          currentPurchasePresentation ? (
+            <View
+              style={
+                styles.currentOrderCard
+              }
+            >
+              <Pressable
+                style={
+                  styles.currentOrderMain
+                }
+                onPress={
+                  handleCurrentPurchasePress
+                }
+              >
+                <View
+                  style={
+                    styles.currentOrderTop
+                  }
+                >
+                  <View
+                    style={
+                      styles.currentOrderIcon
+                    }
+                  >
+                    <Ionicons
+                      name="bag-handle-outline"
+                      size={22}
+                      color="#DF5D8D"
+                    />
+                  </View>
+
+                  <View
+                    style={
+                      styles.currentOrderHeading
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.currentOrderReference
+                      }
+                    >
+                      {
+                        currentPurchasePresentation.reference
+                      }
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.currentOrderTitle
+                      }
+                      numberOfLines={
+                        2
+                      }
+                    >
+                      {
+                        currentPurchasePresentation.title
+                      }
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.currentOrderShop
+                      }
+                      numberOfLines={
+                        1
+                      }
+                    >
+                      {
+                        currentPurchasePresentation.subtitle
+                      }
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color="#BFB6BA"
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.currentOrderDivider
+                  }
+                />
+
+                <View
+                  style={
+                    styles.currentOrderMetaRow
+                  }
+                >
+                  <View
+                    style={[
+                      styles.currentStatusBadge,
+
+                      {
+                        backgroundColor:
+                          currentPurchasePresentation.statusBackground,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        currentPurchasePresentation.statusIcon
+                      }
+                      size={14}
+                      color={
+                        currentPurchasePresentation.statusForeground
+                      }
+                    />
+
+                    <Text
+                      style={[
+                        styles.currentStatusText,
+
+                        {
+                          color:
+                            currentPurchasePresentation.statusForeground,
+                        },
+                      ]}
+                    >
+                      {
+                        currentPurchasePresentation.status
+                      }
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={
+                      styles.currentOrderTotal
+                    }
+                  >
+                    {formatPrice(
+                      currentPurchasePresentation.total
+                    )}
+                  </Text>
+                </View>
+
+                {currentPurchasePresentation
+                  .isDelivered ? (
+                  <View
+                    style={
+                      styles.deliveredHint
+                    }
+                  >
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={15}
+                      color="#4E8A59"
+                    />
+
+                    <Text
+                      style={
+                        styles.deliveredHintText
+                      }
+                    >
+                      Delivered — open
+                      the order to
+                      confirm receipt.
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+
+              <View
+                style={
+                  styles.currentOrderActions
+                }
+              >
+                {currentPurchaseDelivery &&
+                currentPurchaseDelivery.status !==
+                  "cancelled" ? (
+                  <Pressable
+                    style={
+                      styles.trackCurrentButton
+                    }
+                    onPress={
+                      handleTrackCurrentPurchase
+                    }
+                  >
+                    <Ionicons
+                      name="navigate-outline"
+                      size={16}
+                      color="#FFFFFF"
+                    />
+
+                    <Text
+                      style={
+                        styles.trackCurrentButtonText
+                      }
+                    >
+                      Track Delivery
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                <Pressable
+                  style={[
+                    styles.viewOrderButton,
+
+                    currentPurchaseDelivery &&
+                      currentPurchaseDelivery.status !==
+                        "cancelled" &&
+                      styles.viewOrderButtonSecondary,
+                  ]}
+                  onPress={
+                    handleCurrentPurchasePress
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.viewOrderButtonText,
+
+                      currentPurchaseDelivery &&
+                        currentPurchaseDelivery.status !==
+                          "cancelled" &&
+                        styles.viewOrderButtonTextSecondary,
+                    ]}
+                  >
+                    View Order
+                  </Text>
+
+                  <Ionicons
+                    name="arrow-forward"
+                    size={15}
+                    color={
+                      currentPurchaseDelivery &&
+                      currentPurchaseDelivery.status !==
+                        "cancelled"
+                        ? "#D75C7A"
+                        : "#FFFFFF"
+                    }
+                  />
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              style={
+                styles.noCurrentOrderCard
+              }
+              onPress={
+                handleViewAll
+              }
+            >
+              <View
+                style={
+                  styles.noCurrentOrderIcon
+                }
+              >
+                <Ionicons
+                  name="flower-outline"
+                  size={25}
+                  color="#DC648F"
+                />
+              </View>
+
+              <View
+                style={
+                  styles.noCurrentOrderContent
+                }
+              >
+                <Text
+                  style={
+                    styles.noCurrentOrderTitle
+                  }
+                >
+                  No active orders
+                </Text>
+
+                <Text
+                  style={
+                    styles.noCurrentOrderText
+                  }
+                >
+                  Explore fresh
+                  bouquets from
+                  FLOGRAM florists.
+                </Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color="#C8BEC2"
+              />
+            </Pressable>
+          )}
+
+          {/*
+           * =====================================================
+           * FLOWER TYPES
+           * =====================================================
+           */}
 
           {flowerTypes.length >
-            1 && (
+          1 ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={
@@ -1056,7 +2960,7 @@ export default function CustomerDashboardScreen() {
                           styles.categoryButtonActive,
                       ]}
                       onPress={() =>
-                        handleFlowerType(
+                        void handleFlowerType(
                           flowerType
                         )
                       }
@@ -1070,8 +2974,8 @@ export default function CustomerDashboardScreen() {
                         ]}
                       >
                         {flowerType ===
-                        'All'
-                          ? 'All'
+                        "All"
+                          ? "All"
                           : pluralizeFlowerType(
                               flowerType
                             )}
@@ -1081,14 +2985,16 @@ export default function CustomerDashboardScreen() {
                 }
               )}
             </ScrollView>
-          )}
+          ) : null}
 
-          {/* ================================================
-              OCCASIONS
-          ================================================ */}
+          {/*
+           * =====================================================
+           * OCCASIONS
+           * =====================================================
+           */}
 
           {occasions.length >
-            0 && (
+          0 ? (
             <>
               <View
                 style={
@@ -1129,7 +3035,7 @@ export default function CustomerDashboardScreen() {
                             styles.occasionCardActive,
                         ]}
                         onPress={() =>
-                          handleOccasion(
+                          void handleOccasion(
                             occasion
                           )
                         }
@@ -1149,8 +3055,8 @@ export default function CustomerDashboardScreen() {
                             size={21}
                             color={
                               selected
-                                ? '#FFFFFF'
-                                : '#DF628F'
+                                ? "#FFFFFF"
+                                : "#DF628F"
                             }
                           />
                         </View>
@@ -1166,7 +3072,9 @@ export default function CustomerDashboardScreen() {
                               styles.occasionLabelActive,
                           ]}
                         >
-                          {occasion}
+                          {
+                            occasion
+                          }
                         </Text>
                       </Pressable>
                     );
@@ -1174,11 +3082,13 @@ export default function CustomerDashboardScreen() {
                 )}
               </View>
             </>
-          )}
+          ) : null}
 
-          {/* ================================================
-              PRODUCTS
-          ================================================ */}
+          {/*
+           * =====================================================
+           * PRODUCTS
+           * =====================================================
+           */}
 
           <View
             style={
@@ -1194,29 +3104,29 @@ export default function CustomerDashboardScreen() {
                 {selectedOccasion
                   ? `${selectedOccasion} Flowers`
                   : selectedFlowerType !==
-                      'All'
+                      "All"
                     ? `${pluralizeFlowerType(
                         selectedFlowerType
                       )} for You`
                     : search.trim()
-                      ? 'Search Results'
-                      : 'Explore Bouquets'}
+                      ? "Search Results"
+                      : "Explore Bouquets"}
               </Text>
 
               {!search.trim() &&
-                !selectedOccasion &&
-                selectedFlowerType ===
-                  'All' && (
-                  <Text
-                    style={
-                      styles.sectionSubtitle
-                    }
-                  >
-                    Fresh listings
-                    from FLOGRAM
-                    florists
-                  </Text>
-                )}
+              !selectedOccasion &&
+              selectedFlowerType ===
+                "All" ? (
+                <Text
+                  style={
+                    styles.sectionSubtitle
+                  }
+                >
+                  Fresh listings
+                  from FLOGRAM
+                  florists
+                </Text>
+              ) : null}
             </View>
 
             <Pressable
@@ -1235,230 +3145,213 @@ export default function CustomerDashboardScreen() {
             </Pressable>
           </View>
 
-          {/* ================================================
-              INLINE LOADING
-          ================================================ */}
-
           {loading &&
-            marketplaceFlowers.length >
-              0 && (
-              <View
+          marketplaceFlowers.length >
+            0 ? (
+            <View
+              style={
+                styles.inlineLoading
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color="#E55B8E"
+              />
+
+              <Text
                 style={
-                  styles.inlineLoading
+                  styles.inlineLoadingText
                 }
               >
-                <ActivityIndicator
-                  size="small"
-                  color="#E55B8E"
+                Updating flowers...
+              </Text>
+            </View>
+          ) : null}
+
+          {!loading &&
+          error ? (
+            <View
+              style={
+                styles.messageCard
+              }
+            >
+              <View
+                style={
+                  styles.messageIconContainer
+                }
+              >
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={27}
+                  color="#DF628F"
                 />
-
-                <Text
-                  style={
-                    styles.inlineLoadingText
-                  }
-                >
-                  Updating flowers...
-                </Text>
               </View>
-            )}
 
-          {/* ================================================
-              ERROR
-          ================================================ */}
-
-          {!loading &&
-            error && (
-              <View
+              <Text
                 style={
-                  styles.messageCard
+                  styles.messageTitle
                 }
               >
-                <View
-                  style={
-                    styles.messageIconContainer
-                  }
-                >
-                  <Ionicons
-                    name="cloud-offline-outline"
-                    size={27}
-                    color="#DF628F"
-                  />
-                </View>
+                Unable to load
+                flowers
+              </Text>
 
-                <Text
-                  style={
-                    styles.messageTitle
-                  }
-                >
-                  Unable to load
-                  flowers
-                </Text>
-
-                <Text
-                  style={
-                    styles.messageDescription
-                  }
-                >
-                  {error}
-                </Text>
-
-                <Pressable
-                  style={
-                    styles.retryButton
-                  }
-                  onPress={() =>
-                    loadHomeData()
-                  }
-                >
-                  <Text
-                    style={
-                      styles.retryButtonText
-                    }
-                  >
-                    Try Again
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-
-          {/* ================================================
-              EMPTY
-          ================================================ */}
-
-          {!loading &&
-            !error &&
-            displayedFlowers.length ===
-              0 && (
-              <View
+              <Text
                 style={
-                  styles.messageCard
+                  styles.messageDescription
                 }
               >
-                <View
-                  style={
-                    styles.messageIconContainer
-                  }
-                >
-                  <Ionicons
-                    name="flower-outline"
-                    size={28}
-                    color="#DF628F"
-                  />
-                </View>
+                {error}
+              </Text>
 
+              <Pressable
+                style={
+                  styles.retryButton
+                }
+                onPress={() =>
+                  void loadHomeData()
+                }
+              >
                 <Text
                   style={
-                    styles.messageTitle
+                    styles.retryButtonText
                   }
                 >
-                  No flowers found
+                  Try Again
                 </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
-                <Text
-                  style={
-                    styles.messageDescription
-                  }
-                >
-                  Try another flower
-                  type, occasion, or
-                  search term.
-                </Text>
-
-                <Pressable
-                  style={
-                    styles.retryButton
-                  }
-                  onPress={
-                    handleViewAll
-                  }
-                >
-                  <Text
-                    style={
-                      styles.retryButtonText
-                    }
-                  >
-                    Browse All Flowers
-                  </Text>
-                </Pressable>
+          {!loading &&
+          !error &&
+          displayedFlowers.length ===
+            0 ? (
+            <View
+              style={
+                styles.messageCard
+              }
+            >
+              <View
+                style={
+                  styles.messageIconContainer
+                }
+              >
+                <Ionicons
+                  name="flower-outline"
+                  size={28}
+                  color="#DF628F"
+                />
               </View>
-            )}
 
-          {/* ================================================
-              REAL SELLER FLOWERS
-          ================================================ */}
+              <Text
+                style={
+                  styles.messageTitle
+                }
+              >
+                No flowers found
+              </Text>
+
+              <Text
+                style={
+                  styles.messageDescription
+                }
+              >
+                Try another flower
+                type, occasion, or
+                search term.
+              </Text>
+
+              <Pressable
+                style={
+                  styles.retryButton
+                }
+                onPress={
+                  handleViewAll
+                }
+              >
+                <Text
+                  style={
+                    styles.retryButtonText
+                  }
+                >
+                  Browse All Flowers
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {!error &&
-            displayedFlowers.length >
-              0 && (
-              <View
-                style={
-                  styles.productGrid
-                }
-              >
-                {displayedFlowers.map(
-                  (
-                    flower
-                  ) => {
-                    const imageUrl =
-                      getImageUrl(
-                        flower
-                          .images?.[0]
-                      );
+          displayedFlowers.length >
+            0 ? (
+            <View
+              style={
+                styles.productGrid
+              }
+            >
+              {displayedFlowers.map(
+                (
+                  flower
+                ) => {
+                  const imageUrl =
+                    getImageUrl(
+                      flower
+                        .images?.[0]
+                    );
 
-                    return (
-                      <Pressable
-                        key={
-                          flower._id
-                        }
+                  return (
+                    <Pressable
+                      key={
+                        flower._id
+                      }
+                      style={
+                        styles.productCard
+                      }
+                      onPress={() =>
+                        handleFlowerPress(
+                          flower
+                        )
+                      }
+                    >
+                      <View
                         style={
-                          styles.productCard
-                        }
-                        onPress={() =>
-                          handleFlowerPress(
-                            flower
-                          )
+                          styles.productImageContainer
                         }
                       >
-                        <View
-                          style={
-                            styles.productImageContainer
-                          }
-                        >
-                          {imageUrl ? (
-                            <Image
-                              source={{
-                                uri:
-                                  imageUrl,
-                              }}
-                              style={
-                                styles.productImage
-                              }
-                              resizeMode="cover"
+                        {imageUrl ? (
+                          <Image
+                            source={{
+                              uri:
+                                imageUrl,
+                            }}
+                            style={
+                              styles.productImage
+                            }
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View
+                            style={
+                              styles.productImageFallback
+                            }
+                          >
+                            <Ionicons
+                              name="flower-outline"
+                              size={46}
+                              color="#DF8BA9"
                             />
-                          ) : (
-                            <View
+
+                            <Text
                               style={
-                                styles.productImageFallback
+                                styles.noImageText
                               }
                             >
-                              <Ionicons
-                                name="flower-outline"
-                                size={
-                                  46
-                                }
-                                color="#DF8BA9"
-                              />
+                              No image
+                            </Text>
+                          </View>
+                        )}
 
-                              <Text
-                                style={
-                                  styles.noImageText
-                                }
-                              >
-                                No image
-                              </Text>
-                            </View>
-                          )}
-
+                        {flower.isAvailable ? (
                           <View
                             style={
                               styles.availabilityBadge
@@ -1478,66 +3371,83 @@ export default function CustomerDashboardScreen() {
                               Available
                             </Text>
                           </View>
-                        </View>
-
-                        <View
-                          style={
-                            styles.productInfo
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.shopName
-                            }
-                            numberOfLines={
-                              1
-                            }
-                          >
-                            {flower
-                              .florist
-                              ?.shopName ??
-                              'FLOGRAM Florist'}
-                          </Text>
-
-                          <Text
-                            style={
-                              styles.productName
-                            }
-                            numberOfLines={
-                              2
-                            }
-                          >
-                            {flower.name}
-                          </Text>
-
+                        ) : (
                           <View
                             style={
-                              styles.productFooter
+                              styles.unavailableBadge
                             }
                           >
                             <Text
                               style={
-                                styles.productPrice
+                                styles.unavailableText
                               }
                             >
-                              {formatPrice(
-                                flower.price
-                              )}
+                              Unavailable
                             </Text>
-
-                            <Ionicons
-                              name="chevron-forward"
-                              size={14}
-                              color="#C5BCC1"
-                            />
                           </View>
+                        )}
+                      </View>
+
+                      <View
+                        style={
+                          styles.productInfo
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.shopName
+                          }
+                          numberOfLines={
+                            1
+                          }
+                        >
+                          {flower
+                            .florist
+                            ?.shopName ??
+                            "FLOGRAM Florist"}
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.productName
+                          }
+                          numberOfLines={
+                            2
+                          }
+                        >
+                          {
+                            flower.name
+                          }
+                        </Text>
+
+                        <View
+                          style={
+                            styles.productFooter
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.productPrice
+                            }
+                          >
+                            {formatPrice(
+                              flower.price
+                            )}
+                          </Text>
+
+                          <Ionicons
+                            name="chevron-forward"
+                            size={14}
+                            color="#C5BCC1"
+                          />
                         </View>
-                      </Pressable>
-                    );
-                  }
-                )}
-              </View>
-            )}
+                      </View>
+                    </Pressable>
+                  );
+                }
+              )}
+            </View>
+          ) : null}
 
           <View
             style={
@@ -1546,17 +3456,17 @@ export default function CustomerDashboardScreen() {
           />
         </ScrollView>
 
-        {/* ================================================
-            BOTTOM NAVIGATION
-        ================================================ */}
+        {/*
+         * =======================================================
+         * BOTTOM NAVIGATION
+         * =======================================================
+         */}
 
         <View
           style={
             styles.bottomNavigation
           }
         >
-          {/* HOME */}
-
           <Pressable
             style={
               styles.navItem
@@ -1583,15 +3493,13 @@ export default function CustomerDashboardScreen() {
             </Text>
           </Pressable>
 
-          {/* DISCOVER */}
-
           <Pressable
             style={
               styles.navItem
             }
             onPress={() =>
               router.push(
-                '/(customer)/customer-discover'
+                "/(customer)/customer-discover"
               )
             }
           >
@@ -1610,15 +3518,13 @@ export default function CustomerDashboardScreen() {
             </Text>
           </Pressable>
 
-          {/* BLOOM */}
-
           <Pressable
             style={
               styles.navItem
             }
             onPress={() =>
               router.push(
-                '/(customer)/customer-bloomboard'
+                "/(customer)/customer-bloomboard"
               )
             }
           >
@@ -1637,15 +3543,13 @@ export default function CustomerDashboardScreen() {
             </Text>
           </Pressable>
 
-          {/* CART */}
-
           <Pressable
             style={
               styles.navItem
             }
             onPress={() =>
               router.push(
-                '/(customer)/customer-cart'
+                "/(customer)/customer-cart"
               )
             }
           >
@@ -1664,15 +3568,13 @@ export default function CustomerDashboardScreen() {
             </Text>
           </Pressable>
 
-          {/* AI */}
-
           <Pressable
             style={
               styles.navItem
             }
             onPress={() =>
               router.push(
-                '/(customer)/customer-ai'
+                "/(customer)/customer-ai"
               )
             }
           >
@@ -1691,15 +3593,13 @@ export default function CustomerDashboardScreen() {
             </Text>
           </Pressable>
 
-          {/* PROFILE */}
-
           <Pressable
             style={
               styles.navItem
             }
             onPress={() =>
               router.push(
-                '/(customer)/customer-profile'
+                "/(customer)/customer-profile"
               )
             }
           >
@@ -1733,14 +3633,16 @@ const styles =
   StyleSheet.create({
     container: {
       flex: 1,
+
       backgroundColor:
-        '#FFFFFF',
+        "#FFFFFF",
     },
 
     screen: {
       flex: 1,
+
       backgroundColor:
-        '#FFFFFF',
+        "#FFFFFF",
     },
 
     scrollView: {
@@ -1748,7 +3650,9 @@ const styles =
     },
 
     scrollContent: {
-      paddingHorizontal: 17,
+      paddingHorizontal:
+        17,
+
       paddingTop: 18,
     },
 
@@ -1758,30 +3662,46 @@ const styles =
 
     loadingContainer: {
       flex: 1,
+
       backgroundColor:
-        '#FFFFFF',
-      alignItems: 'center',
+        "#FFFFFF",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       gap: 12,
     },
 
     loadingText: {
-      color: '#8C8489',
+      color:
+        "#8C8489",
+
       fontSize: 13,
     },
 
     inlineLoading: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       gap: 8,
-      paddingVertical: 15,
+
+      paddingVertical:
+        15,
     },
 
     inlineLoadingText: {
-      color: '#989095',
+      color:
+        "#989095",
+
       fontSize: 11,
     },
 
@@ -1794,62 +3714,107 @@ const styles =
     },
 
     headerTop: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'space-between',
+        "space-between",
     },
 
     greetingContainer: {
       flex: 1,
+
       paddingRight: 15,
     },
 
     greetingText: {
-      color: '#A59CA2',
+      color:
+        "#A59CA2",
+
       fontSize: 12,
+
       marginBottom: 2,
     },
 
     userName: {
-      color: '#40383F',
+      color:
+        "#40383F",
+
       fontSize: 25,
-      fontWeight: '800',
+
+      fontWeight:
+        "800",
+    },
+
+    headerActions: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 8,
     },
 
     headerIconButton: {
       width: 42,
+
       height: 42,
+
       borderRadius: 21,
+
       backgroundColor:
-        '#FFF0F5',
-      alignItems: 'center',
+        "#FFF0F5",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
     },
 
     notificationBadge: {
-      position: 'absolute',
+      position:
+        "absolute",
+
       top: -4,
+
       right: -3,
+
       minWidth: 18,
+
       height: 18,
+
       paddingHorizontal: 4,
+
       borderRadius: 9,
+
       backgroundColor:
-        '#DE5A8B',
-      alignItems: 'center',
+        "#DE5A8B",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       borderWidth: 2,
+
       borderColor:
-        '#FFFFFF',
+        "#FFFFFF",
     },
 
     notificationBadgeText: {
-      color: '#FFFFFF',
+      color:
+        "#FFFFFF",
+
       fontSize: 8,
-      fontWeight: '800',
+
+      fontWeight:
+        "800",
     },
 
     /*
@@ -1857,55 +3822,98 @@ const styles =
      */
 
     searchRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       marginTop: 18,
+
       gap: 9,
     },
 
     searchContainer: {
       flex: 1,
+
       height: 50,
+
       borderRadius: 16,
+
       backgroundColor:
-        '#FAF8F9',
+        "#FAF8F9",
+
       borderWidth: 1,
+
       borderColor:
-        '#F3EFF1',
-      flexDirection: 'row',
-      alignItems: 'center',
+        "#F3EFF1",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       paddingHorizontal: 14,
     },
 
     searchInput: {
       flex: 1,
-      color: '#494249',
+
+      color:
+        "#494249",
+
       fontSize: 12,
+
       marginLeft: 9,
+
       paddingVertical: 0,
     },
 
     cameraButton: {
       marginLeft: 8,
+
+      width: 28,
+
+      height: 32,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
     },
 
     filterButton: {
       width: 46,
+
       height: 46,
+
       borderRadius: 23,
+
       backgroundColor:
-        '#DE6692',
-      alignItems: 'center',
+        "#DE6692",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       shadowColor:
-        '#DE6692',
-      shadowOpacity: 0.18,
+        "#DE6692",
+
+      shadowOpacity:
+        0.18,
+
       shadowRadius: 6,
+
       shadowOffset: {
         width: 0,
+
         height: 3,
       },
+
       elevation: 3,
     },
 
@@ -1915,87 +3923,534 @@ const styles =
 
     banner: {
       height: 156,
+
       borderRadius: 21,
-      overflow: 'hidden',
+
+      overflow:
+        "hidden",
+
       backgroundColor:
-        '#F5E5E9',
+        "#F5E5E9",
+
       padding: 18,
+
       marginBottom: 2,
     },
 
     bannerCircleOne: {
-      position: 'absolute',
+      position:
+        "absolute",
+
       width: 175,
+
       height: 175,
+
       borderRadius: 90,
+
       backgroundColor:
-        '#8B545E',
+        "#8B545E",
+
       right: -50,
+
       bottom: -52,
+
       opacity: 0.88,
     },
 
     bannerCircleTwo: {
-      position: 'absolute',
+      position:
+        "absolute",
+
       width: 110,
+
       height: 110,
+
       borderRadius: 60,
+
       backgroundColor:
-        '#FFFFFF',
+        "#FFFFFF",
+
       right: 52,
+
       bottom: -64,
+
       opacity: 0.22,
     },
 
     bannerContent: {
       zIndex: 2,
-      width: '70%',
+
+      width:
+        "70%",
     },
 
     offerText: {
-      color: '#D55E86',
+      color:
+        "#D55E86",
+
       fontSize: 8,
-      fontWeight: '800',
-      letterSpacing: 0.7,
+
+      fontWeight:
+        "800",
+
+      letterSpacing:
+        0.7,
     },
 
     bannerTitle: {
-      color: '#48353B',
+      color:
+        "#48353B",
+
       fontSize: 21,
+
       lineHeight: 24,
-      fontWeight: '800',
+
+      fontWeight:
+        "800",
+
       marginTop: 6,
     },
 
     shopButton: {
       alignSelf:
-        'flex-start',
-      flexDirection: 'row',
-      alignItems: 'center',
+        "flex-start",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       backgroundColor:
-        '#E35E8E',
-      paddingHorizontal: 15,
+        "#E35E8E",
+
+      paddingHorizontal:
+        15,
+
       height: 32,
+
       borderRadius: 17,
+
       marginTop: 11,
+
       gap: 6,
     },
 
     shopButtonText: {
-      color: '#FFFFFF',
+      color:
+        "#FFFFFF",
+
       fontSize: 9,
-      fontWeight: '700',
+
+      fontWeight:
+        "700",
     },
 
     bannerIconContainer: {
-      position: 'absolute',
+      position:
+        "absolute",
+
       right: 20,
+
       bottom: 21,
+
       transform: [
         {
-          rotate: '-12deg',
+          rotate:
+            "-12deg",
         },
       ],
+    },
+
+    /*
+     * CURRENT ORDER
+     */
+
+    currentSectionHeader: {
+      marginTop: 20,
+
+      marginBottom: 10,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "flex-end",
+
+      justifyContent:
+        "space-between",
+    },
+
+    currentSectionTitle: {
+      color:
+        "#403A40",
+
+      fontSize: 15,
+
+      fontWeight:
+        "800",
+    },
+
+    currentSectionSubtitle: {
+      marginTop: 3,
+
+      color:
+        "#A39CA0",
+
+      fontSize: 9,
+    },
+
+    currentOrderCard: {
+      borderRadius: 18,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#F0E7EA",
+
+      backgroundColor:
+        "#FFFFFF",
+
+      overflow:
+        "hidden",
+
+      shadowColor:
+        "#000000",
+
+      shadowOpacity:
+        0.035,
+
+      shadowRadius: 7,
+
+      shadowOffset: {
+        width: 0,
+
+        height: 3,
+      },
+
+      elevation: 2,
+    },
+
+    currentOrderMain: {
+      padding: 14,
+    },
+
+    currentOrderTop: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+    },
+
+    currentOrderIcon: {
+      width: 45,
+
+      height: 45,
+
+      borderRadius: 14,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      backgroundColor:
+        "#FFF0F5",
+    },
+
+    currentOrderHeading: {
+      flex: 1,
+
+      marginLeft: 11,
+
+      marginRight: 8,
+    },
+
+    currentOrderReference: {
+      color:
+        "#AAA1A6",
+
+      fontSize: 8,
+
+      fontWeight:
+        "700",
+    },
+
+    currentOrderTitle: {
+      marginTop: 2,
+
+      color:
+        "#433C41",
+
+      fontSize: 13,
+
+      lineHeight: 17,
+
+      fontWeight:
+        "800",
+    },
+
+    currentOrderShop: {
+      marginTop: 3,
+
+      color:
+        "#9F979C",
+
+      fontSize: 9,
+    },
+
+    currentOrderDivider: {
+      height: 1,
+
+      backgroundColor:
+        "#F2ECEE",
+
+      marginVertical: 12,
+    },
+
+    currentOrderMetaRow: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "space-between",
+    },
+
+    currentStatusBadge: {
+      minHeight: 28,
+
+      paddingHorizontal:
+        9,
+
+      borderRadius: 14,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 5,
+    },
+
+    currentStatusText: {
+      fontSize: 9,
+
+      fontWeight:
+        "800",
+    },
+
+    currentOrderTotal: {
+      color:
+        "#D85884",
+
+      fontSize: 14,
+
+      fontWeight:
+        "900",
+    },
+
+    deliveredHint: {
+      marginTop: 11,
+
+      paddingHorizontal:
+        9,
+
+      paddingVertical:
+        8,
+
+      borderRadius: 10,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 6,
+
+      backgroundColor:
+        "#EEF8F0",
+    },
+
+    deliveredHintText: {
+      flex: 1,
+
+      fontSize: 9,
+
+      lineHeight: 13,
+
+      color:
+        "#618069",
+    },
+
+    currentOrderActions: {
+      borderTopWidth: 1,
+
+      borderTopColor:
+        "#F1EBED",
+
+      padding: 11,
+
+      flexDirection:
+        "row",
+
+      gap: 8,
+
+      backgroundColor:
+        "#FCFAFB",
+    },
+
+    trackCurrentButton: {
+      flex: 1,
+
+      minHeight: 40,
+
+      borderRadius: 13,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 5,
+
+      backgroundColor:
+        "#D75C7A",
+    },
+
+    trackCurrentButtonText: {
+      color:
+        "#FFFFFF",
+
+      fontSize: 10,
+
+      fontWeight:
+        "800",
+    },
+
+    viewOrderButton: {
+      flex: 1,
+
+      minHeight: 40,
+
+      borderRadius: 13,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 5,
+
+      backgroundColor:
+        "#D75C7A",
+    },
+
+    viewOrderButtonSecondary: {
+      borderWidth: 1,
+
+      borderColor:
+        "#F0CBD4",
+
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    viewOrderButtonText: {
+      color:
+        "#FFFFFF",
+
+      fontSize: 10,
+
+      fontWeight:
+        "800",
+    },
+
+    viewOrderButtonTextSecondary: {
+      color:
+        "#D75C7A",
+    },
+
+    noCurrentOrderCard: {
+      minHeight: 88,
+
+      padding: 14,
+
+      borderRadius: 18,
+
+      borderWidth: 1,
+
+      borderColor:
+        "#F0E9EB",
+
+      backgroundColor:
+        "#FCFAFB",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+    },
+
+    noCurrentOrderIcon: {
+      width: 46,
+
+      height: 46,
+
+      borderRadius: 15,
+
+      backgroundColor:
+        "#FFF0F5",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+    },
+
+    noCurrentOrderContent: {
+      flex: 1,
+
+      marginLeft: 11,
+
+      marginRight: 8,
+    },
+
+    noCurrentOrderTitle: {
+      color:
+        "#4B4449",
+
+      fontSize: 12,
+
+      fontWeight:
+        "800",
+    },
+
+    noCurrentOrderText: {
+      marginTop: 3,
+
+      color:
+        "#9C9499",
+
+      fontSize: 9,
+
+      lineHeight: 13,
     },
 
     /*
@@ -2009,40 +4464,58 @@ const styles =
 
     categoryContainer: {
       gap: 8,
+
       paddingVertical: 14,
+
       paddingHorizontal: 17,
     },
 
     categoryButton: {
       height: 33,
+
       paddingHorizontal: 17,
+
       borderRadius: 17,
+
       backgroundColor:
-        '#F8F6F7',
-      alignItems: 'center',
+        "#F8F6F7",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       borderWidth: 1,
+
       borderColor:
-        '#F3EFF1',
+        "#F3EFF1",
     },
 
     categoryButtonActive: {
       backgroundColor:
-        '#E55E90',
+        "#E55E90",
+
       borderColor:
-        '#E55E90',
+        "#E55E90",
     },
 
     categoryText: {
-      color: '#827B80',
+      color:
+        "#827B80",
+
       fontSize: 10,
-      fontWeight: '600',
+
+      fontWeight:
+        "600",
     },
 
     categoryTextActive: {
-      color: '#FFFFFF',
-      fontWeight: '700',
+      color:
+        "#FFFFFF",
+
+      fontWeight:
+        "700",
     },
 
     /*
@@ -2051,79 +4524,118 @@ const styles =
 
     smallSectionHeader: {
       marginTop: 3,
+
       marginBottom: 10,
     },
 
     smallSectionTitle: {
-      color: '#403A40',
+      color:
+        "#403A40",
+
       fontSize: 13,
-      fontWeight: '800',
+
+      fontWeight:
+        "800",
     },
 
     occasionRow: {
-      flexDirection: 'row',
+      flexDirection:
+        "row",
+
       gap: 8,
     },
 
     occasionCard: {
       flex: 1,
+
       minWidth: 0,
+
       height: 80,
+
       borderRadius: 15,
+
       backgroundColor:
-        '#FFFFFF',
+        "#FFFFFF",
+
       borderWidth: 1,
+
       borderColor:
-        '#F0EBEE',
-      alignItems: 'center',
+        "#F0EBEE",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       paddingHorizontal: 4,
+
       shadowColor:
-        '#000000',
-      shadowOpacity: 0.025,
+        "#000000",
+
+      shadowOpacity:
+        0.025,
+
       shadowRadius: 5,
+
       shadowOffset: {
         width: 0,
+
         height: 2,
       },
+
       elevation: 1,
     },
 
     occasionCardActive: {
       backgroundColor:
-        '#FFF5F8',
+        "#FFF5F8",
+
       borderColor:
-        '#EFA9C1',
+        "#EFA9C1",
     },
 
     occasionIconContainer: {
       width: 34,
+
       height: 34,
+
       borderRadius: 17,
+
       backgroundColor:
-        '#FFF1F5',
-      alignItems: 'center',
+        "#FFF1F5",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
     },
 
     occasionIconContainerActive:
       {
         backgroundColor:
-          '#E55E90',
+          "#E55E90",
       },
 
     occasionLabel: {
-      color: '#777077',
+      color:
+        "#777077",
+
       fontSize: 8,
+
       marginTop: 6,
-      maxWidth: '100%',
+
+      maxWidth:
+        "100%",
     },
 
     occasionLabelActive: {
-      color: '#D95887',
-      fontWeight: '700',
+      color:
+        "#D95887",
+
+      fontWeight:
+        "700",
     },
 
     /*
@@ -2131,150 +4643,270 @@ const styles =
      */
 
     sectionHeader: {
-      flexDirection: 'row',
+      flexDirection:
+        "row",
+
       alignItems:
-        'flex-end',
+        "flex-end",
+
       justifyContent:
-        'space-between',
+        "space-between",
+
       marginTop: 21,
+
       marginBottom: 11,
     },
 
     sectionTitle: {
-      color: '#403A40',
+      color:
+        "#403A40",
+
       fontSize: 15,
-      fontWeight: '800',
+
+      fontWeight:
+        "800",
     },
 
     sectionSubtitle: {
-      color: '#A39CA0',
+      color:
+        "#A39CA0",
+
       fontSize: 9,
+
       marginTop: 3,
     },
 
     viewAllText: {
-      color: '#DB5D8B',
+      color:
+        "#DB5D8B",
+
       fontSize: 10,
-      fontWeight: '700',
+
+      fontWeight:
+        "700",
     },
 
     productGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection:
+        "row",
+
+      flexWrap:
+        "wrap",
+
       justifyContent:
-        'space-between',
+        "space-between",
+
       rowGap: 15,
     },
 
     productCard: {
-      width: '48.4%',
+      width:
+        "48.4%",
+
       backgroundColor:
-        '#FFFFFF',
+        "#FFFFFF",
+
       borderRadius: 17,
-      overflow: 'hidden',
+
+      overflow:
+        "hidden",
+
       borderWidth: 1,
+
       borderColor:
-        '#F2EDF0',
+        "#F2EDF0",
+
       shadowColor:
-        '#000000',
-      shadowOpacity: 0.035,
+        "#000000",
+
+      shadowOpacity:
+        0.035,
+
       shadowRadius: 7,
+
       shadowOffset: {
         width: 0,
+
         height: 3,
       },
+
       elevation: 2,
     },
 
     productImageContainer: {
-      width: '100%',
-      aspectRatio: 1.12,
+      width:
+        "100%",
+
+      aspectRatio:
+        1.12,
+
       backgroundColor:
-        '#F7E8ED',
-      overflow: 'hidden',
+        "#F7E8ED",
+
+      overflow:
+        "hidden",
     },
 
     productImage: {
-      width: '100%',
-      height: '100%',
+      width:
+        "100%",
+
+      height:
+        "100%",
     },
 
     productImageFallback: {
       flex: 1,
+
       backgroundColor:
-        '#F8E9EE',
-      alignItems: 'center',
+        "#F8E9EE",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       gap: 5,
     },
 
     noImageText: {
-      color: '#B99DA7',
+      color:
+        "#B99DA7",
+
       fontSize: 8,
-      fontWeight: '600',
+
+      fontWeight:
+        "600",
     },
 
     availabilityBadge: {
-      position: 'absolute',
+      position:
+        "absolute",
+
       left: 8,
+
       bottom: 8,
-      flexDirection: 'row',
-      alignItems: 'center',
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       backgroundColor:
-        'rgba(255,255,255,0.94)',
+        "rgba(255,255,255,0.94)",
+
       borderRadius: 10,
+
       paddingHorizontal: 7,
+
       paddingVertical: 4,
+
       gap: 4,
     },
 
     availabilityDot: {
       width: 5,
+
       height: 5,
+
       borderRadius: 3,
+
       backgroundColor:
-        '#52A66A',
+        "#52A66A",
     },
 
     availabilityText: {
-      color: '#607064',
+      color:
+        "#607064",
+
       fontSize: 7,
-      fontWeight: '700',
+
+      fontWeight:
+        "700",
+    },
+
+    unavailableBadge: {
+      position:
+        "absolute",
+
+      left: 8,
+
+      bottom: 8,
+
+      backgroundColor:
+        "rgba(255,255,255,0.95)",
+
+      borderRadius: 10,
+
+      paddingHorizontal: 7,
+
+      paddingVertical: 4,
+    },
+
+    unavailableText: {
+      color:
+        "#A85B68",
+
+      fontSize: 7,
+
+      fontWeight:
+        "700",
     },
 
     productInfo: {
       paddingHorizontal: 10,
+
       paddingTop: 9,
+
       paddingBottom: 11,
     },
 
     shopName: {
-      color: '#A69DA3',
+      color:
+        "#A69DA3",
+
       fontSize: 8,
+
       marginBottom: 3,
     },
 
     productName: {
-      color: '#494147',
+      color:
+        "#494147",
+
       fontSize: 11,
+
       lineHeight: 14,
-      fontWeight: '700',
+
+      fontWeight:
+        "700",
+
       minHeight: 28,
     },
 
     productFooter: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'space-between',
+        "space-between",
+
       marginTop: 5,
     },
 
     productPrice: {
-      color: '#DE5D8B',
+      color:
+        "#DE5D8B",
+
       fontSize: 11,
-      fontWeight: '800',
+
+      fontWeight:
+        "800",
     },
 
     /*
@@ -2283,60 +4915,97 @@ const styles =
 
     messageCard: {
       minHeight: 215,
+
       borderRadius: 18,
+
       backgroundColor:
-        '#FCF9FA',
+        "#FCF9FA",
+
       borderWidth: 1,
+
       borderColor:
-        '#F1EBEE',
-      alignItems: 'center',
+        "#F1EBEE",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       paddingHorizontal: 25,
+
       paddingVertical: 25,
     },
 
     messageIconContainer: {
       width: 52,
+
       height: 52,
+
       borderRadius: 26,
+
       backgroundColor:
-        '#FFF0F5',
-      alignItems: 'center',
+        "#FFF0F5",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
+
       marginBottom: 11,
     },
 
     messageTitle: {
-      color: '#4A4247',
+      color:
+        "#4A4247",
+
       fontSize: 14,
-      fontWeight: '800',
-      textAlign: 'center',
+
+      fontWeight:
+        "800",
+
+      textAlign:
+        "center",
     },
 
     messageDescription: {
-      color: '#938A90',
+      color:
+        "#938A90",
+
       fontSize: 10,
+
       lineHeight: 15,
-      textAlign: 'center',
+
+      textAlign:
+        "center",
+
       marginTop: 6,
+
       maxWidth: 260,
     },
 
     retryButton: {
       backgroundColor:
-        '#E25F8E',
+        "#E25F8E",
+
       borderRadius: 16,
+
       paddingHorizontal: 17,
+
       paddingVertical: 9,
+
       marginTop: 14,
     },
 
     retryButtonText: {
-      color: '#FFFFFF',
+      color:
+        "#FFFFFF",
+
       fontSize: 9,
-      fontWeight: '700',
+
+      fontWeight:
+        "700",
     },
 
     bottomSpacer: {
@@ -2349,56 +5018,91 @@ const styles =
 
     bottomNavigation: {
       height: 72,
+
       backgroundColor:
-        '#FFFFFF',
+        "#FFFFFF",
+
       borderTopWidth: 1,
+
       borderTopColor:
-        '#F0EDEF',
-      flexDirection: 'row',
-      alignItems: 'center',
+        "#F0EDEF",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'space-around',
+        "space-around",
+
       paddingBottom: 3,
+
       shadowColor:
-        '#000000',
-      shadowOpacity: 0.035,
+        "#000000",
+
+      shadowOpacity:
+        0.035,
+
       shadowRadius: 7,
+
       shadowOffset: {
         width: 0,
+
         height: -2,
       },
+
       elevation: 5,
     },
 
     navItem: {
       flex: 1,
-      height: '100%',
-      alignItems: 'center',
+
+      height:
+        "100%",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
     },
 
     activeNavIcon: {
       width: 37,
+
       height: 30,
+
       borderRadius: 16,
+
       backgroundColor:
-        '#FFE8F0',
-      alignItems: 'center',
+        "#FFE8F0",
+
+      alignItems:
+        "center",
+
       justifyContent:
-        'center',
+        "center",
     },
 
     activeNavText: {
-      color: '#DF5D8D',
+      color:
+        "#DF5D8D",
+
       fontSize: 8,
-      fontWeight: '700',
+
+      fontWeight:
+        "700",
+
       marginTop: 3,
     },
 
     navText: {
-      color: '#A7A1A5',
+      color:
+        "#A7A1A5",
+
       fontSize: 8,
+
       marginTop: 4,
     },
   });

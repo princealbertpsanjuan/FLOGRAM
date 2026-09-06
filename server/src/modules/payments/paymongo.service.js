@@ -48,10 +48,6 @@ const getPayMongoWebhookSecret = () => {
 /*
  * Payment methods that appear
  * in PayMongo Hosted Checkout.
- *
- * Example:
- *
- * PAYMONGO_PAYMENT_METHODS=card,gcash,qrph
  */
 const getPaymentMethodTypes = () => {
   const configured =
@@ -80,11 +76,6 @@ const getPaymentMethodTypes = () => {
  * =========================================================
  */
 
-/*
- * Convert PHP pesos to centavos.
- *
- * ₱1,299 -> 129900
- */
 const pesosToCentavos = (
   amount
 ) => {
@@ -109,9 +100,6 @@ const pesosToCentavos = (
   );
 };
 
-/*
- * Add orderId to redirect URL.
- */
 const buildRedirectUrl = (
   baseUrl,
   orderId
@@ -137,15 +125,6 @@ const buildRedirectUrl = (
   }
 };
 
-/*
- * PayMongo uses HTTP Basic Auth.
- *
- * Username:
- * sk_test_...
- *
- * Password:
- * blank
- */
 const getAuthorizationHeader = () => {
   const secretKey =
     getPayMongoSecretKey();
@@ -163,6 +142,7 @@ const getAuthorizationHeader = () => {
  * CREATE CHECKOUT SESSION
  * =========================================================
  */
+
 export const createPayMongoCheckoutSession =
   async ({
     order,
@@ -199,6 +179,7 @@ export const createPayMongoCheckoutSession =
      * CHECKOUT LINE ITEMS
      * =====================================================
      */
+
     const lineItems = [
       {
         name:
@@ -238,10 +219,8 @@ export const createPayMongoCheckoutSession =
      * =====================================================
      * DELIVERY FEE
      * =====================================================
-     *
-     * Include the server-calculated
-     * distance-based delivery fee.
      */
+
     if (
       Number(
         order.deliveryFee
@@ -271,18 +250,8 @@ export const createPayMongoCheckoutSession =
      * =====================================================
      * PRE-ORDER FEE
      * =====================================================
-     *
-     * Scheduled orders receive an
-     * additional pre-order fee.
-     *
-     * Example:
-     *
-     * Product        ₱1,299
-     * Delivery          ₱74
-     * Pre-order         ₱50
-     * ----------------------
-     * Total          ₱1,423
      */
+
     if (
       order.isPreOrder &&
       Number(
@@ -313,13 +282,8 @@ export const createPayMongoCheckoutSession =
      * =====================================================
      * SAFETY CHECK
      * =====================================================
-     *
-     * Make sure PayMongo line items add up
-     * to the same total stored in the order.
-     *
-     * This protects us from accidentally
-     * forgetting a fee in the future.
      */
+
     const checkoutTotalCentavos =
       lineItems.reduce(
         (
@@ -332,7 +296,7 @@ export const createPayMongoCheckoutSession =
           ) *
             Number(
               item.quantity ||
-              1
+                1
             ),
         0
       );
@@ -374,8 +338,11 @@ export const createPayMongoCheckoutSession =
     }
 
     /*
-     * Customer billing details.
+     * =====================================================
+     * BILLING
+     * =====================================================
      */
+
     const billing = {};
 
     const customerName =
@@ -395,20 +362,19 @@ export const createPayMongoCheckoutSession =
         customer.email;
     }
 
-    if (customer?.phoneNumber) {
+    if (
+      customer?.phoneNumber
+    ) {
       billing.phone =
         customer.phoneNumber;
     }
 
     /*
-     * PayMongo Checkout attributes.
-     *
-     * NOTE:
-     * pass_on_fees is intentionally
-     * NOT included because this
-     * checkout endpoint does not
-     * support that field.
+     * =====================================================
+     * PAYMONGO ATTRIBUTES
+     * =====================================================
      */
+
     const attributes = {
       line_items:
         lineItems,
@@ -427,7 +393,9 @@ export const createPayMongoCheckoutSession =
 
       metadata: {
         orderId:
-          String(order._id),
+          String(
+            order._id
+          ),
 
         customerId:
           String(
@@ -445,19 +413,19 @@ export const createPayMongoCheckoutSession =
         deliveryFee:
           String(
             order.deliveryFee ||
-            0
+              0
           ),
 
         preOrderFee:
           String(
             order.preOrderFee ||
-            0
+              0
           ),
 
         totalAmount:
           String(
             order.totalAmount ||
-            0
+              0
           ),
       },
 
@@ -485,6 +453,7 @@ export const createPayMongoCheckoutSession =
      * CREATE HOSTED CHECKOUT SESSION
      * =====================================================
      */
+
     const response =
       await fetch(
         `${PAYMONGO_API_URL}/v1/checkout_sessions`,
@@ -499,10 +468,6 @@ export const createPayMongoCheckoutSession =
             "Content-Type":
               "application/json",
 
-            /*
-             * Prevent accidental duplicate
-             * checkout session creation.
-             */
             "Idempotency-Key":
               `flogram-order-${order._id}`,
           },
@@ -522,11 +487,13 @@ export const createPayMongoCheckoutSession =
       result =
         await response.json();
     } catch {
-      const error = new Error(
-        "Unable to read the PayMongo API response."
-      );
+      const error =
+        new Error(
+          "Unable to read the PayMongo API response."
+        );
 
-      error.statusCode = 502;
+      error.statusCode =
+        502;
 
       throw error;
     }
@@ -546,9 +513,12 @@ export const createPayMongoCheckoutSession =
         "Unable to create PayMongo checkout session.";
 
       const error =
-        new Error(message);
+        new Error(
+          message
+        );
 
-      error.statusCode = 502;
+      error.statusCode =
+        502;
 
       error.paymongoResponse =
         result;
@@ -573,11 +543,13 @@ export const createPayMongoCheckoutSession =
         result
       );
 
-      const error = new Error(
-        "PayMongo returned an invalid checkout session."
-      );
+      const error =
+        new Error(
+          "PayMongo returned an invalid checkout session."
+        );
 
-      error.statusCode = 502;
+      error.statusCode =
+        502;
 
       throw error;
     }
@@ -604,146 +576,141 @@ export const createPayMongoCheckoutSession =
  * WEBHOOK SIGNATURE VERIFICATION
  * =========================================================
  *
- * Paymongo-Signature:
+ * PayMongo signs the exact raw request body using HMAC-SHA256.
  *
- * t=timestamp,
- * te=test_signature,
- * li=live_signature
+ * This verifier:
+ * - requires the raw request body to remain a Buffer
+ * - accepts the test (te) or live (li) signature
+ * - validates the webhook timestamp against the configured tolerance
+ * - compares signatures with crypto.timingSafeEqual()
+ * =========================================================
  */
-export const verifyPayMongoWebhookSignature =
-  (
-    rawBody,
-    signatureHeader
-  ) => {
-    if (
-      !Buffer.isBuffer(
-        rawBody
-      )
-    ) {
-      return false;
-    }
 
-    if (!signatureHeader) {
-      return false;
-    }
+export const verifyPayMongoWebhookSignature = (
+  rawBody,
+  signatureHeader
+) => {
+  if (!Buffer.isBuffer(rawBody)) {
+    return false;
+  }
 
-    const parts = {};
+  if (!signatureHeader) {
+    return false;
+  }
 
-    String(
-      signatureHeader
-    )
-      .split(",")
-      .forEach((part) => {
-        const [
-          key,
-          ...rest
-        ] =
-          part
-            .trim()
-            .split("=");
+  const parts = {};
 
-        if (key) {
-          parts[key] =
-            rest.join("=");
-        }
-      });
+  String(signatureHeader)
+    .split(",")
+    .forEach((part) => {
+      const [key, ...rest] =
+        part.trim().split("=");
 
-    const timestamp =
-      parts.t;
-
-    if (!timestamp) {
-      return false;
-    }
-
-    /*
-     * Test key -> te
-     * Live key -> li
-     */
-    const secretKey =
-      getPayMongoSecretKey();
-
-    const signature =
-      secretKey.startsWith(
-        "sk_live_"
-      )
-        ? parts.li
-        : parts.te;
-
-    if (!signature) {
-      return false;
-    }
-
-    /*
-     * Replay protection.
-     *
-     * Default:
-     * 5 minutes.
-     */
-    const toleranceSeconds =
-      Number(
-        process.env
-          .PAYMONGO_WEBHOOK_TOLERANCE_SECONDS ||
-          300
-      );
-
-    const timestampNumber =
-      Number(timestamp);
-
-    if (
-      Number.isFinite(
-        timestampNumber
-      ) &&
-      toleranceSeconds > 0
-    ) {
-      const now =
-        Math.floor(
-          Date.now() /
-            1000
-        );
-
-      if (
-        Math.abs(
-          now -
-            timestampNumber
-        ) >
-        toleranceSeconds
-      ) {
-        return false;
+      if (key) {
+        parts[key] =
+          rest.join("=");
       }
-    }
+    });
 
-    /*
-     * PayMongo signature payload:
-     *
-     * timestamp.rawBody
-     */
-    const signaturePayload =
-      `${timestamp}.${rawBody.toString(
-        "utf8"
-      )}`;
+  const timestamp =
+    parts.t;
 
-    const expected =
-      crypto
-        .createHmac(
-          "sha256",
-          getPayMongoWebhookSecret()
-        )
-        .update(
-          signaturePayload
-        )
-        .digest(
-          "hex"
-        );
+  if (!timestamp) {
+    return false;
+  }
 
-    const expectedBuffer =
-      Buffer.from(
-        expected,
-        "utf8"
+  const timestampNumber =
+    Number(timestamp);
+
+  if (
+    !Number.isFinite(
+      timestampNumber
+    )
+  ) {
+    return false;
+  }
+
+  const toleranceSeconds =
+    Number(
+      process.env
+        .PAYMONGO_WEBHOOK_TOLERANCE_SECONDS ||
+        300
+    );
+
+  const now =
+    Math.floor(
+      Date.now() / 1000
+    );
+
+  const timestampAge =
+    Math.abs(
+      now -
+        timestampNumber
+    );
+
+  if (
+    Number.isFinite(
+      toleranceSeconds
+    ) &&
+    toleranceSeconds > 0 &&
+    timestampAge >
+      toleranceSeconds
+  ) {
+    return false;
+  }
+
+  const candidateSignatures =
+    [
+      parts.te,
+      parts.li,
+    ].filter(
+      (value) =>
+        typeof value ===
+          "string" &&
+        value.length > 0
+    );
+
+  if (
+    candidateSignatures.length ===
+    0
+  ) {
+    return false;
+  }
+
+  const webhookSecret =
+    getPayMongoWebhookSecret();
+
+  const signaturePayload =
+    `${timestamp}.${rawBody.toString(
+      "utf8"
+    )}`;
+
+  const expectedSignature =
+    crypto
+      .createHmac(
+        "sha256",
+        webhookSecret
+      )
+      .update(
+        signaturePayload
+      )
+      .digest(
+        "hex"
       );
 
+  const expectedBuffer =
+    Buffer.from(
+      expectedSignature,
+      "utf8"
+    );
+
+  for (
+    const candidate of
+    candidateSignatures
+  ) {
     const receivedBuffer =
       Buffer.from(
-        signature,
+        candidate,
         "utf8"
       );
 
@@ -751,20 +718,28 @@ export const verifyPayMongoWebhookSignature =
       expectedBuffer.length !==
       receivedBuffer.length
     ) {
-      return false;
+      continue;
     }
 
-    return crypto.timingSafeEqual(
-      expectedBuffer,
-      receivedBuffer
-    );
-  };
+    if (
+      crypto.timingSafeEqual(
+        expectedBuffer,
+        receivedBuffer
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 /*
  * =========================================================
  * WEBHOOK PAYLOAD PARSER
  * =========================================================
  */
+
 export const parsePayMongoWebhook =
   (
     rawBody
@@ -778,18 +753,21 @@ export const parsePayMongoWebhook =
               "utf8"
             )
           : String(
-              rawBody || ""
+              rawBody ||
+                ""
             );
 
       return JSON.parse(
         text
       );
     } catch {
-      const error = new Error(
-        "Invalid PayMongo webhook payload."
-      );
+      const error =
+        new Error(
+          "Invalid PayMongo webhook payload."
+        );
 
-      error.statusCode = 400;
+      error.statusCode =
+        400;
 
       throw error;
     }

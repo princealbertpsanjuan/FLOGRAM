@@ -10,6 +10,10 @@ import {
   calculateDeliveryRoute,
 } from "../../services/routing.service.js";
 
+import {
+  createNotification,
+} from "../notifications/notification.service.js";
+
 /*
  * =========================================================
  * PRE-ORDER CONFIGURATION
@@ -302,6 +306,88 @@ const populateOrder = (
       "customBouquetRequest"
     );
 };
+
+/*
+ * =========================================================
+ * NOTIFICATION HELPER
+ * =========================================================
+ */
+
+const createNotificationSafely =
+  async (
+    notificationData
+  ) => {
+    try {
+      return await createNotification(
+        notificationData
+      );
+    } catch (error) {
+      console.error(
+        "Order notification creation failed:",
+        error
+      );
+
+      return null;
+    }
+  };
+
+const getOrderStatusNotification =
+  (
+    status,
+    fulfillmentType
+  ) => {
+    switch (status) {
+      case "confirmed":
+        return {
+          title:
+            "Order Confirmed",
+
+          message:
+            "Your florist has confirmed your flower order.",
+        };
+
+      case "preparing":
+        return {
+          title:
+            "Bouquet Preparation Started",
+
+          message:
+            "Your florist is now preparing your bouquet.",
+        };
+
+      case "ready_for_pickup":
+        return {
+          title:
+            "Order Ready for Pickup",
+
+          message:
+            "Your bouquet is ready for pickup at the florist.",
+        };
+
+      case "ready_for_delivery":
+        return {
+          title:
+            "Order Ready for Delivery",
+
+          message:
+            "Your bouquet is ready and will be assigned to a rider for delivery.",
+        };
+
+      default:
+        return {
+          title:
+            "Order Updated",
+
+          message:
+            `Your ${
+              fulfillmentType ===
+              "pickup"
+                ? "pickup"
+                : "delivery"
+            } order status has been updated.`,
+        };
+    }
+  };
 
 /*
  * =========================================================
@@ -1301,9 +1387,67 @@ customerNotes:
       /*
        * ORDER
        */
-      orderStatus:
+            orderStatus:
         "pending",
     });
+
+  await Promise.all([
+    createNotificationSafely({
+      recipient:
+        customerId,
+
+      role:
+        "customer",
+
+      type:
+        "order_created",
+
+      title:
+        "Order Placed",
+
+      message:
+        `${productName} has been added to your orders and is waiting for florist confirmation.`,
+
+      order:
+        order._id,
+
+      metadata: {
+        screen:
+          "order",
+
+        orderStatus:
+          "pending",
+      },
+    }),
+
+    createNotificationSafely({
+      recipient:
+        seller,
+
+      role:
+        "seller",
+
+      type:
+        "order_created",
+
+      title:
+        "New Flower Order",
+
+      message:
+        `A customer placed an order for ${productName}.`,
+
+      order:
+        order._id,
+
+      metadata: {
+        screen:
+          "order",
+
+        orderStatus:
+          "pending",
+      },
+    }),
+  ]);
 
   return populateOrder(
     order._id
@@ -1801,6 +1945,40 @@ export const updateSellerOrderStatus =
 
     await order.save();
 
+    const notification =
+      getOrderStatusNotification(
+        status,
+        order.fulfillmentType
+      );
+
+    await createNotificationSafely({
+      recipient:
+        order.customer,
+
+      role:
+        "customer",
+
+      type:
+        "order_updated",
+
+      title:
+        notification.title,
+
+      message:
+        notification.message,
+
+      order:
+        order._id,
+
+      metadata: {
+        screen:
+          "order",
+
+        orderStatus:
+          status,
+      },
+    });
+
     return order;
   };
 
@@ -1891,7 +2069,69 @@ export const cancelCustomerOrder =
           ).trim()
         : null;
 
-    await order.save();
+       await order.save();
+
+    await Promise.all([
+      createNotificationSafely({
+        recipient:
+          order.customer,
+
+        role:
+          "customer",
+
+        type:
+          "order_cancelled",
+
+        title:
+          "Order Cancelled",
+
+        message:
+          order.cancellationReason
+            ? `Your order was cancelled. Reason: ${order.cancellationReason}`
+            : "Your order was cancelled successfully.",
+
+        order:
+          order._id,
+
+        metadata: {
+          screen:
+            "order",
+
+          orderStatus:
+            "cancelled",
+        },
+      }),
+
+      createNotificationSafely({
+        recipient:
+          order.seller,
+
+        role:
+          "seller",
+
+        type:
+          "order_cancelled",
+
+        title:
+          "Customer Cancelled Order",
+
+        message:
+          order.cancellationReason
+            ? `The customer cancelled this order. Reason: ${order.cancellationReason}`
+            : "The customer cancelled this order.",
+
+        order:
+          order._id,
+
+        metadata: {
+          screen:
+            "order",
+
+          orderStatus:
+            "cancelled",
+        },
+      }),
+    ]);
 
     return order;
   };
@@ -1978,6 +2218,64 @@ export const completeCustomerOrder =
       new Date();
 
     await order.save();
+
+    await Promise.all([
+      createNotificationSafely({
+        recipient:
+          order.customer,
+
+        role:
+          "customer",
+
+        type:
+          "order_updated",
+
+        title:
+          "Order Completed",
+
+        message:
+          "Thank you for confirming that you received your flower order.",
+
+        order:
+          order._id,
+
+        metadata: {
+          screen:
+            "order",
+
+          orderStatus:
+            "completed",
+        },
+      }),
+
+      createNotificationSafely({
+        recipient:
+          order.seller,
+
+        role:
+          "seller",
+
+        type:
+          "order_updated",
+
+        title:
+          "Order Completed",
+
+        message:
+          "The customer confirmed receipt of this flower order.",
+
+        order:
+          order._id,
+
+        metadata: {
+          screen:
+            "order",
+
+          orderStatus:
+            "completed",
+        },
+      }),
+    ]);
 
     return populateOrder(
       order._id

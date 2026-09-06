@@ -18,6 +18,7 @@ import paymentRouter from "../modules/payments/payment.routes.js";
 import cartRouter from "../modules/cart/cart.routes.js";
 import checkoutRouter from "../modules/checkout/checkout.routes.js";
 import notificationRouter from "../modules/notifications/notification.routes.js";
+import reviewRouter from "../modules/reviews/review.routes.js";
 
 
 const apiRouter = Router();
@@ -200,6 +201,17 @@ apiRouter.use(
   notificationRouter
 );
 
+/*
+ * =========================================================
+ * REVIEWS
+ * =========================================================
+ */
+
+apiRouter.use(
+  "/reviews",
+  reviewRouter
+);
+
 apiRouter.use(
   "/cart",
   cartRouter
@@ -209,5 +221,6 @@ apiRouter.use(
   "/checkout",
   checkoutRouter
 );
+
 
 export default apiRouter;
