@@ -2,6 +2,7 @@ import {
   createCustomerReview,
   getCustomerOrderReview,
   getCustomerReviews,
+  getSellerReviews,
 } from "./review.service.js";
 
 /*
@@ -164,6 +165,46 @@ export const getMine =
 
             reviews,
           },
+        });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /*
+ * =========================================================
+ * SELLER
+ * GET REVIEWS RECEIVED
+ * =========================================================
+ *
+ * GET
+ * /api/v1/reviews/seller/mine
+ * =========================================================
+ */
+
+export const getSellerMine =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const result =
+        await getSellerReviews(
+          req.user.userId
+        );
+
+      return res
+        .status(200)
+        .json({
+          success:
+            true,
+
+          message:
+            "Seller reviews retrieved successfully.",
+
+          data:
+            result,
         });
     } catch (error) {
       next(error);

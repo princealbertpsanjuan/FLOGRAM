@@ -1280,6 +1280,47 @@ export const updateRiderAvailability =
     return response.data;
   };
 
+  /*
+ * =========================================================
+ * SELLER
+ * CREATE DELIVERY REQUEST
+ * =========================================================
+ *
+ * POST
+ * /api/v1/deliveries/orders/:orderId/request
+ *
+ * The order must already be:
+ * ready_for_delivery
+ *
+ * This releases the delivery request so an
+ * available Rider can see and accept it.
+ * =========================================================
+ */
+
+export const createSellerDeliveryRequest =
+  async (
+    orderId: string
+  ): Promise<Delivery> => {
+    if (!orderId?.trim()) {
+      throw new Error(
+        'Order ID is required.'
+      );
+    }
+
+    const response =
+      await apiRequest<DeliveryResponse>(
+        `/deliveries/orders/${encodeURIComponent(
+          orderId.trim()
+        )}/request`,
+        {
+          method: 'POST',
+          authenticated: true,
+        }
+      );
+
+    return response.data.delivery;
+  };
+
 /*
  * =========================================================
  * AVAILABLE DELIVERY MARKETPLACE

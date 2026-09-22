@@ -467,3 +467,98 @@ export async function completeOrder(
 
   return response.data.order;
 }
+
+/*
+ * =========================================================
+ * SELLER ORDER FILTERS
+ * =========================================================
+ */
+
+export type SellerOrderFilters = {
+  status?: CustomerOrderStatus;
+  paymentStatus?: PaymentStatus;
+};
+
+/*
+ * =========================================================
+ * GET SELLER ORDERS
+ *
+ * GET /orders/seller/mine
+ * =========================================================
+ */
+
+export async function getSellerOrders(
+  filters?: SellerOrderFilters
+): Promise<CustomerOrder[]> {
+  const query = buildOrderQuery(filters);
+
+  const response =
+    await apiRequest<GetMyOrdersResponse>(
+      `/orders/seller/mine${query}`,
+      {
+        method: 'GET',
+        authenticated: true,
+      }
+    );
+
+  return response.data.orders;
+}
+
+/*
+ * =========================================================
+ * SELLER
+ * UPDATE ORDER STATUS
+ *
+ * PATCH /orders/:orderId/status
+ * =========================================================
+ */
+
+type UpdateSellerOrderStatusResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    order: CustomerOrder;
+  };
+};
+
+export type SellerUpdateOrderStatus =
+  | 'confirmed'
+  | 'preparing'
+  | 'ready_for_pickup'
+  | 'ready_for_delivery';
+
+export async function updateSellerOrderStatus(
+  orderId: string,
+  status: SellerUpdateOrderStatus,
+  sellerNotes?: string
+): Promise<CustomerOrder> {
+  if (!orderId.trim()) {
+    throw new Error(
+      'Order ID is required.'
+    );
+  }
+
+  const response =
+    await apiRequest<UpdateSellerOrderStatusResponse>(
+      `/orders/${encodeURIComponent(
+        orderId.trim()
+      )}/status`,
+      {
+        method: 'PATCH',
+
+        authenticated: true,
+
+        body: JSON.stringify({
+          status,
+
+          sellerNotes:
+            sellerNotes?.trim() ||
+            null,
+        }),
+      }
+    );
+
+  return response.data.order;
+}

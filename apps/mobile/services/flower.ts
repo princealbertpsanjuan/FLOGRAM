@@ -569,3 +569,237 @@ export const formatFlowerPrice = (
     'en-PH'
   )}`;
 };
+
+/*
+ * =========================================================
+ * SELLER FLOWER LIST RESPONSE
+ * =========================================================
+ */
+
+type SellerFlowersResponse = {
+  success: boolean;
+  message: string;
+  data: {
+    flowers: FlowerListing[];
+  };
+};
+
+/*
+ * =========================================================
+ * GET SELLER FLOWERS
+ *
+ * GET /flowers/seller/mine
+ * =========================================================
+ */
+
+export async function getSellerFlowers(): Promise<
+  FlowerListing[]
+> {
+  const response =
+    await apiRequest<SellerFlowersResponse>(
+      '/flowers/seller/mine',
+      {
+        method: 'GET',
+        authenticated: true,
+      }
+    );
+
+  return response.data.flowers;
+}
+
+/*
+ * =========================================================
+ * UPDATE SELLER FLOWER
+ *
+ * PATCH /flowers/:flowerId
+ * =========================================================
+ */
+
+export type UpdateFlowerPayload = {
+  name?: string;
+  description?: string;
+  price?: number;
+  category?: string;
+  occasion?: string[];
+  flowerTypes?: string[];
+  colors?: string[];
+  isAvailable?: boolean;
+};
+
+export async function updateSellerFlower(
+  flowerId: string,
+  payload: UpdateFlowerPayload
+): Promise<FlowerListing> {
+  if (!flowerId.trim()) {
+    throw new Error(
+      'Flower ID is required.'
+    );
+  }
+
+  const response =
+    await apiRequest<FlowerResponse>(
+      `/flowers/${encodeURIComponent(
+        flowerId.trim()
+      )}`,
+      {
+        method: 'PATCH',
+        authenticated: true,
+        body: JSON.stringify(payload),
+      }
+    );
+
+  return response.data.flower;
+}
+
+/*
+ * =========================================================
+ * UPDATE FLOWER AVAILABILITY
+ * =========================================================
+ */
+
+export async function updateFlowerAvailability(
+  flowerId: string,
+  isAvailable: boolean
+): Promise<FlowerListing> {
+  return updateSellerFlower(
+    flowerId,
+    {
+      isAvailable,
+    }
+  );
+}
+
+/*
+ * =========================================================
+ * DEACTIVATE SELLER FLOWER
+ *
+ * DELETE /flowers/:flowerId
+ * =========================================================
+ */
+
+export async function deactivateSellerFlower(
+  flowerId: string
+): Promise<FlowerListing> {
+  if (!flowerId.trim()) {
+    throw new Error(
+      'Flower ID is required.'
+    );
+  }
+
+  const response =
+    await apiRequest<FlowerResponse>(
+      `/flowers/${encodeURIComponent(
+        flowerId.trim()
+      )}`,
+      {
+        method: 'DELETE',
+        authenticated: true,
+      }
+    );
+
+  return response.data.flower;
+}
+
+/*
+ * =========================================================
+ * CREATE SELLER FLOWER
+ *
+ * POST /flowers
+ * =========================================================
+ */
+
+export type CreateFlowerPayload = {
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  occasion?: string[];
+  flowerTypes?: string[];
+  colors?: string[];
+  isAvailable?: boolean;
+  images?: string[];
+};
+
+export async function createSellerFlower(
+  payload: CreateFlowerPayload
+): Promise<FlowerListing> {
+  const formData = new FormData();
+
+  formData.append(
+    'name',
+    payload.name.trim()
+  );
+
+  formData.append(
+    'description',
+    payload.description.trim()
+  );
+
+  formData.append(
+    'price',
+    String(payload.price)
+  );
+
+  formData.append(
+    'category',
+    payload.category.trim()
+  );
+
+  formData.append(
+    'occasion',
+    JSON.stringify(
+      payload.occasion ?? []
+    )
+  );
+
+  formData.append(
+    'flowerTypes',
+    JSON.stringify(
+      payload.flowerTypes ?? []
+    )
+  );
+
+  formData.append(
+    'colors',
+    JSON.stringify(
+      payload.colors ?? []
+    )
+  );
+
+  formData.append(
+    'isAvailable',
+    String(
+      payload.isAvailable ?? true
+    )
+  );
+
+  /*
+   * Backend accepts maximum 5 images.
+   */
+
+  const images =
+    payload.images?.slice(0, 5) ??
+    [];
+
+  images.forEach((imageUri) => {
+    const imageFile =
+      new File(imageUri);
+
+    formData.append(
+      'images',
+      imageFile
+    );
+  });
+
+  const response =
+    await apiRequest<FlowerResponse>(
+      '/flowers',
+      {
+        method: 'POST',
+        authenticated: true,
+        body: formData,
+      }
+    );
+
+  return response.data.flower;
+}

@@ -791,3 +791,191 @@ export const getCustomerReviews =
         )
     );
   };
+
+  /*
+ * =========================================================
+ * SELLER
+ * GET REVIEWS RECEIVED
+ * =========================================================
+ *
+ * Returns all reviews received by the authenticated Seller.
+ *
+ * IMPORTANT:
+ *
+ * - Seller performance uses sellerRating.
+ * - overallRating is the complete FLOGRAM transaction rating.
+ * - Reviews are sorted newest first.
+ * =========================================================
+ */
+
+export const getSellerReviews =
+  async (
+    sellerId
+  ) => {
+    /*
+     * =====================================================
+     * REVIEWS
+     * =====================================================
+     */
+
+    const reviews =
+      await Review.find({
+        seller:
+          sellerId,
+      })
+        .sort({
+          createdAt:
+            -1,
+        })
+        .populate(
+          "customer",
+          "firstName lastName profileImage"
+        )
+        .populate(
+          "seller",
+          "firstName lastName profileImage"
+        )
+        .populate(
+          "florist",
+          "shopName shopLogo"
+        )
+        .populate(
+          "delivery"
+        )
+        .populate(
+          "riderUser",
+          "firstName lastName profileImage"
+        )
+        .populate({
+          path:
+            "rider",
+
+          populate: {
+            path:
+              "owner",
+
+            select:
+              "firstName lastName profileImage",
+          },
+        })
+        .populate(
+          "order"
+        );
+
+    /*
+     * =====================================================
+     * FORMAT REVIEWS
+     * =====================================================
+     */
+
+    const formattedReviews =
+      reviews.map(
+        (
+          review
+        ) =>
+          formatReview(
+            review
+          )
+      );
+
+    /*
+     * =====================================================
+     * SELLER RATING SUMMARY
+     * =====================================================
+     */
+
+    const validRatings =
+      formattedReviews
+        .map(
+          review =>
+            Number(
+              review
+                .sellerRating
+            )
+        )
+        .filter(
+          rating =>
+            Number.isFinite(
+              rating
+            ) &&
+            rating >= 1 &&
+            rating <= 5
+        );
+
+    const ratingCount =
+      validRatings.length;
+
+    const averageRating =
+      ratingCount > 0
+        ? validRatings.reduce(
+            (
+              total,
+              rating
+            ) =>
+              total +
+              rating,
+            0
+          ) /
+          ratingCount
+        : null;
+
+    /*
+     * =====================================================
+     * RATING DISTRIBUTION
+     * =====================================================
+     */
+
+    const distribution = {
+      5:
+        0,
+
+      4:
+        0,
+
+      3:
+        0,
+
+      2:
+        0,
+
+      1:
+        0,
+    };
+
+    validRatings.forEach(
+      rating => {
+        const normalizedRating =
+          Math.round(
+            rating
+          );
+
+        if (
+          normalizedRating >= 1 &&
+          normalizedRating <= 5
+        ) {
+          distribution[
+            normalizedRating
+          ] += 1;
+        }
+      }
+    );
+
+    return {
+      averageRating:
+        averageRating !== null
+          ? Number(
+              averageRating.toFixed(
+                2
+              )
+            )
+          : null,
+
+      count:
+        ratingCount,
+
+      distribution,
+
+      reviews:
+        formattedReviews,
+    };
+  };

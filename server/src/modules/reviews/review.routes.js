@@ -9,6 +9,7 @@ import {
   createReview,
   getMine,
   getOrderReview,
+  getSellerMine,
 } from "./review.controller.js";
 
 import {
@@ -55,6 +56,35 @@ reviewRouter.get(
   ),
 
   getMine
+);
+/*
+ * =========================================================
+ * SELLER
+ * GET REVIEWS RECEIVED
+ * =========================================================
+ *
+ * GET
+ * /api/v1/reviews/seller/mine
+ *
+ * Returns:
+ *
+ * averageRating
+ * count
+ * distribution
+ * reviews
+ * =========================================================
+ */
+
+reviewRouter.get(
+  "/seller/mine",
+
+  authenticate,
+
+  authorize(
+    "seller"
+  ),
+
+  getSellerMine
 );
 
 /*

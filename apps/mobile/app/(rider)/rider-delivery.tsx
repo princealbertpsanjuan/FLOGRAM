@@ -173,10 +173,17 @@ export default function RiderDeliveryScreen() {
     > | null>(null);
 
   const sendingLocation =
-    useRef(false);
+  useRef(false);
 
-  const startingLocationTracking =
-    useRef(false);
+/*
+ * True after the backend has successfully
+ * received at least one Rider GPS coordinate.
+ */
+const hasBackendRiderLocation =
+  useRef(false);
+
+const startingLocationTracking =
+  useRef(false);
 
   const deliveryStatusRef =
   useRef<Delivery['status'] | null>(
@@ -196,48 +203,55 @@ export default function RiderDeliveryScreen() {
    */
 
   const loadTracking =
-    useCallback(async () => {
-      if (!deliveryId) {
-        return;
-      }
+  useCallback(async () => {
+    if (!deliveryId) {
+      return;
+    }
 
-      try {
-        const tracking =
-          await getDeliveryTracking(
-            deliveryId
-          );
-
-        setDelivery(tracking);
-
-        const backendLatitude =
-          tracking?.riderLocation
-            ?.latitude;
-
-        const backendLongitude =
-          tracking?.riderLocation
-            ?.longitude;
-
-        if (
-          typeof backendLatitude ===
-            'number' &&
-          typeof backendLongitude ===
-            'number'
-        ) {
-          setRiderCoordinate({
-            latitude:
-              backendLatitude,
-
-            longitude:
-              backendLongitude,
-          });
-        }
-      } catch (error) {
-        console.error(
-          'Unable to load delivery tracking:',
-          error
+    try {
+      const tracking =
+        await getDeliveryTracking(
+          deliveryId
         );
+
+      setDelivery(tracking);
+
+      const backendLatitude =
+        tracking?.riderLocation
+          ?.latitude;
+
+      const backendLongitude =
+        tracking?.riderLocation
+          ?.longitude;
+
+      if (
+        typeof backendLatitude ===
+          'number' &&
+        typeof backendLongitude ===
+          'number'
+      ) {
+        /*
+         * The backend already has the
+         * Rider's GPS position.
+         */
+        hasBackendRiderLocation.current =
+          true;
+
+        setRiderCoordinate({
+          latitude:
+            backendLatitude,
+
+          longitude:
+            backendLongitude,
+        });
       }
-    }, [deliveryId]);
+    } catch (error) {
+      console.error(
+        'Unable to load delivery tracking:',
+        error
+      );
+    }
+  }, [deliveryId]);
 
   /*
    * =========================================================
@@ -246,27 +260,57 @@ export default function RiderDeliveryScreen() {
    */
 
   const loadNavigation =
-    useCallback(async () => {
-      if (!deliveryId) {
+  useCallback(async () => {
+    if (!deliveryId) {
+      return;
+    }
+
+    /*
+     * The backend cannot calculate navigation
+     * until it has received the Rider's GPS.
+     */
+    if (
+      !hasBackendRiderLocation.current
+    ) {
+      return;
+    }
+
+    try {
+      const currentNavigation =
+        await getRiderNavigation(
+          deliveryId
+        );
+
+      setNavigation(
+        currentNavigation
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : '';
+
+      /*
+       * The first GPS update and navigation
+       * request can briefly overlap.
+       *
+       * This is an expected temporary state,
+       * not a fatal application error.
+       */
+      if (
+        message.includes(
+          "current location has not been received yet"
+        )
+      ) {
         return;
       }
 
-      try {
-        const currentNavigation =
-          await getRiderNavigation(
-            deliveryId
-          );
-
-        setNavigation(
-          currentNavigation
-        );
-      } catch (error) {
-        console.error(
-          'Unable to load rider navigation:',
-          error
-        );
-      }
-    }, [deliveryId]);
+      console.error(
+        'Unable to load rider navigation:',
+        error
+      );
+    }
+  }, [deliveryId]);
 
   /*
    * =========================================================
@@ -360,19 +404,19 @@ const sendLocationToBackend =
         deliveryStatusRef.current;
 
       const isActiveDelivery =
-        currentStatus === 'accepted' ||
-        currentStatus === 'picked_up' ||
+        currentStatus ===
+          'accepted' ||
+        currentStatus ===
+          'picked_up' ||
         currentStatus ===
           'out_for_delivery';
 
       /*
-       * Never send GPS updates after
-       * the delivery stops being active.
+       * Never send GPS updates when:
        *
-       * This also protects against a
-       * Location.watchPositionAsync()
-       * callback that was already queued
-       * when the delivery was completed.
+       * - there is no delivery
+       * - the delivery is no longer active
+       * - another GPS update is already running
        */
       if (
         !deliveryId ||
@@ -387,15 +431,15 @@ const sendLocationToBackend =
           true;
 
         /*
-         * Check again after acquiring the
-         * sending lock in case the status
-         * changed at almost the same time.
+         * Check the status again after
+         * acquiring the sending lock.
          */
         const latestStatus =
           deliveryStatusRef.current;
 
         const stillActive =
-          latestStatus === 'accepted' ||
+          latestStatus ===
+            'accepted' ||
           latestStatus ===
             'picked_up' ||
           latestStatus ===
@@ -413,10 +457,20 @@ const sendLocationToBackend =
             location.coords.longitude,
         };
 
+        /*
+         * Immediately show the Rider's
+         * position on the map.
+         */
         setRiderCoordinate(
           currentCoordinate
         );
 
+        /*
+         * IMPORTANT:
+         *
+         * Send GPS to the backend BEFORE
+         * requesting navigation.
+         */
         await updateRiderLocation(
           deliveryId,
           {
@@ -432,13 +486,19 @@ const sendLocationToBackend =
         );
 
         /*
-         * The delivery may have been
-         * completed while the network
-         * request was running.
+         * updateRiderLocation succeeded.
          *
-         * If so, don't continue requesting
-         * navigation/tracking for the
-         * completed delivery.
+         * The backend now has:
+         *
+         * delivery.riderLocation.latitude
+         * delivery.riderLocation.longitude
+         */
+        hasBackendRiderLocation.current =
+          true;
+
+        /*
+         * The delivery could have changed
+         * status while the request was running.
          */
         const statusAfterUpdate =
           deliveryStatusRef.current;
@@ -461,10 +521,14 @@ const sendLocationToBackend =
 
         setLocationError(null);
 
+        /*
+         * Safe now because the backend has
+         * already received Rider GPS.
+         */
         await loadNavigation();
 
         /*
-         * Check one more time before
+         * Check status once more before
          * refreshing tracking.
          */
         const statusBeforeTracking =
@@ -478,21 +542,22 @@ const sendLocationToBackend =
           statusBeforeTracking ===
             'out_for_delivery';
 
-        if (canRefreshTracking) {
+        if (
+          canRefreshTracking
+        ) {
           await loadTracking();
         }
       } catch (error) {
         /*
-         * If the delivery became completed
-         * while a GPS request was already
-         * in flight, do not show/log that
-         * expected race-condition error.
+         * Ignore requests that finished after
+         * the delivery stopped being active.
          */
         const latestStatus =
           deliveryStatusRef.current;
 
         const stillActive =
-          latestStatus === 'accepted' ||
+          latestStatus ===
+            'accepted' ||
           latestStatus ===
             'picked_up' ||
           latestStatus ===
@@ -531,122 +596,18 @@ const sendLocationToBackend =
    */
 
   const startLocationTracking =
-    useCallback(async () => {
-      if (
-        !deliveryId ||
-        startingLocationTracking.current
-      ) {
-        return;
-      }
+  useCallback(async () => {
+    if (
+      !deliveryId ||
+      startingLocationTracking.current
+    ) {
+      return;
+    }
 
-      try {
-        startingLocationTracking.current =
-          true;
+    try {
+      startingLocationTracking.current =
+        true;
 
-        if (
-          locationSubscription.current
-        ) {
-          locationSubscription.current.remove();
-
-          locationSubscription.current =
-            null;
-        }
-
-        const permission =
-          await Location.requestForegroundPermissionsAsync();
-
-        if (
-          permission.status !==
-          'granted'
-        ) {
-          setLocationPermissionGranted(
-            false
-          );
-
-          setLocationError(
-            'Location permission is required for rider navigation.'
-          );
-
-          return;
-        }
-
-        setLocationPermissionGranted(
-          true
-        );
-
-        setLocationError(null);
-
-        const currentLocation =
-          await Location.getCurrentPositionAsync(
-            {
-              accuracy:
-                Location.Accuracy.High,
-            }
-          );
-
-        await sendLocationToBackend(
-          currentLocation
-        );
-
-        locationSubscription.current =
-          await Location.watchPositionAsync(
-            {
-              accuracy:
-                Location.Accuracy.High,
-
-              timeInterval:
-                5000,
-
-              distanceInterval:
-                10,
-            },
-
-            async (
-              location
-            ) => {
-              await sendLocationToBackend(
-                location
-              );
-            }
-          );
-      } catch (error) {
-        console.error(
-          'Unable to start location tracking:',
-          error
-        );
-
-        setLocationError(
-          error instanceof Error
-            ? error.message
-            : 'Unable to start GPS tracking.'
-        );
-      } finally {
-        startingLocationTracking.current =
-          false;
-      }
-    }, [
-      deliveryId,
-      sendLocationToBackend,
-    ]);
-
-  /*
-   * =========================================================
-   * GPS LIFECYCLE
-   * =========================================================
-   */
-
-  useEffect(() => {
-    const activeStatus =
-      delivery?.status ===
-        'accepted' ||
-      delivery?.status ===
-        'picked_up' ||
-      delivery?.status ===
-        'out_for_delivery';
-
-    if (activeStatus) {
-      startLocationTracking();
-    } else {
       if (
         locationSubscription.current
       ) {
@@ -655,9 +616,130 @@ const sendLocationToBackend =
         locationSubscription.current =
           null;
       }
+
+      const permission =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (
+        permission.status !==
+        'granted'
+      ) {
+        setLocationPermissionGranted(
+          false
+        );
+
+        setLocationError(
+          'Location permission is required for rider navigation.'
+        );
+
+        return;
+      }
+
+      setLocationPermissionGranted(
+        true
+      );
+
+      setLocationError(null);
+
+      /*
+       * Get the first GPS coordinate immediately.
+       */
+      const currentLocation =
+        await Location.getCurrentPositionAsync(
+          {
+            accuracy:
+              Location.Accuracy.High,
+          }
+        );
+
+      /*
+       * This sends the first GPS coordinate
+       * to the backend before navigation
+       * is requested.
+       */
+      await sendLocationToBackend(
+        currentLocation
+      );
+
+      /*
+       * Continue sending live GPS updates.
+       */
+      locationSubscription.current =
+        await Location.watchPositionAsync(
+          {
+            accuracy:
+              Location.Accuracy.High,
+
+            timeInterval:
+              5000,
+
+            distanceInterval:
+              10,
+          },
+
+          async (
+            location
+          ) => {
+            await sendLocationToBackend(
+              location
+            );
+          }
+        );
+    } catch (error) {
+      console.error(
+        'Unable to start location tracking:',
+        error
+      );
+
+      setLocationError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to start GPS tracking.'
+      );
+    } finally {
+      startingLocationTracking.current =
+        false;
     }
+  }, [
+    deliveryId,
+    sendLocationToBackend,
+  ]);
+
+  /*
+   * =========================================================
+   * GPS LIFECYCLE
+   * =========================================================
+   */
+
+  useEffect(() => {
+  const activeStatus =
+    delivery?.status === 'accepted' ||
+    delivery?.status === 'picked_up' ||
+    delivery?.status === 'out_for_delivery';
+
+  /*
+   * Start GPS asynchronously instead of
+   * calling the state-changing function
+   * directly inside the effect.
+   */
+  const beginTracking =
+    async () => {
+      if (!activeStatus) {
+        return;
+      }
+
+      await startLocationTracking();
+    };
+
+  if (activeStatus) {
+    const timeout =
+      setTimeout(() => {
+        void beginTracking();
+      }, 0);
 
     return () => {
+      clearTimeout(timeout);
+
       if (
         locationSubscription.current
       ) {
@@ -667,10 +749,35 @@ const sendLocationToBackend =
           null;
       }
     };
-  }, [
-    delivery?.status,
-    startLocationTracking,
-  ]);
+  }
+
+  /*
+   * Delivery is no longer active.
+   * Stop the existing GPS subscription.
+   */
+  if (
+    locationSubscription.current
+  ) {
+    locationSubscription.current.remove();
+
+    locationSubscription.current =
+      null;
+  }
+
+  return () => {
+    if (
+      locationSubscription.current
+    ) {
+      locationSubscription.current.remove();
+
+      locationSubscription.current =
+        null;
+    }
+  };
+}, [
+  delivery?.status,
+  startLocationTracking,
+]);
 
   /*
    * =========================================================

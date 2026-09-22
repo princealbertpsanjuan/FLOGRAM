@@ -377,6 +377,43 @@ export type MyReviewsData = {
 
 /*
  * =========================================================
+ * SELLER REVIEW SUMMARY
+ * =========================================================
+ */
+
+export type SellerRatingDistribution = {
+  5:
+    number;
+
+  4:
+    number;
+
+  3:
+    number;
+
+  2:
+    number;
+
+  1:
+    number;
+};
+
+export type SellerReviewsData = {
+  averageRating:
+    number | null;
+
+  count:
+    number;
+
+  distribution:
+    SellerRatingDistribution;
+
+  reviews:
+    Review[];
+};
+
+/*
+ * =========================================================
  * API RESPONSE TYPES
  * =========================================================
  */
@@ -394,6 +431,7 @@ type CreateReviewResponse = {
   };
 };
 
+
 type OrderReviewResponse = {
   success:
     boolean;
@@ -403,6 +441,17 @@ type OrderReviewResponse = {
 
   data:
     OrderReviewStatus;
+};
+
+type SellerReviewsResponse = {
+  success:
+    boolean;
+
+  message:
+    string;
+
+  data:
+    SellerReviewsData;
 };
 
 type MyReviewsResponse = {
@@ -671,4 +720,32 @@ export const hasReviewedOrder =
       result.reviewed ===
       true
     );
+  };
+
+  /*
+ * =========================================================
+ * SELLER
+ * GET REVIEWS RECEIVED
+ * =========================================================
+ *
+ * GET
+ * /api/v1/reviews/seller/mine
+ * =========================================================
+ */
+
+export const getSellerReviews =
+  async (): Promise<SellerReviewsData> => {
+    const response =
+      await apiRequest<SellerReviewsResponse>(
+        '/reviews/seller/mine',
+        {
+          method:
+            'GET',
+
+          authenticated:
+            true,
+        }
+      );
+
+    return response.data;
   };
