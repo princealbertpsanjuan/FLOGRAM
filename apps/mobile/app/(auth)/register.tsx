@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,204 +12,591 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
+} from "react-native";
 
 import {
+  logout,
   register,
   type UserRole,
-} from '../../services/auth';
+} from "../../services/auth";
 
-type RegistrationRole = Exclude<UserRole, 'admin'>;
+type RegistrationRole = Exclude<
+  UserRole,
+  "admin"
+>;
+
+const EMAIL_REGEX =
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const PHONE_REGEX =
+  /^(09|\+639)\d{9}$/;
+
+const LOWERCASE_REGEX =
+  /[a-z]/;
+
+const UPPERCASE_REGEX =
+  /[A-Z]/;
+
+const NUMBER_REGEX =
+  /[0-9]/;
 
 export default function RegisterScreen() {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [
+    firstName,
+    setFirstName,
+  ] = useState("");
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [
+    lastName,
+    setLastName,
+  ] = useState("");
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [
+    email,
+    setEmail,
+  ] = useState("");
 
-  const [role, setRole] =
-    useState<RegistrationRole>('customer');
+  const [
+    phoneNumber,
+    setPhoneNumber,
+  ] = useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [
+    password,
+    setPassword,
+  ] = useState("");
 
-  const handleRegister = async () => {
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState("");
+
+  const [
+    showPassword,
+    setShowPassword,
+  ] = useState(false);
+
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
+
+  const [
+    role,
+    setRole,
+  ] =
+    useState<RegistrationRole>(
+      "customer"
+    );
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  /*
+   * =======================================================
+   * VALIDATION
+   * =======================================================
+   */
+
+  const validateForm = () => {
+    const cleanFirstName =
+      firstName.trim();
+
+    const cleanLastName =
+      lastName.trim();
+
+    const cleanEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    const cleanPhoneNumber =
+      phoneNumber.trim();
+
+    if (!cleanFirstName) {
+      Alert.alert(
+        "First Name Required",
+        "Please enter your first name."
+      );
+
+      return false;
+    }
+
     if (
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !email.trim() ||
-      !phoneNumber.trim() ||
-      !password ||
-      !confirmPassword
+      cleanFirstName.length >
+      50
     ) {
       Alert.alert(
-        'Missing Information',
-        'Please complete all required fields.'
+        "Invalid First Name",
+        "First name cannot exceed 50 characters."
       );
 
-      return;
+      return false;
     }
 
-    if (password !== confirmPassword) {
+    if (!cleanLastName) {
       Alert.alert(
-        'Password Mismatch',
-        'Your password confirmation does not match.'
+        "Last Name Required",
+        "Please enter your last name."
       );
 
-      return;
+      return false;
     }
 
-    try {
-      setLoading(true);
-
-      const response = await register({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim().toLowerCase(),
-        phoneNumber: phoneNumber.trim(),
-        password,
-        confirmPassword,
-        role,
-      });
-
-      const user = response.data.user;
-
-      /*
-       * Customers don't require administrator verification.
-       */
-      if (user.role === 'customer') {
-        Alert.alert(
-          'Account Created',
-          `Welcome to FLOGRAM, ${user.firstName}!`,
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                /*
-                 * Customer home will replace this
-                 * destination once we build its UI.
-                 */
-                router.replace('/(tabs)');
-              },
-            },
-          ]
-        );
-
-        return;
-      }
-
-      /*
-       * Seller and rider accounts are created with
-       * verificationStatus = "pending".
-       */
-      if (user.verificationStatus === 'pending') {
-        Alert.alert(
-          'Account Created',
-          'Your account was created successfully and is awaiting administrator verification.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                router.replace('/(auth)/login');
-              },
-            },
-          ]
-        );
-
-        return;
-      }
-
-      router.replace('/(auth)/login');
-    } catch (error) {
+    if (
+      cleanLastName.length >
+      50
+    ) {
       Alert.alert(
-        'Registration Failed',
-        error instanceof Error
-          ? error.message
-          : 'Unable to create your account.'
+        "Invalid Last Name",
+        "Last name cannot exceed 50 characters."
       );
-    } finally {
-      setLoading(false);
+
+      return false;
     }
+
+    if (!cleanEmail) {
+      Alert.alert(
+        "Email Required",
+        "Please enter your email address."
+      );
+
+      return false;
+    }
+
+    if (
+      !EMAIL_REGEX.test(
+        cleanEmail
+      )
+    ) {
+      Alert.alert(
+        "Invalid Email",
+        "Please enter a valid email address."
+      );
+
+      return false;
+    }
+
+    if (!cleanPhoneNumber) {
+      Alert.alert(
+        "Phone Number Required",
+        "Please enter your phone number."
+      );
+
+      return false;
+    }
+
+    if (
+      !PHONE_REGEX.test(
+        cleanPhoneNumber
+      )
+    ) {
+      Alert.alert(
+        "Invalid Phone Number",
+        "Enter a valid Philippine phone number, such as 09171234567."
+      );
+
+      return false;
+    }
+
+    if (!password) {
+      Alert.alert(
+        "Password Required",
+        "Please enter a password."
+      );
+
+      return false;
+    }
+
+    if (
+      password.length < 8
+    ) {
+      Alert.alert(
+        "Invalid Password",
+        "Password must contain at least 8 characters."
+      );
+
+      return false;
+    }
+
+    if (
+      !LOWERCASE_REGEX.test(
+        password
+      )
+    ) {
+      Alert.alert(
+        "Invalid Password",
+        "Password must contain at least one lowercase letter."
+      );
+
+      return false;
+    }
+
+    if (
+      !UPPERCASE_REGEX.test(
+        password
+      )
+    ) {
+      Alert.alert(
+        "Invalid Password",
+        "Password must contain at least one uppercase letter."
+      );
+
+      return false;
+    }
+
+    if (
+      !NUMBER_REGEX.test(
+        password
+      )
+    ) {
+      Alert.alert(
+        "Invalid Password",
+        "Password must contain at least one number."
+      );
+
+      return false;
+    }
+
+    if (!confirmPassword) {
+      Alert.alert(
+        "Confirm Password",
+        "Please confirm your password."
+      );
+
+      return false;
+    }
+
+    if (
+      password !==
+      confirmPassword
+    ) {
+      Alert.alert(
+        "Password Mismatch",
+        "Your password confirmation does not match."
+      );
+
+      return false;
+    }
+
+    return true;
   };
 
+  /*
+   * =======================================================
+   * REGISTER
+   * =======================================================
+   */
+
+  const handleRegister =
+    async () => {
+      if (!validateForm()) {
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const response =
+          await register({
+            firstName:
+              firstName.trim(),
+
+            lastName:
+              lastName.trim(),
+
+            email:
+              email
+                .trim()
+                .toLowerCase(),
+
+            phoneNumber:
+              phoneNumber.trim(),
+
+            password,
+
+            confirmPassword,
+
+            role,
+          });
+
+        const user =
+          response.data.user;
+
+        /*
+         * ===============================================
+         * CUSTOMER
+         * ===============================================
+         *
+         * Customer accounts do not require
+         * administrator verification.
+         *
+         * register() already saves the session,
+         * so the customer can continue directly
+         * to the Customer application.
+         */
+
+        if (
+          user.role ===
+          "customer"
+        ) {
+          Alert.alert(
+            "Account Created",
+            `Welcome to FLOGRAM, ${user.firstName}!`,
+            [
+              {
+                text: "Continue",
+
+                onPress: () => {
+                  router.replace(
+                    "/(tabs)"
+                  );
+                },
+              },
+            ]
+          );
+
+          return;
+        }
+
+        /*
+         * ===============================================
+         * SELLER / RIDER
+         * ===============================================
+         *
+         * register() stores the access token returned
+         * by the backend.
+         *
+         * Pending seller/rider accounts should not
+         * remain signed in while waiting for Admin
+         * verification, so clear the newly created
+         * session before returning to Login.
+         */
+
+        if (
+          user.verificationStatus ===
+          "pending"
+        ) {
+          await logout();
+
+          const accountType =
+            user.role ===
+            "seller"
+              ? "Seller"
+              : "Rider";
+
+          Alert.alert(
+            "Account Created",
+            `Your ${accountType.toLowerCase()} account was created successfully and is awaiting administrator verification.`,
+            [
+              {
+                text: "OK",
+
+                onPress: () => {
+                  router.replace(
+                    "/(auth)/login"
+                  );
+                },
+              },
+            ]
+          );
+
+          return;
+        }
+
+        /*
+         * Safety fallback for a non-customer
+         * registration that does not return pending.
+         */
+
+        await logout();
+
+        router.replace(
+          "/(auth)/login"
+        );
+      } catch (error) {
+        Alert.alert(
+          "Registration Failed",
+          error instanceof Error
+            ? error.message
+            : "Unable to create your account."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  /*
+   * =======================================================
+   * UI
+   * =======================================================
+   */
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+    >
       <KeyboardAvoidingView
         style={styles.container}
         behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
+          Platform.OS === "ios"
+            ? "padding"
             : undefined
         }
       >
         <ScrollView
           style={styles.container}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={
+            styles.scrollContent
+          }
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={
+            false
+          }
         >
-          {/* HEADER */}
+          {/* ============================================
+              HEADER
+          ============================================ */}
 
-          <View style={styles.hero}>
-            <View style={styles.decorLeft} />
-            <View style={styles.decorRight} />
+          <View
+            style={styles.hero}
+          >
+            <View
+              style={
+                styles.decorLeft
+              }
+            />
 
-            <Text style={styles.flower}>🌸</Text>
+            <View
+              style={
+                styles.decorRight
+              }
+            />
 
-            <Text style={styles.heroTitle}>
+            <Text
+              style={styles.flower}
+            >
+              🌸
+            </Text>
+
+            <Text
+              style={
+                styles.heroTitle
+              }
+            >
               Create Account
             </Text>
 
-            <Text style={styles.heroSubtitle}>
-              Join FLOGRAM and make every moment bloom
+            <Text
+              style={
+                styles.heroSubtitle
+              }
+            >
+              Join FLOGRAM and make
+              every moment bloom
             </Text>
           </View>
 
-          {/* FORM */}
+          {/* ============================================
+              FORM
+          ============================================ */}
 
-          <View style={styles.form}>
-            <Text style={styles.sectionTitle}>
+          <View
+            style={styles.form}
+          >
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
               PERSONAL INFORMATION
             </Text>
 
-            <View style={styles.nameRow}>
-              <View style={styles.nameField}>
-                <Text style={styles.label}>
+            {/* NAME */}
+
+            <View
+              style={
+                styles.nameRow
+              }
+            >
+              <View
+                style={
+                  styles.nameField
+                }
+              >
+                <Text
+                  style={
+                    styles.label
+                  }
+                >
                   FIRST NAME
                 </Text>
 
                 <TextInput
-                  style={styles.input}
+                  style={
+                    styles.input
+                  }
                   placeholder="Sofia"
                   placeholderTextColor="#B8AFB4"
-                  value={firstName}
-                  onChangeText={setFirstName}
+                  value={
+                    firstName
+                  }
+                  onChangeText={
+                    setFirstName
+                  }
                   autoCapitalize="words"
+                  autoCorrect={
+                    false
+                  }
+                  maxLength={50}
+                  textContentType="givenName"
+                  returnKeyType="next"
                 />
               </View>
 
-              <View style={styles.nameField}>
-                <Text style={styles.label}>
+              <View
+                style={
+                  styles.nameField
+                }
+              >
+                <Text
+                  style={
+                    styles.label
+                  }
+                >
                   LAST NAME
                 </Text>
 
                 <TextInput
-                  style={styles.input}
+                  style={
+                    styles.input
+                  }
                   placeholder="Reyes"
                   placeholderTextColor="#B8AFB4"
-                  value={lastName}
-                  onChangeText={setLastName}
+                  value={
+                    lastName
+                  }
+                  onChangeText={
+                    setLastName
+                  }
                   autoCapitalize="words"
+                  autoCorrect={
+                    false
+                  }
+                  maxLength={50}
+                  textContentType="familyName"
+                  returnKeyType="next"
                 />
               </View>
             </View>
 
-            <Text style={styles.label}>
+            {/* EMAIL */}
+
+            <Text
+              style={styles.label}
+            >
               EMAIL ADDRESS
             </Text>
 
@@ -218,13 +605,21 @@ export default function RegisterScreen() {
               placeholder="sofia@email.com"
               placeholderTextColor="#B8AFB4"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={
+                setEmail
+              }
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              textContentType="emailAddress"
+              returnKeyType="next"
             />
 
-            <Text style={styles.label}>
+            {/* PHONE */}
+
+            <Text
+              style={styles.label}
+            >
               PHONE NUMBER
             </Text>
 
@@ -233,163 +628,415 @@ export default function RegisterScreen() {
               placeholder="09171234567"
               placeholderTextColor="#B8AFB4"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              onChangeText={(
+                value
+              ) => {
+                /*
+                 * Keep only numbers and
+                 * an optional leading +.
+                 */
+
+                const cleaned =
+                  value.replace(
+                    /[^\d+]/g,
+                    ""
+                  );
+
+                setPhoneNumber(
+                  cleaned
+                );
+              }}
               keyboardType="phone-pad"
               maxLength={13}
+              textContentType="telephoneNumber"
+              returnKeyType="next"
             />
 
-            {/* ACCOUNT TYPE */}
+            <Text
+              style={
+                styles.fieldHint
+              }
+            >
+              Use 09XXXXXXXXX or
+              +639XXXXXXXXX.
+            </Text>
 
-            <Text style={styles.sectionTitle}>
+            {/* ============================================
+                ACCOUNT TYPE
+            ============================================ */}
+
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
               ACCOUNT TYPE
             </Text>
 
-            <View style={styles.roleContainer}>
+            <View
+              style={
+                styles.roleContainer
+              }
+            >
               <RoleButton
                 label="Customer"
                 icon="🌷"
-                selected={role === 'customer'}
-                onPress={() => setRole('customer')}
+                selected={
+                  role ===
+                  "customer"
+                }
+                onPress={() =>
+                  setRole(
+                    "customer"
+                  )
+                }
               />
 
               <RoleButton
                 label="Seller"
                 icon="🏪"
-                selected={role === 'seller'}
-                onPress={() => setRole('seller')}
+                selected={
+                  role ===
+                  "seller"
+                }
+                onPress={() =>
+                  setRole(
+                    "seller"
+                  )
+                }
               />
 
               <RoleButton
                 label="Rider"
                 icon="🛵"
-                selected={role === 'rider'}
-                onPress={() => setRole('rider')}
+                selected={
+                  role ===
+                  "rider"
+                }
+                onPress={() =>
+                  setRole(
+                    "rider"
+                  )
+                }
               />
             </View>
 
-            {role !== 'customer' && (
-              <View style={styles.verificationNotice}>
-                <Text style={styles.verificationTitle}>
-                  Verification Required
-                </Text>
+            {role !==
+              "customer" && (
+              <View
+                style={
+                  styles.verificationNotice
+                }
+              >
+                <View
+                  style={
+                    styles.verificationHeader
+                  }
+                >
+                  <Text
+                    style={
+                      styles.verificationIcon
+                    }
+                  >
+                    ⏳
+                  </Text>
 
-                <Text style={styles.verificationText}>
-                  {role === 'seller'
-                    ? 'Seller accounts require administrator verification before full seller features become available.'
-                    : 'Rider accounts require administrator verification before delivery features become available.'}
+                  <Text
+                    style={
+                      styles.verificationTitle
+                    }
+                  >
+                    Verification
+                    Required
+                  </Text>
+                </View>
+
+                <Text
+                  style={
+                    styles.verificationText
+                  }
+                >
+                  {role ===
+                  "seller"
+                    ? "Your seller account will be reviewed by an administrator before seller features become available."
+                    : "Your rider account will be reviewed by an administrator before delivery features become available."}
                 </Text>
               </View>
             )}
 
-            {/* PASSWORD */}
+            {/* ============================================
+                SECURITY
+            ============================================ */}
 
-            <Text style={styles.sectionTitle}>
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
               SECURITY
             </Text>
 
-            <Text style={styles.label}>
+            <Text
+              style={styles.label}
+            >
               PASSWORD
             </Text>
 
-            <View style={styles.passwordContainer}>
+            <View
+              style={
+                styles.passwordContainer
+              }
+            >
               <TextInput
-                style={styles.passwordInput}
+                style={
+                  styles.passwordInput
+                }
                 placeholder="Enter password"
                 placeholderTextColor="#B8AFB4"
                 value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-
-              <Pressable
-                onPress={() =>
-                  setShowPassword((current) => !current)
+                onChangeText={
+                  setPassword
                 }
-              >
-                <Text style={styles.showText}>
-                  {showPassword ? 'Hide' : 'Show'}
-                </Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.passwordHint}>
-              At least 8 characters with uppercase, lowercase and a number.
-            </Text>
-
-            <Text style={styles.label}>
-              CONFIRM PASSWORD
-            </Text>
-
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="Confirm password"
-                placeholderTextColor="#B8AFB4"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
+                secureTextEntry={
+                  !showPassword
+                }
                 autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="newPassword"
+                returnKeyType="next"
               />
 
               <Pressable
+                hitSlop={10}
                 onPress={() =>
-                  setShowConfirmPassword(
-                    (current) => !current
+                  setShowPassword(
+                    (current) =>
+                      !current
                   )
                 }
               >
-                <Text style={styles.showText}>
-                  {showConfirmPassword
-                    ? 'Hide'
-                    : 'Show'}
+                <Text
+                  style={
+                    styles.showText
+                  }
+                >
+                  {showPassword
+                    ? "Hide"
+                    : "Show"}
                 </Text>
               </Pressable>
             </View>
 
-            {/* CREATE */}
+            <View
+              style={
+                styles.passwordRequirements
+              }
+            >
+              <PasswordRequirement
+                met={
+                  password.length >=
+                  8
+                }
+                text="At least 8 characters"
+              />
+
+              <PasswordRequirement
+                met={LOWERCASE_REGEX.test(
+                  password
+                )}
+                text="One lowercase letter"
+              />
+
+              <PasswordRequirement
+                met={UPPERCASE_REGEX.test(
+                  password
+                )}
+                text="One uppercase letter"
+              />
+
+              <PasswordRequirement
+                met={NUMBER_REGEX.test(
+                  password
+                )}
+                text="One number"
+              />
+            </View>
+
+            <Text
+              style={styles.label}
+            >
+              CONFIRM PASSWORD
+            </Text>
+
+            <View
+              style={
+                styles.passwordContainer
+              }
+            >
+              <TextInput
+                style={
+                  styles.passwordInput
+                }
+                placeholder="Confirm password"
+                placeholderTextColor="#B8AFB4"
+                value={
+                  confirmPassword
+                }
+                onChangeText={
+                  setConfirmPassword
+                }
+                secureTextEntry={
+                  !showConfirmPassword
+                }
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="newPassword"
+                returnKeyType="done"
+                onSubmitEditing={() => {
+                  if (!loading) {
+                    void handleRegister();
+                  }
+                }}
+              />
+
+              <Pressable
+                hitSlop={10}
+                onPress={() =>
+                  setShowConfirmPassword(
+                    (current) =>
+                      !current
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.showText
+                  }
+                >
+                  {showConfirmPassword
+                    ? "Hide"
+                    : "Show"}
+                </Text>
+              </Pressable>
+            </View>
+
+            {confirmPassword
+              .length > 0 && (
+              <Text
+                style={[
+                  styles.confirmationText,
+
+                  password ===
+                  confirmPassword
+                    ? styles.confirmationSuccess
+                    : styles.confirmationError,
+                ]}
+              >
+                {password ===
+                confirmPassword
+                  ? "✓ Passwords match"
+                  : "Passwords do not match"}
+              </Text>
+            )}
+
+            {/* ============================================
+                CREATE ACCOUNT
+            ============================================ */}
 
             <Pressable
               disabled={loading}
-              style={({ pressed }) => [
+              style={({
+                pressed,
+              }) => [
                 styles.createButton,
-                pressed && styles.pressed,
-                loading && styles.disabledButton,
+
+                pressed &&
+                  styles.pressed,
+
+                loading &&
+                  styles.disabledButton,
               ]}
-              onPress={handleRegister}
+              onPress={() => {
+                void handleRegister();
+              }}
             >
               {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <>
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={
+                      styles.createButtonText
+                    }
+                  >
+                    Creating
+                    Account...
+                  </Text>
+                </>
               ) : (
-                <Text style={styles.createButtonText}>
+                <Text
+                  style={
+                    styles.createButtonText
+                  }
+                >
                   Create Account
                 </Text>
               )}
             </Pressable>
 
-            {/* LOGIN */}
+            {/* ============================================
+                LOGIN
+            ============================================ */}
 
-            <View style={styles.loginRow}>
-              <Text style={styles.loginPrefix}>
-                Already have an account?
+            <View
+              style={
+                styles.loginRow
+              }
+            >
+              <Text
+                style={
+                  styles.loginPrefix
+                }
+              >
+                Already have an
+                account?
               </Text>
 
               <Pressable
+                disabled={loading}
                 onPress={() =>
-                  router.replace('/(auth)/login')
+                  router.replace(
+                    "/(auth)/login"
+                  )
                 }
               >
-                <Text style={styles.loginLink}>
+                <Text
+                  style={
+                    styles.loginLink
+                  }
+                >
                   Sign In
                 </Text>
               </Pressable>
             </View>
 
             <Pressable
-              style={styles.backButton}
-              onPress={() => router.back()}
+              style={
+                styles.backButton
+              }
+              disabled={loading}
+              onPress={() =>
+                router.back()
+              }
             >
-              <Text style={styles.backText}>
+              <Text
+                style={
+                  styles.backText
+                }
+              >
                 ← Back
               </Text>
             </Pressable>
@@ -399,6 +1046,12 @@ export default function RegisterScreen() {
     </SafeAreaView>
   );
 }
+
+/*
+ * =========================================================
+ * ROLE BUTTON
+ * =========================================================
+ */
 
 type RoleButtonProps = {
   label: string;
@@ -415,20 +1068,31 @@ function RoleButton({
 }: RoleButtonProps) {
   return (
     <Pressable
-      style={[
+      style={({
+        pressed,
+      }) => [
         styles.roleButton,
-        selected && styles.roleButtonSelected,
+
+        selected &&
+          styles.roleButtonSelected,
+
+        pressed &&
+          styles.roleButtonPressed,
       ]}
       onPress={onPress}
     >
-      <Text style={styles.roleIcon}>
+      <Text
+        style={styles.roleIcon}
+      >
         {icon}
       </Text>
 
       <Text
         style={[
           styles.roleText,
-          selected && styles.roleTextSelected,
+
+          selected &&
+            styles.roleTextSelected,
         ]}
       >
         {label}
@@ -437,248 +1101,419 @@ function RoleButton({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+/*
+ * =========================================================
+ * PASSWORD REQUIREMENT
+ * =========================================================
+ */
 
-  scrollContent: {
-    flexGrow: 1,
-    backgroundColor: '#FFFFFF',
-    paddingBottom: 35,
-  },
+type PasswordRequirementProps = {
+  met: boolean;
+  text: string;
+};
 
-  hero: {
-    height: 215,
-    backgroundColor: '#DF5A8C',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    paddingTop: 12,
-  },
+function PasswordRequirement({
+  met,
+  text,
+}: PasswordRequirementProps) {
+  return (
+    <View
+      style={
+        styles.requirementRow
+      }
+    >
+      <Text
+        style={[
+          styles.requirementIcon,
 
-  decorLeft: {
-    position: 'absolute',
-    width: 145,
-    height: 145,
-    borderRadius: 73,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    top: -62,
-    left: -45,
-  },
+          met &&
+            styles.requirementMet,
+        ]}
+      >
+        {met ? "✓" : "○"}
+      </Text>
 
-  decorRight: {
-    position: 'absolute',
-    width: 145,
-    height: 145,
-    borderRadius: 73,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    bottom: -75,
-    right: -45,
-  },
+      <Text
+        style={[
+          styles.requirementText,
 
-  flower: {
-    fontSize: 34,
-    marginBottom: 8,
-  },
+          met &&
+            styles.requirementTextMet,
+        ]}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
 
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-  },
+/*
+ * =========================================================
+ * STYLES
+ * =========================================================
+ */
 
-  heroSubtitle: {
-    color: 'rgba(255,255,255,0.90)',
-    fontSize: 12,
-    marginTop: 6,
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        "#FFFFFF",
+    },
 
-  form: {
-    paddingHorizontal: 26,
-    paddingTop: 25,
-  },
+    scrollContent: {
+      flexGrow: 1,
+      backgroundColor:
+        "#FFFFFF",
+      paddingBottom: 35,
+    },
 
-  sectionTitle: {
-    color: '#D95888',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    marginBottom: 14,
-    marginTop: 7,
-  },
+    /*
+     * HEADER
+     */
 
-  nameRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+    hero: {
+      height: 215,
+      backgroundColor:
+        "#DF5A8C",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      overflow: "hidden",
+      paddingTop: 12,
+    },
 
-  nameField: {
-    flex: 1,
-  },
+    decorLeft: {
+      position: "absolute",
+      width: 145,
+      height: 145,
+      borderRadius: 73,
+      backgroundColor:
+        "rgba(255,255,255,0.12)",
+      top: -62,
+      left: -45,
+    },
 
-  label: {
-    color: '#98909A',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    marginBottom: 7,
-    marginTop: 5,
-  },
+    decorRight: {
+      position: "absolute",
+      width: 145,
+      height: 145,
+      borderRadius: 73,
+      backgroundColor:
+        "rgba(255,255,255,0.10)",
+      bottom: -75,
+      right: -45,
+    },
 
-  input: {
-    height: 50,
-    backgroundColor: '#F8F7F9',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    color: '#3F3940',
-    fontSize: 14,
-    marginBottom: 13,
-  },
+    flower: {
+      fontSize: 34,
+      marginBottom: 8,
+    },
 
-  roleContainer: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
-  },
+    heroTitle: {
+      color: "#FFFFFF",
+      fontSize: 24,
+      fontWeight: "800",
+    },
 
-  roleButton: {
-    flex: 1,
-    minHeight: 78,
-    borderRadius: 15,
-    backgroundColor: '#F8F7F9',
-    borderWidth: 1.5,
-    borderColor: '#F0ECEF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    heroSubtitle: {
+      color:
+        "rgba(255,255,255,0.90)",
+      fontSize: 12,
+      marginTop: 6,
+      textAlign: "center",
+      paddingHorizontal: 20,
+    },
 
-  roleButtonSelected: {
-    backgroundColor: '#FFF3F7',
-    borderColor: '#DF5A8C',
-  },
+    /*
+     * FORM
+     */
 
-  roleIcon: {
-    fontSize: 23,
-    marginBottom: 5,
-  },
+    form: {
+      paddingHorizontal: 26,
+      paddingTop: 25,
+    },
 
-  roleText: {
-    color: '#91888E',
-    fontSize: 11,
-    fontWeight: '600',
-  },
+    sectionTitle: {
+      color: "#D95888",
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.8,
+      marginBottom: 14,
+      marginTop: 10,
+    },
 
-  roleTextSelected: {
-    color: '#D95888',
-    fontWeight: '800',
-  },
+    nameRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
 
-  verificationNotice: {
-    backgroundColor: '#FFF5F8',
-    borderRadius: 13,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginBottom: 16,
-  },
+    nameField: {
+      flex: 1,
+    },
 
-  verificationTitle: {
-    color: '#D95888',
-    fontSize: 11,
-    fontWeight: '800',
-    marginBottom: 3,
-  },
+    label: {
+      color: "#98909A",
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      marginBottom: 7,
+      marginTop: 5,
+    },
 
-  verificationText: {
-    color: '#8D858A',
-    fontSize: 10,
-    lineHeight: 15,
-  },
+    input: {
+      height: 50,
+      backgroundColor:
+        "#F8F7F9",
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      color: "#3F3940",
+      fontSize: 14,
+      marginBottom: 13,
+    },
 
-  passwordContainer: {
-    height: 50,
-    backgroundColor: '#F8F7F9',
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 16,
-    paddingRight: 14,
-    marginBottom: 8,
-  },
+    fieldHint: {
+      color: "#B0A8AD",
+      fontSize: 9,
+      lineHeight: 14,
+      marginTop: -7,
+      marginBottom: 15,
+      paddingHorizontal: 2,
+    },
 
-  passwordInput: {
-    flex: 1,
-    color: '#3F3940',
-    fontSize: 14,
-    padding: 0,
-  },
+    /*
+     * ACCOUNT TYPE
+     */
 
-  showText: {
-    color: '#D95888',
-    fontSize: 11,
-    fontWeight: '600',
-  },
+    roleContainer: {
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 14,
+    },
 
-  passwordHint: {
-    color: '#B0A8AD',
-    fontSize: 9,
-    lineHeight: 14,
-    marginBottom: 11,
-    paddingHorizontal: 2,
-  },
+    roleButton: {
+      flex: 1,
+      minHeight: 78,
+      borderRadius: 15,
+      backgroundColor:
+        "#F8F7F9",
+      borderWidth: 1.5,
+      borderColor:
+        "#F0ECEF",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  createButton: {
-    height: 53,
-    backgroundColor: '#E65A8D',
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
+    roleButtonSelected: {
+      backgroundColor:
+        "#FFF3F7",
+      borderColor:
+        "#DF5A8C",
+    },
 
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
+    roleButtonPressed: {
+      opacity: 0.8,
+    },
 
-  disabledButton: {
-    opacity: 0.65,
-  },
+    roleIcon: {
+      fontSize: 23,
+      marginBottom: 5,
+    },
 
-  pressed: {
-    opacity: 0.82,
-  },
+    roleText: {
+      color: "#91888E",
+      fontSize: 11,
+      fontWeight: "600",
+    },
 
-  loginRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    gap: 4,
-  },
+    roleTextSelected: {
+      color: "#D95888",
+      fontWeight: "800",
+    },
 
-  loginPrefix: {
-    color: '#AAA2A8',
-    fontSize: 11,
-  },
+    /*
+     * VERIFICATION
+     */
 
-  loginLink: {
-    color: '#D95888',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+    verificationNotice: {
+      backgroundColor:
+        "#FFF5F8",
+      borderRadius: 13,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor:
+        "#F9DDE7",
+    },
 
-  backButton: {
-    alignSelf: 'center',
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-  },
+    verificationHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      marginBottom: 4,
+    },
 
-  backText: {
-    color: '#AAA2A8',
-    fontSize: 11,
-  },
-});
+    verificationIcon: {
+      fontSize: 12,
+    },
+
+    verificationTitle: {
+      color: "#D95888",
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    verificationText: {
+      color: "#8D858A",
+      fontSize: 10,
+      lineHeight: 15,
+    },
+
+    /*
+     * PASSWORD
+     */
+
+    passwordContainer: {
+      height: 50,
+      backgroundColor:
+        "#F8F7F9",
+      borderRadius: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      paddingLeft: 16,
+      paddingRight: 14,
+      marginBottom: 8,
+    },
+
+    passwordInput: {
+      flex: 1,
+      color: "#3F3940",
+      fontSize: 14,
+      padding: 0,
+    },
+
+    showText: {
+      color: "#D95888",
+      fontSize: 11,
+      fontWeight: "700",
+      paddingLeft: 10,
+    },
+
+    passwordRequirements: {
+      backgroundColor:
+        "#FCFAFB",
+      borderRadius: 11,
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+      marginBottom: 13,
+    },
+
+    requirementRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginVertical: 2,
+    },
+
+    requirementIcon: {
+      width: 18,
+      color: "#B8AFB4",
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    requirementMet: {
+      color: "#4E9A72",
+    },
+
+    requirementText: {
+      color: "#AAA2A8",
+      fontSize: 9,
+    },
+
+    requirementTextMet: {
+      color: "#6C967B",
+    },
+
+    confirmationText: {
+      fontSize: 9,
+      marginTop: -1,
+      paddingHorizontal: 2,
+    },
+
+    confirmationSuccess: {
+      color: "#4E9A72",
+    },
+
+    confirmationError: {
+      color: "#D75C73",
+    },
+
+    /*
+     * CREATE ACCOUNT
+     */
+
+    createButton: {
+      height: 53,
+      backgroundColor:
+        "#E65A8D",
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 20,
+    },
+
+    createButtonText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "700",
+    },
+
+    disabledButton: {
+      opacity: 0.65,
+    },
+
+    pressed: {
+      opacity: 0.82,
+    },
+
+    /*
+     * LOGIN / BACK
+     */
+
+    loginRow: {
+      flexDirection: "row",
+      justifyContent:
+        "center",
+      alignItems: "center",
+      marginTop: 20,
+      gap: 4,
+    },
+
+    loginPrefix: {
+      color: "#AAA2A8",
+      fontSize: 11,
+    },
+
+    loginLink: {
+      color: "#D95888",
+      fontSize: 12,
+      fontWeight: "700",
+    },
+
+    backButton: {
+      alignSelf: "center",
+      marginTop: 12,
+      paddingHorizontal: 18,
+      paddingVertical: 8,
+    },
+
+    backText: {
+      color: "#AAA2A8",
+      fontSize: 11,
+    },
+  });
