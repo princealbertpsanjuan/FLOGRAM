@@ -6,9 +6,11 @@ import {
   cancel,
   complete,
   create,
+  getForAdmin,
   getForSeller,
   getMine,
   getOne,
+  getOneForAdmin,
   updateStatus,
 } from "./order.controller.js";
 
@@ -49,6 +51,35 @@ orderRouter.get(
   authenticate,
   authorize("seller"),
   getForSeller
+);
+
+/*
+ * =========================================================
+ * ADMIN
+ * Get all orders.
+ *
+ * IMPORTANT:
+ * Keep Admin routes above /:orderId.
+ * =========================================================
+ */
+orderRouter.get(
+  "/admin",
+  authenticate,
+  authorize("admin"),
+  getForAdmin
+);
+
+/*
+ * =========================================================
+ * ADMIN
+ * Get one order.
+ * =========================================================
+ */
+orderRouter.get(
+  "/admin/:orderId",
+  authenticate,
+  authorize("admin"),
+  getOneForAdmin
 );
 
 /*

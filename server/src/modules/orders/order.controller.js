@@ -2,6 +2,8 @@ import {
   cancelCustomerOrder,
   completeCustomerOrder,
   createOrder,
+  getAdminOrderById,
+  getAdminOrders,
   getCustomerOrders,
   getOrderById,
   getSellerOrders,
@@ -21,12 +23,9 @@ export const create = async (
       );
 
     res.status(201).json({
-      success:
-        true,
-
+      success: true,
       message:
         "Order created successfully.",
-
       data: {
         order,
       },
@@ -48,23 +47,19 @@ export const getMine = async (
         {
           status:
             req.query.status,
-
           paymentStatus:
-            req.query.paymentStatus,
+            req.query
+              .paymentStatus,
         }
       );
 
     res.status(200).json({
-      success:
-        true,
-
+      success: true,
       message:
         "Customer orders retrieved successfully.",
-
       data: {
         count:
           orders.length,
-
         orders,
       },
     });
@@ -86,24 +81,94 @@ export const getForSeller =
           {
             status:
               req.query.status,
-
             paymentStatus:
-              req.query.paymentStatus,
+              req.query
+                .paymentStatus,
           }
         );
 
       res.status(200).json({
-        success:
-          true,
-
+        success: true,
         message:
           "Seller orders retrieved successfully.",
-
         data: {
           count:
             orders.length,
-
           orders,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET ALL ORDERS
+ * =========================================================
+ */
+export const getForAdmin =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const orders =
+        await getAdminOrders({
+          status:
+            req.query.status,
+          paymentStatus:
+            req.query
+              .paymentStatus,
+          paymentMethod:
+            req.query
+              .paymentMethod,
+          fulfillmentType:
+            req.query
+              .fulfillmentType,
+        });
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Admin orders retrieved successfully.",
+        data: {
+          count:
+            orders.length,
+          orders,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET ONE ORDER
+ * =========================================================
+ */
+export const getOneForAdmin =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const order =
+        await getAdminOrderById(
+          req.params.orderId
+        );
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Admin order retrieved successfully.",
+        data: {
+          order,
         },
       });
     } catch (error) {
@@ -124,12 +189,9 @@ export const getOne = async (
       );
 
     res.status(200).json({
-      success:
-        true,
-
+      success: true,
       message:
         "Order retrieved successfully.",
-
       data: {
         order,
       },
@@ -155,12 +217,9 @@ export const updateStatus =
         );
 
       res.status(200).json({
-        success:
-          true,
-
+        success: true,
         message:
           "Order status updated successfully.",
-
         data: {
           order,
         },
@@ -184,12 +243,9 @@ export const cancel = async (
       );
 
     res.status(200).json({
-      success:
-        true,
-
+      success: true,
       message:
         "Order cancelled successfully.",
-
       data: {
         order,
       },
@@ -199,12 +255,6 @@ export const cancel = async (
   }
 };
 
-/*
- * =========================================================
- * CUSTOMER
- * COMPLETE DELIVERED ORDER
- * =========================================================
- */
 export const complete = async (
   req,
   res,
@@ -218,12 +268,9 @@ export const complete = async (
       );
 
     res.status(200).json({
-      success:
-        true,
-
+      success: true,
       message:
         "Order completed successfully.",
-
       data: {
         order,
       },

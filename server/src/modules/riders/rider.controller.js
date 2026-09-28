@@ -1,15 +1,19 @@
 import {
   approveRider,
   createRiderProfile,
+  getAdminRiderRemittanceById,
+  getAdminRiderRemittances,
   getMyRiderProfile,
   getPendingRiders,
   getRiderById,
   getRiderWallet,
   getRiderDashboard,
   rejectRider,
+  rejectRiderRemittance,
   submitRiderRemittance,
   updateRiderAvailability,
   updateRiderProfile,
+  verifyRiderRemittance,
 } from "./rider.service.js";
 
 /*
@@ -446,6 +450,162 @@ export const submitRemittance =
 
         message:
           "Remittance submitted successfully and is awaiting admin verification.",
+
+        data: {
+          remittance,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /*
+ * =========================================================
+ * ADMIN
+ * GET RIDER REMITTANCES
+ * =========================================================
+ */
+
+export const getRemittances =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const status =
+        req.query.status
+          ? String(
+              req.query.status
+            )
+          : null;
+
+      const remittances =
+        await getAdminRiderRemittances(
+          status
+        );
+
+      res.status(200).json({
+        success: true,
+
+        message:
+          "Rider remittances retrieved successfully.",
+
+        data: {
+          remittances,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET ONE RIDER REMITTANCE
+ * =========================================================
+ */
+
+export const getRemittance =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const remittance =
+        await getAdminRiderRemittanceById(
+          req.params
+            .remittanceId
+        );
+
+      res.status(200).json({
+        success: true,
+
+        message:
+          "Rider remittance retrieved successfully.",
+
+        data: {
+          remittance,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * VERIFY RIDER REMITTANCE
+ * =========================================================
+ */
+
+export const verifyRemittance =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const remittance =
+        await verifyRiderRemittance(
+          req.params
+            .remittanceId,
+
+          req.user.userId,
+
+          req.body
+            .remarks
+        );
+
+      res.status(200).json({
+        success: true,
+
+        message:
+          "COD remittance verified successfully.",
+
+        data: {
+          remittance,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * REJECT RIDER REMITTANCE
+ * =========================================================
+ */
+
+export const rejectRemittance =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const remittance =
+        await rejectRiderRemittance(
+          req.params
+            .remittanceId,
+
+          req.user.userId,
+
+          req.body
+            .remarks
+        );
+
+      res.status(200).json({
+        success: true,
+
+        message:
+          "COD remittance rejected successfully.",
 
         data: {
           remittance,

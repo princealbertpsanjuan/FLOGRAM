@@ -8,15 +8,20 @@ import {
   getDashboard,
   getMyProfile,
   getPending,
+  getRemittance,
+  getRemittances,
   getRider,
   getWallet,
   reject,
+  rejectRemittance,
   submitRemittance,
   updateAvailability,
   updateMyProfile,
+  verifyRemittance,
 } from "./rider.controller.js";
 
 import {
+  rejectRemittanceValidation,
   rejectRiderValidation,
   riderAvailabilityValidation,
   riderProfileValidation,
@@ -166,13 +171,11 @@ riderRouter.get(
  * PATCH
  * /api/v1/riders/me/remittances/:remittanceId/submit
  *
- * BODY:
+ * FORM DATA:
  *
- * {
- *   "referenceNumber": "REM-001",
- *   "proofImageUrl": "https://...",
- *   "riderRemarks": "Optional remarks"
- * }
+ * referenceNumber
+ * riderRemarks
+ * proofImage
  *
  * ALLOWED STATUS:
  *
@@ -189,8 +192,7 @@ riderRouter.get(
  * submitted → submitted
  * verified  → submitted
  *
- * Admin verification will be handled
- * separately.
+ * Admin verification is handled separately.
  * =========================================================
  */
 
@@ -243,26 +245,103 @@ riderRouter.patch(
  * ALL STATIC RIDER ROUTES MUST REMAIN
  * ABOVE "/:riderId".
  *
- * Otherwise Express may interpret:
- *
- * /me/wallet
- * /me/dashboard
- * /me/availability
- * /me/remittances/...
- * /pending
- *
- * as:
- *
- * riderId = "me"
- *
- * or:
- *
- * riderId = "pending"
+ * Otherwise Express may interpret static
+ * route names as rider IDs.
  * =========================================================
  */
 
 /*
  * =========================================================
+ * ADMIN
+ * GET RIDER REMITTANCES
+ *
+ * GET
+ * /api/v1/riders/remittances
+ *
+ * Optional:
+ *
+ * ?status=pending
+ * ?status=submitted
+ * ?status=verified
+ * ?status=rejected
+ * =========================================================
+ */
+
+riderRouter.get(
+  "/remittances",
+  authenticate,
+  authorize("admin"),
+  getRemittances
+);
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET ONE RIDER REMITTANCE
+ *
+ * GET
+ * /api/v1/riders/remittances/:remittanceId
+ * =========================================================
+ */
+
+riderRouter.get(
+  "/remittances/:remittanceId",
+  authenticate,
+  authorize("admin"),
+  getRemittance
+);
+
+/*
+ * =========================================================
+ * ADMIN
+ * VERIFY RIDER REMITTANCE
+ *
+ * PATCH
+ * /api/v1/riders/remittances/:remittanceId/verify
+ *
+ * Optional body:
+ *
+ * {
+ *   "remarks": "Verified"
+ * }
+ * =========================================================
+ */
+
+riderRouter.patch(
+  "/remittances/:remittanceId/verify",
+  authenticate,
+  authorize("admin"),
+  verifyRemittance
+);
+
+/*
+ * =========================================================
+ * ADMIN
+ * REJECT RIDER REMITTANCE
+ *
+ * PATCH
+ * /api/v1/riders/remittances/:remittanceId/reject
+ *
+ * Required body:
+ *
+ * {
+ *   "remarks": "Reason for rejection"
+ * }
+ * =========================================================
+ */
+
+riderRouter.patch(
+  "/remittances/:remittanceId/reject",
+  authenticate,
+  authorize("admin"),
+  rejectRemittanceValidation,
+  validateRiderRequest,
+  rejectRemittance
+);
+
+/*
+ * =========================================================
+ * ADMIN
  * GET PENDING RIDERS
  *
  * GET
@@ -279,6 +358,7 @@ riderRouter.get(
 
 /*
  * =========================================================
+ * ADMIN
  * GET ONE RIDER
  *
  * GET
@@ -295,6 +375,7 @@ riderRouter.get(
 
 /*
  * =========================================================
+ * ADMIN
  * APPROVE RIDER
  *
  * PATCH
@@ -311,6 +392,7 @@ riderRouter.patch(
 
 /*
  * =========================================================
+ * ADMIN
  * REJECT RIDER
  *
  * PATCH

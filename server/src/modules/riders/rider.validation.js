@@ -132,6 +132,28 @@ export const rejectRiderValidation = [
     ),
 ];
 
+/*
+ * =========================================================
+ * ADMIN
+ * REJECT RIDER REMITTANCE VALIDATION
+ * =========================================================
+ */
+
+export const rejectRemittanceValidation = [
+  body("remarks")
+    .trim()
+    .notEmpty()
+    .withMessage(
+      "A rejection reason is required."
+    )
+    .isLength({
+      max: 500,
+    })
+    .withMessage(
+      "Remarks cannot exceed 500 characters."
+    ),
+];
+
 export const validateRiderRequest = (
   req,
   res,

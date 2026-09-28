@@ -2755,3 +2755,639 @@ export const submitRiderRemittance =
           .verifiedAt,
     };
   };
+
+  /*
+ * =========================================================
+ * ADMIN
+ * GET RIDER REMITTANCES
+ * =========================================================
+ *
+ * Used by the Admin remittance management screen.
+ *
+ * Optional status:
+ *
+ * submitted
+ * verified
+ * rejected
+ * pending
+ *
+ * When no status is supplied, all remittances
+ * are returned.
+ * =========================================================
+ */
+
+export const getAdminRiderRemittances =
+  async (
+    status = null
+  ) => {
+    const allowedStatuses = [
+      "pending",
+      "submitted",
+      "verified",
+      "rejected",
+    ];
+
+    const filter = {};
+
+    if (status) {
+      if (
+        !allowedStatuses.includes(
+          status
+        )
+      ) {
+        const error =
+          new Error(
+            "Invalid remittance status."
+          );
+
+        error.statusCode = 400;
+
+        throw error;
+      }
+
+      filter.status = status;
+    }
+
+    const remittances =
+      await RiderRemittance.find(
+        filter
+      )
+        .populate(
+          "riderUser",
+          "firstName lastName email phoneNumber"
+        )
+        .populate({
+          path: "rider",
+          select:
+            "owner vehicleType vehiclePlateNumber verificationStatus",
+        })
+        .populate(
+          "verifiedBy",
+          "firstName lastName email"
+        )
+        .sort({
+          submittedAt: -1,
+          createdAt: -1,
+        })
+        .lean();
+
+    return remittances.map(
+      (remittance) => ({
+        id:
+          String(
+            remittance._id
+          ),
+
+        riderId:
+          remittance.rider?._id
+            ? String(
+                remittance
+                  .rider
+                  ._id
+              )
+            : null,
+
+        rider:
+          remittance.rider ||
+          null,
+
+        riderUser:
+          remittance.riderUser ||
+          null,
+
+        shiftDate:
+          remittance.shiftDate,
+
+        deliveryCount:
+          Array.isArray(
+            remittance.items
+          )
+            ? remittance
+                .items
+                .length
+            : 0,
+
+        totalAmount:
+          Number(
+            remittance
+              .totalAmount ||
+              0
+          ),
+
+        status:
+          remittance.status,
+
+        referenceNumber:
+          remittance.referenceNumber ||
+          "",
+
+        proofImageUrl:
+          remittance.proofImageUrl ||
+          null,
+
+        riderRemarks:
+          remittance.riderRemarks ||
+          "",
+
+        adminRemarks:
+          remittance.adminRemarks ||
+          "",
+
+        submittedAt:
+          remittance.submittedAt,
+
+        verifiedAt:
+          remittance.verifiedAt,
+
+        verifiedBy:
+          remittance.verifiedBy ||
+          null,
+
+        createdAt:
+          remittance.createdAt,
+
+        updatedAt:
+          remittance.updatedAt,
+      })
+    );
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET ONE RIDER REMITTANCE
+ * =========================================================
+ */
+
+export const getAdminRiderRemittanceById =
+  async (
+    remittanceId
+  ) => {
+    const remittance =
+      await RiderRemittance.findById(
+        remittanceId
+      )
+        .populate(
+          "riderUser",
+          "firstName lastName email phoneNumber"
+        )
+        .populate({
+          path: "rider",
+          select:
+            "owner vehicleType vehiclePlateNumber verificationStatus",
+        })
+        .populate(
+          "verifiedBy",
+          "firstName lastName email"
+        )
+        .populate({
+          path: "items.delivery",
+          select:
+            "_id status deliveredAt",
+        })
+        .populate({
+          path: "items.order",
+          select:
+            "_id productName totalAmount paymentMethod paymentStatus orderStatus createdAt",
+        });
+
+    if (!remittance) {
+      const error =
+        new Error(
+          "Remittance record was not found."
+        );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+    return {
+      id:
+        String(
+          remittance._id
+        ),
+
+      riderId:
+        remittance.rider?._id
+          ? String(
+              remittance
+                .rider
+                ._id
+            )
+          : null,
+
+      rider:
+        remittance.rider ||
+        null,
+
+      riderUser:
+        remittance.riderUser ||
+        null,
+
+      shiftDate:
+        remittance.shiftDate,
+
+      deliveryCount:
+        remittance.items.length,
+
+      items:
+        remittance.items.map(
+          (item) => ({
+            delivery:
+              item.delivery ||
+              null,
+
+            order:
+              item.order ||
+              null,
+
+            deliveryId:
+              item.delivery?._id
+                ? String(
+                    item
+                      .delivery
+                      ._id
+                  )
+                : item.delivery
+                  ? String(
+                      item.delivery
+                    )
+                  : null,
+
+            orderId:
+              item.order?._id
+                ? String(
+                    item
+                      .order
+                      ._id
+                  )
+                : item.order
+                  ? String(
+                      item.order
+                    )
+                  : null,
+
+            amount:
+              Number(
+                item.amount ||
+                  0
+              ),
+          })
+        ),
+
+      totalAmount:
+        Number(
+          remittance
+            .totalAmount ||
+            0
+        ),
+
+      status:
+        remittance.status,
+
+      referenceNumber:
+        remittance.referenceNumber ||
+        "",
+
+      proofImageUrl:
+        remittance.proofImageUrl ||
+        null,
+
+      riderRemarks:
+        remittance.riderRemarks ||
+        "",
+
+      adminRemarks:
+        remittance.adminRemarks ||
+        "",
+
+      submittedAt:
+        remittance.submittedAt,
+
+      verifiedAt:
+        remittance.verifiedAt,
+
+      verifiedBy:
+        remittance.verifiedBy ||
+        null,
+
+      createdAt:
+        remittance.createdAt,
+
+      updatedAt:
+        remittance.updatedAt,
+    };
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * VERIFY RIDER REMITTANCE
+ * =========================================================
+ *
+ * submitted
+ *    ↓
+ * verified
+ *
+ * Only submitted remittances can be verified.
+ *
+ * verifiedAt is important because the Admin
+ * Dashboard uses it to determine when COD
+ * sales become recognized.
+ * =========================================================
+ */
+
+export const verifyRiderRemittance =
+  async (
+    remittanceId,
+    adminId,
+    adminRemarks = ""
+  ) => {
+    const remittance =
+      await RiderRemittance.findById(
+        remittanceId
+      );
+
+    if (!remittance) {
+      const error =
+        new Error(
+          "Remittance record was not found."
+        );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+    if (
+      remittance.status ===
+      "verified"
+    ) {
+      const error =
+        new Error(
+          "This remittance has already been verified."
+        );
+
+      error.statusCode = 409;
+
+      throw error;
+    }
+
+    if (
+      remittance.status !==
+      "submitted"
+    ) {
+      const error =
+        new Error(
+          "Only submitted remittances can be verified."
+        );
+
+      error.statusCode = 409;
+
+      throw error;
+    }
+
+    if (
+      !Array.isArray(
+        remittance.items
+      ) ||
+      remittance.items.length ===
+        0
+    ) {
+      const error =
+        new Error(
+          "This remittance does not contain any COD transactions."
+        );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+    /*
+     * Recheck the authoritative orders before
+     * approving the remittance.
+     */
+
+    for (
+      const item
+      of remittance.items
+    ) {
+      const order =
+        await Order.findById(
+          item.order
+        );
+
+      if (!order) {
+        const error =
+          new Error(
+            "One of the orders included in this remittance could not be found."
+          );
+
+        error.statusCode = 404;
+
+        throw error;
+      }
+
+      if (
+        order.paymentMethod !==
+        "cash_on_delivery"
+      ) {
+        const error =
+          new Error(
+            "This remittance contains a non-COD order."
+          );
+
+        error.statusCode = 400;
+
+        throw error;
+      }
+
+      if (
+        order.paymentStatus !==
+        "paid"
+      ) {
+        const error =
+          new Error(
+            "Every COD order must be paid before the remittance can be verified."
+          );
+
+        error.statusCode = 400;
+
+        throw error;
+      }
+
+      if (
+        order.orderStatus !==
+          "delivered" &&
+        order.orderStatus !==
+          "completed"
+      ) {
+        const error =
+          new Error(
+            "Every COD order must be delivered before the remittance can be verified."
+          );
+
+        error.statusCode = 400;
+
+        throw error;
+      }
+
+      const expectedAmount =
+        Number(
+          order.totalAmount ||
+            0
+        );
+
+      const remittedAmount =
+        Number(
+          item.amount ||
+            0
+        );
+
+      if (
+        expectedAmount !==
+        remittedAmount
+      ) {
+        const error =
+          new Error(
+            "A COD remittance amount no longer matches the order total."
+          );
+
+        error.statusCode = 409;
+
+        throw error;
+      }
+    }
+
+    remittance.status =
+      "verified";
+
+    remittance.verifiedAt =
+      new Date();
+
+    remittance.verifiedBy =
+      adminId;
+
+    remittance.adminRemarks =
+      String(
+        adminRemarks ||
+          ""
+      ).trim();
+
+    await remittance.save();
+
+    return getAdminRiderRemittanceById(
+      remittance._id
+    );
+  };
+
+/*
+ * =========================================================
+ * ADMIN
+ * REJECT RIDER REMITTANCE
+ * =========================================================
+ *
+ * submitted
+ *    ↓
+ * rejected
+ *
+ * Rejected remittances are NOT included
+ * in Admin Dashboard COD sales.
+ *
+ * Rider may correct and resubmit them.
+ * =========================================================
+ */
+
+export const rejectRiderRemittance =
+  async (
+    remittanceId,
+    adminId,
+    remarks
+  ) => {
+    const remittance =
+      await RiderRemittance.findById(
+        remittanceId
+      );
+
+    if (!remittance) {
+      const error =
+        new Error(
+          "Remittance record was not found."
+        );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+    if (
+      remittance.status ===
+      "verified"
+    ) {
+      const error =
+        new Error(
+          "A verified remittance can no longer be rejected."
+        );
+
+      error.statusCode = 409;
+
+      throw error;
+    }
+
+    if (
+      remittance.status !==
+      "submitted"
+    ) {
+      const error =
+        new Error(
+          "Only submitted remittances can be rejected."
+        );
+
+      error.statusCode = 409;
+
+      throw error;
+    }
+
+    const cleanRemarks =
+      String(
+        remarks ||
+          ""
+      ).trim();
+
+    if (!cleanRemarks) {
+      const error =
+        new Error(
+          "A rejection reason is required."
+        );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+    remittance.status =
+      "rejected";
+
+    /*
+     * verifiedBy identifies the Admin
+     * who reviewed the submission even
+     * when the decision is rejection.
+     */
+
+    remittance.verifiedBy =
+      adminId;
+
+    remittance.verifiedAt =
+      null;
+
+    remittance.adminRemarks =
+      cleanRemarks;
+
+    await remittance.save();
+
+    return getAdminRiderRemittanceById(
+      remittance._id
+    );
+  };

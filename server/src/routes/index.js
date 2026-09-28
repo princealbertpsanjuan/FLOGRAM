@@ -20,6 +20,13 @@ import checkoutRouter from "../modules/checkout/checkout.routes.js";
 import notificationRouter from "../modules/notifications/notification.routes.js";
 import reviewRouter from "../modules/reviews/review.routes.js";
 
+/*
+ * =========================================================
+ * ADMIN
+ * =========================================================
+ */
+
+import adminRouter from "../modules/admin/admin.routes.js";
 
 const apiRouter = Router();
 
@@ -212,15 +219,44 @@ apiRouter.use(
   reviewRouter
 );
 
+/*
+ * =========================================================
+ * CART
+ * =========================================================
+ */
+
 apiRouter.use(
   "/cart",
   cartRouter
 );
+
+/*
+ * =========================================================
+ * CHECKOUT
+ * =========================================================
+ */
 
 apiRouter.use(
   "/checkout",
   checkoutRouter
 );
 
+/*
+ * =========================================================
+ * ADMIN
+ * =========================================================
+ *
+ * Final endpoint:
+ *
+ * GET
+ * /api/v1/admin/dashboard
+ *
+ * =========================================================
+ */
+
+apiRouter.use(
+  "/admin",
+  adminRouter
+);
 
 export default apiRouter;

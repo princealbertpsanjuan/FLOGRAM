@@ -2281,3 +2281,99 @@ export const completeCustomerOrder =
       order._id
     );
   };
+
+  /*
+ * =========================================================
+ * ADMIN
+ * GET ALL ORDERS
+ * =========================================================
+ */
+export const getAdminOrders = async (
+  filters = {}
+) => {
+  const query = {};
+
+  if (
+    filters.status &&
+    filters.status !== "all"
+  ) {
+    query.orderStatus =
+      filters.status;
+  }
+
+  if (
+    filters.paymentStatus &&
+    filters.paymentStatus !== "all"
+  ) {
+    query.paymentStatus =
+      filters.paymentStatus;
+  }
+
+  if (
+    filters.paymentMethod &&
+    filters.paymentMethod !== "all"
+  ) {
+    query.paymentMethod =
+      filters.paymentMethod;
+  }
+
+  if (
+    filters.fulfillmentType &&
+    filters.fulfillmentType !== "all"
+  ) {
+    query.fulfillmentType =
+      filters.fulfillmentType;
+  }
+
+  return Order.find(query)
+    .populate(
+      "customer",
+      "firstName lastName email phoneNumber profileImage"
+    )
+    .populate(
+      "seller",
+      "firstName lastName email phoneNumber"
+    )
+    .populate(
+      "florist",
+      "shopName address location contactNumber businessEmail shopLogo"
+    )
+    .populate(
+      "flower",
+      "name images price"
+    )
+    .populate(
+      "customBouquetRequest"
+    )
+    .sort({
+      createdAt: -1,
+    });
+};
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET ONE ORDER
+ * =========================================================
+ */
+export const getAdminOrderById = async (
+  orderId
+) => {
+  const order =
+    await populateOrder(
+      orderId
+    );
+
+  if (!order) {
+    const error =
+      new Error(
+        "Order was not found."
+      );
+
+    error.statusCode = 404;
+
+    throw error;
+  }
+
+  return order;
+};
