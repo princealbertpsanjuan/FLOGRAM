@@ -1,13 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import {
-  useFocusEffect,
-  useRouter,
-} from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import {
-  useCallback,
-  useState,
-} from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,79 +15,47 @@ import {
   TextInput,
   View,
 } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
 
 import { apiRequest } from "../../services/api";
-
 import {
   AdminSettingsData,
   getAdminSettings,
   updateAdminSettings,
 } from "../../services/admin";
 
-/*
- * =========================================================
- * COLORS
- * =========================================================
- */
-
 const COLORS = {
   purple: "#312E81",
   purpleDark: "#24245D",
   purpleAccent: "#5B4FCF",
   purpleLight: "#EEEAFE",
-
   background: "#F7F7FA",
   card: "#FFFFFF",
-
   text: "#18181B",
   secondaryText: "#777783",
   mutedText: "#A1A1AA",
-
   border: "#ECECF1",
-
   green: "#4E9A72",
   greenBackground: "#EAF7EF",
-
   red: "#D75C73",
   redBackground: "#FDECEF",
-
   yellow: "#B9892D",
   yellowBackground: "#FFF5D9",
-
   blue: "#4C7DC0",
   blueBackground: "#EAF2FC",
 };
 
-/*
- * =========================================================
- * TYPES
- * =========================================================
- */
-
 type AdminProfile = {
   _id?: string;
   id?: string;
-
   firstName?: string;
   lastName?: string;
-
   email?: string;
   phoneNumber?: string;
-
   role?: string;
-
   accountStatus?: string;
-
   verificationStatus?: string;
-
   profileImage?: string | null;
-
   lastLoginAt?: string | null;
-
   createdAt?: string;
   updatedAt?: string;
 };
@@ -104,19 +66,11 @@ type ApiResponse<T> = {
   data?: T;
 };
 
-type ProfileResponse =
-  ApiResponse<{
-    user?: AdminProfile;
-  }>;
+type ProfileResponse = ApiResponse<{
+  user?: AdminProfile;
+}>;
 
-type PasswordResponse =
-  ApiResponse<unknown>;
-
-/*
- * =========================================================
- * HELPERS
- * =========================================================
- */
+type PasswordResponse = ApiResponse<unknown>;
 
 function getErrorMessage(
   error: unknown,
@@ -148,12 +102,6 @@ function getInitials(
   return initials || "A";
 }
 
-/*
- * =========================================================
- * REUSABLE COMPONENTS
- * =========================================================
- */
-
 type SectionHeaderProps = {
   title: string;
   subtitle?: string;
@@ -170,11 +118,7 @@ function SectionHeader({
       </Text>
 
       {subtitle ? (
-        <Text
-          style={
-            styles.sectionSubtitle
-          }
-        >
+        <Text style={styles.sectionSubtitle}>
           {subtitle}
         </Text>
       ) : null}
@@ -317,17 +261,8 @@ function NavigationRow({
   );
 }
 
-/*
- * =========================================================
- * SCREEN
- * =========================================================
- */
-
 export default function AdminSettingsScreen() {
   const router = useRouter();
-
-  const insets =
-    useSafeAreaInsets();
 
   const [
     settings,
@@ -356,6 +291,11 @@ export default function AdminSettingsScreen() {
   ] = useState(false);
 
   const [
+    headerRefreshing,
+    setHeaderRefreshing,
+  ] = useState(false);
+
+  const [
     savingProfile,
     setSavingProfile,
   ] = useState(false);
@@ -369,12 +309,6 @@ export default function AdminSettingsScreen() {
     changingPassword,
     setChangingPassword,
   ] = useState(false);
-
-  /*
-   * =======================================================
-   * PROFILE FORM
-   * =======================================================
-   */
 
   const [
     firstName,
@@ -391,12 +325,6 @@ export default function AdminSettingsScreen() {
     setPhoneNumber,
   ] = useState("");
 
-  /*
-   * =======================================================
-   * PLATFORM FORM
-   * =======================================================
-   */
-
   const [
     platformName,
     setPlatformName,
@@ -406,12 +334,6 @@ export default function AdminSettingsScreen() {
     commissionPercentage,
     setCommissionPercentage,
   ] = useState("");
-
-  /*
-   * =======================================================
-   * PASSWORD FORM
-   * =======================================================
-   */
 
   const [
     currentPassword,
@@ -442,12 +364,6 @@ export default function AdminSettingsScreen() {
     showConfirmPassword,
     setShowConfirmPassword,
   ] = useState(false);
-
-  /*
-   * =======================================================
-   * LOAD PROFILE
-   * =======================================================
-   */
 
   const loadProfile =
     useCallback(async () => {
@@ -487,12 +403,6 @@ export default function AdminSettingsScreen() {
       );
     }, []);
 
-  /*
-   * =======================================================
-   * LOAD SETTINGS
-   * =======================================================
-   */
-
   const loadPlatformSettings =
     useCallback(async () => {
       const data =
@@ -511,12 +421,6 @@ export default function AdminSettingsScreen() {
         )
       );
     }, []);
-
-  /*
-   * =======================================================
-   * LOAD PAGE
-   * =======================================================
-   */
 
   const loadPage =
     useCallback(
@@ -567,24 +471,50 @@ export default function AdminSettingsScreen() {
     }, [loadPage])
   );
 
-  /*
-   * =======================================================
-   * REFRESH
-   * =======================================================
-   */
-
   const handleRefresh =
     useCallback(() => {
+      if (refreshing) {
+        return;
+      }
+
       setRefreshing(true);
-
       void loadPage(false);
-    }, [loadPage]);
+    }, [loadPage, refreshing]);
 
-  /*
-   * =======================================================
-   * UPDATE PROFILE
-   * =======================================================
-   */
+  const handleHeaderRefresh =
+    useCallback(async () => {
+      if (headerRefreshing) {
+        return;
+      }
+
+      try {
+        setHeaderRefreshing(true);
+
+        await Promise.all([
+          loadProfile(),
+          loadPlatformSettings(),
+        ]);
+      } catch (error) {
+        console.error(
+          "Failed to refresh Admin settings:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to Refresh Settings",
+          getErrorMessage(
+            error,
+            "Admin settings could not be refreshed."
+          )
+        );
+      } finally {
+        setHeaderRefreshing(false);
+      }
+    }, [
+      headerRefreshing,
+      loadPlatformSettings,
+      loadProfile,
+    ]);
 
   const handleSaveProfile =
     useCallback(async () => {
@@ -702,12 +632,6 @@ export default function AdminSettingsScreen() {
       phoneNumber,
     ]);
 
-  /*
-   * =======================================================
-   * UPDATE PLATFORM SETTINGS
-   * =======================================================
-   */
-
   const handleSavePlatform =
     useCallback(async () => {
       const cleanPlatformName =
@@ -809,12 +733,6 @@ export default function AdminSettingsScreen() {
       platformName,
     ]);
 
-  /*
-   * =======================================================
-   * CHANGE PASSWORD
-   * =======================================================
-   */
-
   const handleChangePassword =
     useCallback(async () => {
       if (!currentPassword) {
@@ -905,9 +823,7 @@ export default function AdminSettingsScreen() {
 
               body: JSON.stringify({
                 currentPassword,
-
                 newPassword,
-
                 confirmNewPassword,
               }),
             }
@@ -955,22 +871,9 @@ export default function AdminSettingsScreen() {
       newPassword,
     ]);
 
-  /*
-   * =======================================================
-   * LOGOUT
-   * =======================================================
-   */
-
   const performLogout =
     useCallback(async () => {
       try {
-        /*
-         * The backend logout endpoint is
-         * stateless, but calling it keeps
-         * the client flow aligned with the
-         * authentication API.
-         */
-
         try {
           await apiRequest(
             "/auth/logout",
@@ -985,14 +888,6 @@ export default function AdminSettingsScreen() {
             error
           );
         }
-
-        /*
-         * Remove common SecureStore token
-         * keys used by Expo applications.
-         *
-         * deleteItemAsync is safe even if a
-         * particular key does not exist.
-         */
 
         await Promise.all([
           SecureStore.deleteItemAsync(
@@ -1048,20 +943,16 @@ export default function AdminSettingsScreen() {
       );
     }, [performLogout]);
 
-  /*
-   * =======================================================
-   * LOADING
-   * =======================================================
-   */
-
   if (loading) {
     return (
-      <SafeAreaView
-        style={styles.safeArea}
+      <View
+        style={
+          styles.loadingContainer
+        }
       >
         <View
           style={
-            styles.loadingContainer
+            styles.loadingContent
           }
         >
           <ActivityIndicator
@@ -1079,1380 +970,1280 @@ export default function AdminSettingsScreen() {
             Loading settings...
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
-  /*
-   * =======================================================
-   * UI
-   * =======================================================
-   */
-
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={[
-        "top",
-        "left",
-        "right",
-      ]}
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : undefined
+      }
     >
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
+      <View
+        style={
+          styles.container
         }
       >
-        <View
+        <ScrollView
           style={
-            styles.container
+            styles.scrollView
+          }
+          contentContainerStyle={
+            styles.scrollContent
+          }
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={
+            false
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={
+                refreshing
+              }
+              onRefresh={
+                handleRefresh
+              }
+              tintColor={
+                COLORS.purpleAccent
+              }
+            />
           }
         >
-          <ScrollView
-            style={
-              styles.scrollView
-            }
-            contentContainerStyle={[
-              styles.scrollContent,
-              {
-                paddingBottom:
-                  105 +
-                  insets.bottom,
-              },
-            ]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={
-              false
-            }
-            refreshControl={
-              <RefreshControl
-                refreshing={
-                  refreshing
-                }
-                onRefresh={
-                  handleRefresh
-                }
-                tintColor={
-                  COLORS.purpleAccent
-                }
-              />
-            }
+          <View
+            style={styles.header}
           >
-            {/* ============================================
-                HEADER
-            ============================================ */}
-
             <View
-              style={styles.header}
-            >
-              <View
-                style={
-                  styles.headerCircleOne
-                }
-              />
-
-              <View
-                style={
-                  styles.headerCircleTwo
-                }
-              />
-
-              <Text
-                style={
-                  styles.headerEyebrow
-                }
-              >
-                SYSTEM SETTINGS
-              </Text>
-
-              <Text
-                style={
-                  styles.headerTitle
-                }
-              >
-                Settings
-              </Text>
-
-              <Text
-                style={
-                  styles.headerSubtitle
-                }
-              >
-                Manage your
-                administrator account
-                and application
-                preferences.
-              </Text>
-            </View>
-
-            {/* ============================================
-                ADMIN PROFILE
-            ============================================ */}
+              style={
+                styles.headerCircleOne
+              }
+            />
 
             <View
               style={
-                styles.section
+                styles.headerCircleTwo
+              }
+            />
+
+            <View
+              style={
+                styles.headerTop
               }
             >
-              <SectionHeader
-                title="Admin Profile"
-                subtitle="Manage your administrator information."
-              />
-
               <View
                 style={
-                  styles.card
+                  styles.headerTitleContent
                 }
               >
-                <View
+                <Text
                   style={
-                    styles.profileHeader
+                    styles.headerEyebrow
                   }
                 >
-                  <View
-                    style={
-                      styles.avatar
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.avatarText
-                      }
-                    >
-                      {getInitials(
-                        profile?.firstName,
-                        profile?.lastName
-                      )}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.profileInfo
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.profileName
-                      }
-                    >
-                      {[
-                        profile?.firstName,
-                        profile?.lastName,
-                      ]
-                        .filter(Boolean)
-                        .join(" ") ||
-                        "Administrator"}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.profileEmail
-                      }
-                    >
-                      {profile?.email ||
-                        "No email available"}
-                    </Text>
-
-                    <View
-                      style={
-                        styles.adminBadge
-                      }
-                    >
-                      <Ionicons
-                        name="shield-checkmark"
-                        size={13}
-                        color={
-                          COLORS.purpleAccent
-                        }
-                      />
-
-                      <Text
-                        style={
-                          styles.adminBadgeText
-                        }
-                      >
-                        Administrator
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View
-                  style={
-                    styles.divider
-                  }
-                />
-
-                <InputField
-                  label="First Name"
-                  value={
-                    firstName
-                  }
-                  onChangeText={
-                    setFirstName
-                  }
-                  placeholder="First name"
-                  autoCapitalize="words"
-                />
-
-                <InputField
-                  label="Last Name"
-                  value={
-                    lastName
-                  }
-                  onChangeText={
-                    setLastName
-                  }
-                  placeholder="Last name"
-                  autoCapitalize="words"
-                />
-
-                <InputField
-                  label="Email Address"
-                  value={
-                    profile?.email ||
-                    ""
-                  }
-                  editable={false}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
+                  SYSTEM SETTINGS
+                </Text>
 
                 <Text
                   style={
-                    styles.helperText
+                    styles.headerTitle
                   }
                 >
-                  Email cannot be
-                  changed from this
-                  screen.
+                  Settings
                 </Text>
 
-                <InputField
-                  label="Phone Number"
-                  value={
-                    phoneNumber
+                <Text
+                  style={
+                    styles.headerSubtitle
                   }
-                  onChangeText={
-                    setPhoneNumber
-                  }
-                  placeholder="09XXXXXXXXX"
-                  keyboardType="phone-pad"
-                  autoCapitalize="none"
-                />
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    pressed &&
-                      styles.buttonPressed,
-                    savingProfile &&
-                      styles.buttonDisabled,
-                  ]}
-                  disabled={
-                    savingProfile
-                  }
-                  onPress={() => {
-                    void handleSaveProfile();
-                  }}
                 >
-                  {savingProfile ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#FFFFFF"
-                    />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="save-outline"
-                        size={18}
-                        color="#FFFFFF"
-                      />
-
-                      <Text
-                        style={
-                          styles.primaryButtonText
-                        }
-                      >
-                        Save Profile
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
+                  Manage your administrator account and application preferences.
+                </Text>
               </View>
-            </View>
 
-            {/* ============================================
-                PLATFORM SETTINGS
-            ============================================ */}
+              <Pressable
+                style={({
+                  pressed,
+                }) => [
+                  styles.headerButton,
+                  pressed &&
+                    styles.buttonPressed,
+                  headerRefreshing &&
+                    styles.headerButtonDisabled,
+                ]}
+                disabled={
+                  headerRefreshing
+                }
+                onPress={() => {
+                  void handleHeaderRefresh();
+                }}
+              >
+                {headerRefreshing ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Ionicons
+                    name="refresh-outline"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                )}
+              </Pressable>
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.section
+            }
+          >
+            <SectionHeader
+              title="Admin Profile"
+              subtitle="Manage your administrator information."
+            />
 
             <View
               style={
-                styles.section
+                styles.card
               }
             >
-              <SectionHeader
-                title="Platform Settings"
-                subtitle="Manage FLOGRAM's platform and financial configuration."
-              />
-
               <View
                 style={
-                  styles.card
+                  styles.profileHeader
                 }
               >
                 <View
                   style={
-                    styles.cardHeadingRow
-                  }
-                >
-                  <View
-                    style={[
-                      styles.cardHeadingIcon,
-                      {
-                        backgroundColor:
-                          COLORS
-                            .purpleLight,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="settings-outline"
-                      size={21}
-                      color={
-                        COLORS.purpleAccent
-                      }
-                    />
-                  </View>
-
-                  <View
-                    style={
-                      styles.cardHeadingContent
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.cardHeadingTitle
-                      }
-                    >
-                      General
-                      Configuration
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.cardHeadingSubtitle
-                      }
-                    >
-                      Platform identity
-                      and commission rate.
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  style={
-                    styles.divider
-                  }
-                />
-
-                <InputField
-                  label="Platform Name"
-                  value={
-                    platformName
-                  }
-                  onChangeText={
-                    setPlatformName
-                  }
-                  placeholder="FLOGRAM"
-                  autoCapitalize="characters"
-                />
-
-                <View
-                  style={
-                    styles.commissionLabelRow
+                    styles.avatar
                   }
                 >
                   <Text
                     style={
-                      styles.inputLabel
+                      styles.avatarText
                     }
                   >
-                    Platform Commission
+                    {getInitials(
+                      profile?.firstName,
+                      profile?.lastName
+                    )}
                   </Text>
-
-                  <View
-                    style={
-                      styles.commissionBadge
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.commissionBadgeText
-                      }
-                    >
-                      {
-                        commissionPercentage
-                      }
-                      %
-                    </Text>
-                  </View>
                 </View>
 
                 <View
                   style={
-                    styles.percentageInputContainer
+                    styles.profileInfo
+                  }
+                >
+                  <Text
+                    style={
+                      styles.profileName
+                    }
+                  >
+                    {[
+                      profile?.firstName,
+                      profile?.lastName,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") ||
+                      "Administrator"}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.profileEmail
+                    }
+                  >
+                    {profile?.email ||
+                      "No email available"}
+                  </Text>
+
+                  <View
+                    style={
+                      styles.adminBadge
+                    }
+                  >
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={13}
+                      color={
+                        COLORS.purpleAccent
+                      }
+                    />
+
+                    <Text
+                      style={
+                        styles.adminBadgeText
+                      }
+                    >
+                      Administrator
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View
+                style={
+                  styles.divider
+                }
+              />
+
+              <InputField
+                label="First Name"
+                value={
+                  firstName
+                }
+                onChangeText={
+                  setFirstName
+                }
+                placeholder="First name"
+                autoCapitalize="words"
+              />
+
+              <InputField
+                label="Last Name"
+                value={
+                  lastName
+                }
+                onChangeText={
+                  setLastName
+                }
+                placeholder="Last name"
+                autoCapitalize="words"
+              />
+
+              <InputField
+                label="Email Address"
+                value={
+                  profile?.email ||
+                  ""
+                }
+                editable={false}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <Text
+                style={
+                  styles.helperText
+                }
+              >
+                Email cannot be changed from this screen.
+              </Text>
+
+              <InputField
+                label="Phone Number"
+                value={
+                  phoneNumber
+                }
+                onChangeText={
+                  setPhoneNumber
+                }
+                placeholder="09XXXXXXXXX"
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+              />
+
+              <Pressable
+                style={({
+                  pressed,
+                }) => [
+                  styles.primaryButton,
+                  pressed &&
+                    styles.buttonPressed,
+                  savingProfile &&
+                    styles.buttonDisabled,
+                ]}
+                disabled={
+                  savingProfile
+                }
+                onPress={() => {
+                  void handleSaveProfile();
+                }}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="save-outline"
+                      size={18}
+                      color="#FFFFFF"
+                    />
+
+                    <Text
+                      style={
+                        styles.primaryButtonText
+                      }
+                    >
+                      Save Profile
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.section
+            }
+          >
+            <SectionHeader
+              title="Platform Settings"
+              subtitle="Manage FLOGRAM's platform and financial configuration."
+            />
+
+            <View
+              style={
+                styles.card
+              }
+            >
+              <View
+                style={
+                  styles.cardHeadingRow
+                }
+              >
+                <View
+                  style={[
+                    styles.cardHeadingIcon,
+                    {
+                      backgroundColor:
+                        COLORS.purpleLight,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="settings-outline"
+                    size={21}
+                    color={
+                      COLORS.purpleAccent
+                    }
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.cardHeadingContent
+                  }
+                >
+                  <Text
+                    style={
+                      styles.cardHeadingTitle
+                    }
+                  >
+                    General Configuration
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.cardHeadingSubtitle
+                    }
+                  >
+                    Platform identity and commission rate.
+                  </Text>
+                </View>
+              </View>
+
+              <View
+                style={
+                  styles.divider
+                }
+              />
+
+              <InputField
+                label="Platform Name"
+                value={
+                  platformName
+                }
+                onChangeText={
+                  setPlatformName
+                }
+                placeholder="FLOGRAM"
+                autoCapitalize="characters"
+              />
+
+              <View
+                style={
+                  styles.commissionLabelRow
+                }
+              >
+                <Text
+                  style={
+                    styles.inputLabel
+                  }
+                >
+                  Platform Commission Rate
+                </Text>
+
+                <View
+                  style={
+                    styles.commissionBadge
+                  }
+                >
+                  <Text
+                    style={
+                      styles.commissionBadgeText
+                    }
+                  >
+                    {
+                      commissionPercentage
+                    }
+                    %
+                  </Text>
+                </View>
+              </View>
+
+              <View
+                style={
+                  styles.percentageInputContainer
+                }
+              >
+                <TextInput
+                  style={
+                    styles.percentageInput
+                  }
+                  value={
+                    commissionPercentage
+                  }
+                  onChangeText={
+                    setCommissionPercentage
+                  }
+                  placeholder="15"
+                  placeholderTextColor={
+                    COLORS.mutedText
+                  }
+                  keyboardType="decimal-pad"
+                />
+
+                <View
+                  style={
+                    styles.percentageSuffix
+                  }
+                >
+                  <Text
+                    style={
+                      styles.percentageSuffixText
+                    }
+                  >
+                    %
+                  </Text>
+                </View>
+              </View>
+
+              <Text
+                style={
+                  styles.helperText
+                }
+              >
+                This rate is used when calculating the platform commission and seller share in Dashboard and Reports.
+              </Text>
+
+              <View
+                style={
+                  styles.infoBox
+                }
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={20}
+                  color={
+                    COLORS.blue
+                  }
+                />
+
+                <Text
+                  style={
+                    styles.infoBoxText
+                  }
+                >
+                  This is the current platform commission rate applied to successful orders.
+                </Text>
+              </View>
+
+              <Pressable
+                style={({
+                  pressed,
+                }) => [
+                  styles.primaryButton,
+                  pressed &&
+                    styles.buttonPressed,
+                  savingPlatform &&
+                    styles.buttonDisabled,
+                ]}
+                disabled={
+                  savingPlatform
+                }
+                onPress={() => {
+                  void handleSavePlatform();
+                }}
+              >
+                {savingPlatform ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={19}
+                      color="#FFFFFF"
+                    />
+
+                    <Text
+                      style={
+                        styles.primaryButtonText
+                      }
+                    >
+                      Save Platform Settings
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.section
+            }
+          >
+            <SectionHeader
+              title="Admin Operations"
+              subtitle="Quick access to important platform management tasks."
+            />
+
+            <View
+              style={[
+                styles.card,
+                styles.navigationCard,
+              ]}
+            >
+              <NavigationRow
+                icon="storefront-outline"
+                iconBackground={
+                  COLORS.purpleLight
+                }
+                iconColor={
+                  COLORS.purpleAccent
+                }
+                title="Seller Verification"
+                subtitle="Review florist and seller applications."
+                onPress={() =>
+                  router.push(
+                    "/(admin)/admin-seller-verification"
+                  )
+                }
+              />
+
+              <View
+                style={
+                  styles.rowDivider
+                }
+              />
+
+              <NavigationRow
+                icon="bicycle-outline"
+                iconBackground={
+                  COLORS.blueBackground
+                }
+                iconColor={
+                  COLORS.blue
+                }
+                title="Rider Verification"
+                subtitle="Review rider registration and verification."
+                onPress={() =>
+                  router.push(
+                    "/(admin)/admin-rider-verification"
+                  )
+                }
+              />
+
+              <View
+                style={
+                  styles.rowDivider
+                }
+              />
+
+              <NavigationRow
+                icon="wallet-outline"
+                iconBackground={
+                  COLORS.greenBackground
+                }
+                iconColor={
+                  COLORS.green
+                }
+                title="COD Remittances"
+                subtitle="Review and verify rider COD remittances."
+                onPress={() =>
+                  router.push(
+                    "/(admin)/admin-remittances"
+                  )
+                }
+              />
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.section
+            }
+          >
+            <SectionHeader
+              title="Account & Security"
+              subtitle="Keep your administrator account secure."
+            />
+
+            <View
+              style={
+                styles.card
+              }
+            >
+              <View
+                style={
+                  styles.cardHeadingRow
+                }
+              >
+                <View
+                  style={[
+                    styles.cardHeadingIcon,
+                    {
+                      backgroundColor:
+                        COLORS.yellowBackground,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={21}
+                    color={
+                      COLORS.yellow
+                    }
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.cardHeadingContent
+                  }
+                >
+                  <Text
+                    style={
+                      styles.cardHeadingTitle
+                    }
+                  >
+                    Change Password
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.cardHeadingSubtitle
+                    }
+                  >
+                    Update your administrator password.
+                  </Text>
+                </View>
+              </View>
+
+              <View
+                style={
+                  styles.divider
+                }
+              />
+
+              <View
+                style={
+                  styles.inputGroup
+                }
+              >
+                <Text
+                  style={
+                    styles.inputLabel
+                  }
+                >
+                  Current Password
+                </Text>
+
+                <View
+                  style={
+                    styles.passwordInputContainer
                   }
                 >
                   <TextInput
                     style={
-                      styles.percentageInput
+                      styles.passwordInput
                     }
                     value={
-                      commissionPercentage
+                      currentPassword
                     }
                     onChangeText={
-                      setCommissionPercentage
+                      setCurrentPassword
                     }
-                    placeholder="15"
+                    placeholder="Enter current password"
                     placeholderTextColor={
                       COLORS.mutedText
                     }
-                    keyboardType="decimal-pad"
+                    secureTextEntry={
+                      !showCurrentPassword
+                    }
+                    autoCapitalize="none"
                   />
 
-                  <View
+                  <Pressable
                     style={
-                      styles.percentageSuffix
+                      styles.eyeButton
+                    }
+                    onPress={() =>
+                      setShowCurrentPassword(
+                        (current) =>
+                          !current
+                      )
                     }
                   >
-                    <Text
-                      style={
-                        styles.percentageSuffixText
+                    <Ionicons
+                      name={
+                        showCurrentPassword
+                          ? "eye-off-outline"
+                          : "eye-outline"
                       }
-                    >
-                      %
-                    </Text>
-                  </View>
-                </View>
-
-                <Text
-                  style={
-                    styles.helperText
-                  }
-                >
-                  This rate is used
-                  when calculating the
-                  platform commission
-                  and seller share in
-                  Dashboard and
-                  Reports.
-                </Text>
-
-                <View
-                  style={
-                    styles.infoBox
-                  }
-                >
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={20}
-                    color={
-                      COLORS.blue
-                    }
-                  />
-
-                  <Text
-                    style={
-                      styles.infoBoxText
-                    }
-                  >
-                    The FLOGRAM
-                    business model
-                    currently uses a
-                    15% platform
-                    commission on
-                    successful orders.
-                  </Text>
-                </View>
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    pressed &&
-                      styles.buttonPressed,
-                    savingPlatform &&
-                      styles.buttonDisabled,
-                  ]}
-                  disabled={
-                    savingPlatform
-                  }
-                  onPress={() => {
-                    void handleSavePlatform();
-                  }}
-                >
-                  {savingPlatform ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#FFFFFF"
+                      size={20}
+                      color={
+                        COLORS.secondaryText
+                      }
                     />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="checkmark-circle-outline"
-                        size={19}
-                        color="#FFFFFF"
-                      />
-
-                      <Text
-                        style={
-                          styles.primaryButtonText
-                        }
-                      >
-                        Save Platform
-                        Settings
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
+                  </Pressable>
+                </View>
               </View>
-            </View>
-
-            {/* ============================================
-                ADMIN OPERATIONS
-            ============================================ */}
-
-            <View
-              style={
-                styles.section
-              }
-            >
-              <SectionHeader
-                title="Admin Operations"
-                subtitle="Quick access to important platform management tasks."
-              />
-
-              <View
-                style={[
-                  styles.card,
-                  styles.navigationCard,
-                ]}
-              >
-                <NavigationRow
-                  icon="storefront-outline"
-                  iconBackground={
-                    COLORS.purpleLight
-                  }
-                  iconColor={
-                    COLORS.purpleAccent
-                  }
-                  title="Seller Verification"
-                  subtitle="Review florist and seller applications."
-                  onPress={() =>
-                    router.push(
-                      "/(admin)/admin-seller-verification"
-                    )
-                  }
-                />
-
-                <View
-                  style={
-                    styles.rowDivider
-                  }
-                />
-
-                <NavigationRow
-                  icon="bicycle-outline"
-                  iconBackground={
-                    COLORS.blueBackground
-                  }
-                  iconColor={
-                    COLORS.blue
-                  }
-                  title="Rider Verification"
-                  subtitle="Review rider registration and verification."
-                  onPress={() =>
-                    router.push(
-                      "/(admin)/admin-rider-verification"
-                    )
-                  }
-                />
-
-                <View
-                  style={
-                    styles.rowDivider
-                  }
-                />
-
-                <NavigationRow
-                  icon="wallet-outline"
-                  iconBackground={
-                    COLORS.greenBackground
-                  }
-                  iconColor={
-                    COLORS.green
-                  }
-                  title="COD Remittances"
-                  subtitle="Review and verify rider COD remittances."
-                  onPress={() =>
-                    router.push(
-                      "/(admin)/admin-remittances"
-                    )
-                  }
-                />
-              </View>
-            </View>
-
-            {/* ============================================
-                ACCOUNT & SECURITY
-            ============================================ */}
-
-            <View
-              style={
-                styles.section
-              }
-            >
-              <SectionHeader
-                title="Account & Security"
-                subtitle="Keep your administrator account secure."
-              />
 
               <View
                 style={
-                  styles.card
+                  styles.inputGroup
                 }
               >
-                <View
-                  style={
-                    styles.cardHeadingRow
-                  }
-                >
-                  <View
-                    style={[
-                      styles.cardHeadingIcon,
-                      {
-                        backgroundColor:
-                          COLORS
-                            .yellowBackground,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={21}
-                      color={
-                        COLORS.yellow
-                      }
-                    />
-                  </View>
-
-                  <View
-                    style={
-                      styles.cardHeadingContent
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.cardHeadingTitle
-                      }
-                    >
-                      Change Password
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.cardHeadingSubtitle
-                      }
-                    >
-                      Update your
-                      administrator
-                      password.
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  style={
-                    styles.divider
-                  }
-                />
-
-                <View
-                  style={
-                    styles.inputGroup
-                  }
-                >
-                  <Text
-                    style={
-                      styles.inputLabel
-                    }
-                  >
-                    Current Password
-                  </Text>
-
-                  <View
-                    style={
-                      styles.passwordInputContainer
-                    }
-                  >
-                    <TextInput
-                      style={
-                        styles.passwordInput
-                      }
-                      value={
-                        currentPassword
-                      }
-                      onChangeText={
-                        setCurrentPassword
-                      }
-                      placeholder="Enter current password"
-                      placeholderTextColor={
-                        COLORS.mutedText
-                      }
-                      secureTextEntry={
-                        !showCurrentPassword
-                      }
-                      autoCapitalize="none"
-                    />
-
-                    <Pressable
-                      style={
-                        styles.eyeButton
-                      }
-                      onPress={() =>
-                        setShowCurrentPassword(
-                          (
-                            current
-                          ) =>
-                            !current
-                        )
-                      }
-                    >
-                      <Ionicons
-                        name={
-                          showCurrentPassword
-                            ? "eye-off-outline"
-                            : "eye-outline"
-                        }
-                        size={20}
-                        color={
-                          COLORS.secondaryText
-                        }
-                      />
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View
-                  style={
-                    styles.inputGroup
-                  }
-                >
-                  <Text
-                    style={
-                      styles.inputLabel
-                    }
-                  >
-                    New Password
-                  </Text>
-
-                  <View
-                    style={
-                      styles.passwordInputContainer
-                    }
-                  >
-                    <TextInput
-                      style={
-                        styles.passwordInput
-                      }
-                      value={
-                        newPassword
-                      }
-                      onChangeText={
-                        setNewPassword
-                      }
-                      placeholder="Enter new password"
-                      placeholderTextColor={
-                        COLORS.mutedText
-                      }
-                      secureTextEntry={
-                        !showNewPassword
-                      }
-                      autoCapitalize="none"
-                    />
-
-                    <Pressable
-                      style={
-                        styles.eyeButton
-                      }
-                      onPress={() =>
-                        setShowNewPassword(
-                          (
-                            current
-                          ) =>
-                            !current
-                        )
-                      }
-                    >
-                      <Ionicons
-                        name={
-                          showNewPassword
-                            ? "eye-off-outline"
-                            : "eye-outline"
-                        }
-                        size={20}
-                        color={
-                          COLORS.secondaryText
-                        }
-                      />
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View
-                  style={
-                    styles.inputGroup
-                  }
-                >
-                  <Text
-                    style={
-                      styles.inputLabel
-                    }
-                  >
-                    Confirm New
-                    Password
-                  </Text>
-
-                  <View
-                    style={
-                      styles.passwordInputContainer
-                    }
-                  >
-                    <TextInput
-                      style={
-                        styles.passwordInput
-                      }
-                      value={
-                        confirmNewPassword
-                      }
-                      onChangeText={
-                        setConfirmNewPassword
-                      }
-                      placeholder="Confirm new password"
-                      placeholderTextColor={
-                        COLORS.mutedText
-                      }
-                      secureTextEntry={
-                        !showConfirmPassword
-                      }
-                      autoCapitalize="none"
-                    />
-
-                    <Pressable
-                      style={
-                        styles.eyeButton
-                      }
-                      onPress={() =>
-                        setShowConfirmPassword(
-                          (
-                            current
-                          ) =>
-                            !current
-                        )
-                      }
-                    >
-                      <Ionicons
-                        name={
-                          showConfirmPassword
-                            ? "eye-off-outline"
-                            : "eye-outline"
-                        }
-                        size={20}
-                        color={
-                          COLORS.secondaryText
-                        }
-                      />
-                    </Pressable>
-                  </View>
-                </View>
-
                 <Text
                   style={
-                    styles.helperText
+                    styles.inputLabel
                   }
                 >
-                  Use at least 8
-                  characters with an
-                  uppercase letter,
-                  lowercase letter,
-                  and number.
+                  New Password
                 </Text>
 
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.secondaryButton,
-                    pressed &&
-                      styles.secondaryButtonPressed,
-                    changingPassword &&
-                      styles.buttonDisabled,
-                  ]}
-                  disabled={
-                    changingPassword
+                <View
+                  style={
+                    styles.passwordInputContainer
                   }
-                  onPress={() => {
-                    void handleChangePassword();
-                  }}
                 >
-                  {changingPassword ? (
-                    <ActivityIndicator
-                      size="small"
+                  <TextInput
+                    style={
+                      styles.passwordInput
+                    }
+                    value={
+                      newPassword
+                    }
+                    onChangeText={
+                      setNewPassword
+                    }
+                    placeholder="Enter new password"
+                    placeholderTextColor={
+                      COLORS.mutedText
+                    }
+                    secureTextEntry={
+                      !showNewPassword
+                    }
+                    autoCapitalize="none"
+                  />
+
+                  <Pressable
+                    style={
+                      styles.eyeButton
+                    }
+                    onPress={() =>
+                      setShowNewPassword(
+                        (current) =>
+                          !current
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name={
+                        showNewPassword
+                          ? "eye-off-outline"
+                          : "eye-outline"
+                      }
+                      size={20}
+                      color={
+                        COLORS.secondaryText
+                      }
+                    />
+                  </Pressable>
+                </View>
+              </View>
+
+              <View
+                style={
+                  styles.inputGroup
+                }
+              >
+                <Text
+                  style={
+                    styles.inputLabel
+                  }
+                >
+                  Confirm New Password
+                </Text>
+
+                <View
+                  style={
+                    styles.passwordInputContainer
+                  }
+                >
+                  <TextInput
+                    style={
+                      styles.passwordInput
+                    }
+                    value={
+                      confirmNewPassword
+                    }
+                    onChangeText={
+                      setConfirmNewPassword
+                    }
+                    placeholder="Confirm new password"
+                    placeholderTextColor={
+                      COLORS.mutedText
+                    }
+                    secureTextEntry={
+                      !showConfirmPassword
+                    }
+                    autoCapitalize="none"
+                  />
+
+                  <Pressable
+                    style={
+                      styles.eyeButton
+                    }
+                    onPress={() =>
+                      setShowConfirmPassword(
+                        (current) =>
+                          !current
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name={
+                        showConfirmPassword
+                          ? "eye-off-outline"
+                          : "eye-outline"
+                      }
+                      size={20}
+                      color={
+                        COLORS.secondaryText
+                      }
+                    />
+                  </Pressable>
+                </View>
+              </View>
+
+              <Text
+                style={
+                  styles.helperText
+                }
+              >
+                Use at least 8 characters with an uppercase letter, lowercase letter, and number.
+              </Text>
+
+              <Pressable
+                style={({
+                  pressed,
+                }) => [
+                  styles.secondaryButton,
+                  pressed &&
+                    styles.secondaryButtonPressed,
+                  changingPassword &&
+                    styles.buttonDisabled,
+                ]}
+                disabled={
+                  changingPassword
+                }
+                onPress={() => {
+                  void handleChangePassword();
+                }}
+              >
+                {changingPassword ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      COLORS.purpleAccent
+                    }
+                  />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="key-outline"
+                      size={18}
                       color={
                         COLORS.purpleAccent
                       }
                     />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="key-outline"
-                        size={18}
-                        color={
-                          COLORS.purpleAccent
-                        }
-                      />
 
-                      <Text
-                        style={
-                          styles.secondaryButtonText
-                        }
-                      >
-                        Change Password
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-              </View>
+                    <Text
+                      style={
+                        styles.secondaryButtonText
+                      }
+                    >
+                      Change Password
+                    </Text>
+                  </>
+                )}
+              </Pressable>
             </View>
+          </View>
 
-            {/* ============================================
-                SYSTEM INFORMATION
-            ============================================ */}
+          <View
+            style={
+              styles.section
+            }
+          >
+            <SectionHeader
+              title="System Information"
+              subtitle="Current FLOGRAM platform information."
+            />
 
             <View
               style={
-                styles.section
+                styles.card
               }
             >
-              <SectionHeader
-                title="System Information"
-                subtitle="Current FLOGRAM platform information."
+              <View
+                style={
+                  styles.infoRow
+                }
+              >
+                <View
+                  style={
+                    styles.infoRowLeft
+                  }
+                >
+                  <View
+                    style={[
+                      styles.smallIcon,
+                      {
+                        backgroundColor:
+                          COLORS.purpleLight,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="flower-outline"
+                      size={18}
+                      color={
+                        COLORS.purpleAccent
+                      }
+                    />
+                  </View>
+
+                  <Text
+                    style={
+                      styles.infoRowLabel
+                    }
+                  >
+                    Platform
+                  </Text>
+                </View>
+
+                <Text
+                  style={
+                    styles.infoRowValue
+                  }
+                >
+                  {settings
+                    ?.platformName ||
+                    "FLOGRAM"}
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.rowDivider
+                }
               />
 
               <View
                 style={
-                  styles.card
+                  styles.infoRow
                 }
               >
                 <View
                   style={
-                    styles.infoRow
+                    styles.infoRowLeft
                   }
                 >
                   <View
-                    style={
-                      styles.infoRowLeft
-                    }
+                    style={[
+                      styles.smallIcon,
+                      {
+                        backgroundColor:
+                          COLORS.blueBackground,
+                      },
+                    ]}
                   >
-                    <View
-                      style={[
-                        styles.smallIcon,
-                        {
-                          backgroundColor:
-                            COLORS
-                              .purpleLight,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name="flower-outline"
-                        size={18}
-                        color={
-                          COLORS.purpleAccent
-                        }
-                      />
-                    </View>
-
-                    <Text
-                      style={
-                        styles.infoRowLabel
+                    <Ionicons
+                      name="code-slash-outline"
+                      size={18}
+                      color={
+                        COLORS.blue
                       }
-                    >
-                      Platform
-                    </Text>
+                    />
                   </View>
 
                   <Text
                     style={
-                      styles.infoRowValue
+                      styles.infoRowLabel
                     }
                   >
-                    {settings
-                      ?.platformName ||
-                      "FLOGRAM"}
+                    App Version
                   </Text>
                 </View>
 
-                <View
+                <Text
                   style={
-                    styles.rowDivider
+                    styles.infoRowValue
                   }
-                />
+                >
+                  {settings
+                    ?.appVersion ||
+                    "1.0.0"}
+                </Text>
+              </View>
 
+              <View
+                style={
+                  styles.rowDivider
+                }
+              />
+
+              <View
+                style={
+                  styles.infoRow
+                }
+              >
                 <View
                   style={
-                    styles.infoRow
+                    styles.infoRowLeft
                   }
                 >
                   <View
-                    style={
-                      styles.infoRowLeft
-                    }
+                    style={[
+                      styles.smallIcon,
+                      {
+                        backgroundColor:
+                          COLORS.greenBackground,
+                      },
+                    ]}
                   >
-                    <View
-                      style={[
-                        styles.smallIcon,
-                        {
-                          backgroundColor:
-                            COLORS
-                              .blueBackground,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name="code-slash-outline"
-                        size={18}
-                        color={
-                          COLORS.blue
-                        }
-                      />
-                    </View>
-
-                    <Text
-                      style={
-                        styles.infoRowLabel
+                    <Ionicons
+                      name="shield-checkmark-outline"
+                      size={18}
+                      color={
+                        COLORS.green
                       }
-                    >
-                      App Version
-                    </Text>
+                    />
                   </View>
 
                   <Text
                     style={
-                      styles.infoRowValue
+                      styles.infoRowLabel
                     }
                   >
-                    {settings
-                      ?.appVersion ||
-                      "1.0.0"}
+                    Account Role
                   </Text>
                 </View>
 
-                <View
+                <Text
                   style={
-                    styles.rowDivider
-                  }
-                />
-
-                <View
-                  style={
-                    styles.infoRow
+                    styles.infoRowValue
                   }
                 >
-                  <View
-                    style={
-                      styles.infoRowLeft
-                    }
-                  >
-                    <View
-                      style={[
-                        styles.smallIcon,
-                        {
-                          backgroundColor:
-                            COLORS
-                              .greenBackground,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name="shield-checkmark-outline"
-                        size={18}
-                        color={
-                          COLORS.green
-                        }
-                      />
-                    </View>
-
-                    <Text
-                      style={
-                        styles.infoRowLabel
-                      }
-                    >
-                      Account Role
-                    </Text>
-                  </View>
-
-                  <Text
-                    style={
-                      styles.infoRowValue
-                    }
-                  >
-                    Administrator
-                  </Text>
-                </View>
+                  Administrator
+                </Text>
               </View>
             </View>
+          </View>
 
-            {/* ============================================
-                LOGOUT
-            ============================================ */}
-
-            <View
-              style={
-                styles.section
+          <View
+            style={
+              styles.section
+            }
+          >
+            <Pressable
+              style={({
+                pressed,
+              }) => [
+                styles.logoutButton,
+                pressed &&
+                  styles.logoutButtonPressed,
+              ]}
+              onPress={
+                handleLogout
               }
             >
-              <Pressable
-                style={({ pressed }) => [
-                  styles.logoutButton,
-                  pressed &&
-                    styles.logoutButtonPressed,
-                ]}
-                onPress={
-                  handleLogout
+              <View
+                style={
+                  styles.logoutIcon
                 }
               >
-                <View
-                  style={
-                    styles.logoutIcon
-                  }
-                >
-                  <Ionicons
-                    name="log-out-outline"
-                    size={21}
-                    color={
-                      COLORS.red
-                    }
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.logoutContent
-                  }
-                >
-                  <Text
-                    style={
-                      styles.logoutTitle
-                    }
-                  >
-                    Log Out
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.logoutSubtitle
-                    }
-                  >
-                    Sign out of your
-                    administrator
-                    account.
-                  </Text>
-                </View>
-
                 <Ionicons
-                  name="chevron-forward"
-                  size={20}
+                  name="log-out-outline"
+                  size={21}
                   color={
                     COLORS.red
                   }
                 />
-              </Pressable>
-            </View>
-          </ScrollView>
+              </View>
 
-          {/* ==============================================
-              BOTTOM NAVIGATION
-          ============================================== */}
-
-          <View
-            style={[
-              styles.bottomNav,
-              {
-                paddingBottom:
-                  Math.max(
-                    insets.bottom,
-                    8
-                  ),
-              },
-            ]}
-          >
-            <Pressable
-              style={
-                styles.navItem
-              }
-              onPress={() =>
-                router.replace(
-                  "/(admin)/admin-dashboard"
-                )
-              }
-            >
-              <Ionicons
-                name="grid-outline"
-                size={22}
-                color={
-                  COLORS.mutedText
-                }
-              />
-
-              <Text
+              <View
                 style={
-                  styles.navLabel
+                  styles.logoutContent
                 }
               >
-                Dashboard
-              </Text>
-            </Pressable>
+                <Text
+                  style={
+                    styles.logoutTitle
+                  }
+                >
+                  Log Out
+                </Text>
 
-            <Pressable
-              style={
-                styles.navItem
-              }
-              onPress={() =>
-                router.replace(
-                  "/(admin)/admin-users"
-                )
-              }
-            >
+                <Text
+                  style={
+                    styles.logoutSubtitle
+                  }
+                >
+                  Sign out of your administrator account.
+                </Text>
+              </View>
+
               <Ionicons
-                name="people-outline"
-                size={22}
+                name="chevron-forward"
+                size={20}
                 color={
-                  COLORS.mutedText
+                  COLORS.red
                 }
               />
-
-              <Text
-                style={
-                  styles.navLabel
-                }
-              >
-                Users
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={
-                styles.navItem
-              }
-              onPress={() =>
-                router.replace(
-                  "/(admin)/admin-orders"
-                )
-              }
-            >
-              <Ionicons
-                name="receipt-outline"
-                size={22}
-                color={
-                  COLORS.mutedText
-                }
-              />
-
-              <Text
-                style={
-                  styles.navLabel
-                }
-              >
-                Orders
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={
-                styles.navItem
-              }
-              onPress={() =>
-                router.replace(
-                  "/(admin)/admin-reports"
-                )
-              }
-            >
-              <Ionicons
-                name="bar-chart-outline"
-                size={22}
-                color={
-                  COLORS.mutedText
-                }
-              />
-
-              <Text
-                style={
-                  styles.navLabel
-                }
-              >
-                Reports
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.navItem,
-                styles.navItemActive,
-              ]}
-            >
-              <Ionicons
-                name="settings"
-                size={22}
-                color={
-                  COLORS.purpleAccent
-                }
-              />
-
-              <Text
-                style={[
-                  styles.navLabel,
-                  styles.navLabelActive,
-                ]}
-              >
-                Settings
-              </Text>
             </Pressable>
           </View>
+        </ScrollView>
+
+        <View
+          style={
+            styles.bottomNavigation
+          }
+        >
+          {[
+            {
+              label: "Dashboard",
+              route:
+                "/(admin)/admin-dashboard",
+              icon:
+                "home-outline" as const,
+            },
+            {
+              label: "Users",
+              route:
+                "/(admin)/admin-users",
+              icon:
+                "people-outline" as const,
+            },
+            {
+              label: "Orders",
+              route:
+                "/(admin)/admin-orders",
+              icon:
+                "receipt-outline" as const,
+            },
+            {
+              label: "Reports",
+              route:
+                "/(admin)/admin-reports",
+              icon:
+                "bar-chart-outline" as const,
+            },
+            {
+              label: "Settings",
+              route:
+                "/(admin)/admin-settings",
+              icon:
+                "settings" as const,
+            },
+          ].map((item) => {
+            const active =
+              item.label ===
+              "Settings";
+
+            return (
+              <Pressable
+                key={
+                  item.label
+                }
+                style={
+                  styles.bottomNavItem
+                }
+                onPress={() => {
+                  if (!active) {
+                    router.replace(
+                      item.route as never
+                    );
+                  }
+                }}
+              >
+                <View
+                  style={[
+                    styles.bottomNavIconWrap,
+                    active &&
+                      styles.bottomNavIconWrapActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      item.icon
+                    }
+                    size={21}
+                    color={
+                      active
+                        ? COLORS.purpleAccent
+                        : COLORS.mutedText
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={[
+                    styles.bottomNavLabel,
+                    active &&
+                      styles.bottomNavLabelActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
-
-/*
- * =========================================================
- * STYLES
- * =========================================================
- */
 
 const styles =
   StyleSheet.create({
     flex: {
       flex: 1,
-    },
-
-    safeArea: {
-      flex: 1,
-      backgroundColor:
-        COLORS.background,
     },
 
     container: {
@@ -2469,17 +2260,41 @@ const styles =
       paddingBottom: 120,
     },
 
-    /*
-     * HEADER
-     */
-
     header: {
       backgroundColor:
-        COLORS.purpleDark,
-      paddingHorizontal: 22,
-      paddingTop: 24,
-      paddingBottom: 30,
+        COLORS.purple,
+      paddingHorizontal: 20,
+      paddingTop: 54,
+      paddingBottom: 26,
+      borderBottomLeftRadius: 28,
+      borderBottomRightRadius: 28,
       overflow: "hidden",
+    },
+
+    headerTop: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent:
+        "space-between",
+    },
+
+    headerTitleContent: {
+      flex: 1,
+      paddingRight: 12,
+    },
+
+    headerButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor:
+        "rgba(255,255,255,0.12)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    headerButtonDisabled: {
+      opacity: 0.8,
     },
 
     headerCircleOne: {
@@ -2530,16 +2345,17 @@ const styles =
       maxWidth: 330,
     },
 
-    /*
-     * LOADING
-     */
-
     loadingContainer: {
       flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
       backgroundColor:
         COLORS.background,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    loadingContent: {
+      alignItems: "center",
+      justifyContent: "center",
       gap: 12,
     },
 
@@ -2549,10 +2365,6 @@ const styles =
       fontSize: 14,
       fontWeight: "500",
     },
-
-    /*
-     * SECTIONS
-     */
 
     section: {
       paddingHorizontal: 16,
@@ -2577,10 +2389,6 @@ const styles =
       marginTop: 3,
     },
 
-    /*
-     * CARDS
-     */
-
     card: {
       backgroundColor:
         COLORS.card,
@@ -2589,7 +2397,6 @@ const styles =
       borderWidth: 1,
       borderColor:
         COLORS.border,
-
       shadowColor: "#000000",
       shadowOpacity: 0.04,
       shadowRadius: 10,
@@ -2597,7 +2404,6 @@ const styles =
         width: 0,
         height: 4,
       },
-
       elevation: 1,
     },
 
@@ -2614,10 +2420,6 @@ const styles =
         COLORS.border,
       marginLeft: 58,
     },
-
-    /*
-     * PROFILE
-     */
 
     profileHeader: {
       flexDirection: "row",
@@ -2680,10 +2482,6 @@ const styles =
       fontWeight: "700",
     },
 
-    /*
-     * INPUTS
-     */
-
     inputGroup: {
       marginBottom: 14,
     },
@@ -2724,10 +2522,6 @@ const styles =
       marginBottom: 15,
     },
 
-    /*
-     * CARD HEADINGS
-     */
-
     cardHeadingRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -2759,10 +2553,6 @@ const styles =
       lineHeight: 16,
       marginTop: 2,
     },
-
-    /*
-     * COMMISSION
-     */
 
     commissionLabelRow: {
       flexDirection: "row",
@@ -2846,10 +2636,6 @@ const styles =
       lineHeight: 17,
     },
 
-    /*
-     * BUTTONS
-     */
-
     primaryButton: {
       minHeight: 48,
       borderRadius: 12,
@@ -2903,10 +2689,6 @@ const styles =
       opacity: 0.6,
     },
 
-    /*
-     * NAVIGATION ROWS
-     */
-
     navigationCard: {
       padding: 0,
       overflow: "hidden",
@@ -2953,10 +2735,6 @@ const styles =
       marginTop: 3,
     },
 
-    /*
-     * PASSWORD
-     */
-
     passwordInputContainer: {
       minHeight: 48,
       flexDirection: "row",
@@ -2983,10 +2761,6 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
     },
-
-    /*
-     * SYSTEM INFO
-     */
 
     infoRow: {
       minHeight: 57,
@@ -3025,10 +2799,6 @@ const styles =
       maxWidth: "45%",
       textAlign: "right",
     },
-
-    /*
-     * LOGOUT
-     */
 
     logoutButton: {
       backgroundColor:
@@ -3077,67 +2847,56 @@ const styles =
       marginTop: 3,
     },
 
-    /*
-     * BOTTOM NAVIGATION
-     */
-
-    bottomNav: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      bottom: 0,
-
-      minHeight: 70,
-
+    bottomNavigation: {
+      minHeight: 76,
+      paddingTop: 7,
+      paddingBottom: 9,
+      paddingHorizontal: 6,
       flexDirection: "row",
-      alignItems:
-        "flex-start",
-
+      alignItems: "flex-start",
+      justifyContent:
+        "space-around",
       backgroundColor:
         "#FFFFFF",
-
       borderTopWidth: 1,
       borderTopColor:
         COLORS.border,
-
-      paddingTop: 8,
-      paddingHorizontal: 4,
-
-      shadowColor: "#000000",
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      shadowOffset: {
-        width: 0,
-        height: -3,
-      },
-
-      elevation: 8,
     },
 
-    navItem: {
+    bottomNavItem: {
       flex: 1,
-      minHeight: 52,
+      minHeight: 57,
+      alignItems: "center",
+      justifyContent:
+        "flex-start",
+    },
+
+    bottomNavIconWrap: {
+      width: 36,
+      height: 31,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
-      gap: 4,
-      borderRadius: 12,
     },
 
-    navItemActive: {
+    bottomNavIconWrapActive: {
       backgroundColor:
         COLORS.purpleLight,
     },
 
-    navLabel: {
+    bottomNavLabel: {
+      marginTop: 2,
+      fontSize: 9,
+      lineHeight: 13,
+      fontWeight: "500",
       color:
         COLORS.mutedText,
-      fontSize: 10,
-      fontWeight: "600",
+      textAlign: "center",
     },
 
-    navLabelActive: {
+    bottomNavLabelActive: {
+      fontWeight: "700",
       color:
         COLORS.purpleAccent,
-      fontWeight: "800",
     },
   });

@@ -1,5 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import React, {
   useCallback,
   useMemo,
@@ -68,6 +72,10 @@ const PERIODS: {
   value: AdminReportPeriod;
 }[] = [
   {
+    label: "Today",
+    value: "today",
+  },
+  {
     label: "7 Days",
     value: "7d",
   },
@@ -109,7 +117,9 @@ function formatCurrency(
 function formatNumber(
   value?: number | null
 ) {
-  return Number(value || 0).toLocaleString("en-PH");
+  return Number(value || 0).toLocaleString(
+    "en-PH"
+  );
 }
 
 function formatPercent(
@@ -762,6 +772,8 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     label: "Settings",
     icon: "settings-outline",
     activeIcon: "settings",
+    route:
+      "/(admin)/admin-settings",
   },
 ];
 
@@ -854,12 +866,30 @@ function AdminBottomNavigation() {
 export default function AdminReportsScreen() {
   const router = useRouter();
 
+  const { period } =
+    useLocalSearchParams<{
+      period?: string | string[];
+    }>();
+
+  const requestedPeriod =
+    Array.isArray(period)
+      ? period[0]
+      : period;
+
+  const initialPeriod: AdminReportPeriod =
+    PERIODS.some(
+      (item) =>
+        item.value === requestedPeriod
+    )
+      ? (requestedPeriod as AdminReportPeriod)
+      : "30d";
+
   const [
     selectedPeriod,
     setSelectedPeriod,
   ] =
     useState<AdminReportPeriod>(
-      "30d"
+      initialPeriod
     );
 
   const [report, setReport] =
@@ -874,6 +904,11 @@ export default function AdminReportsScreen() {
     refreshing,
     setRefreshing,
   ] = useState(false);
+
+  const [
+  headerRefreshing,
+  setHeaderRefreshing,
+] = useState(false);
 
   const [error, setError] =
     useState("");
@@ -966,6 +1001,36 @@ export default function AdminReportsScreen() {
       };
     }, [selectedPeriod])
   );
+  const handleHeaderRefresh =
+  useCallback(async () => {
+    if (headerRefreshing) {
+      return;
+    }
+
+    setHeaderRefreshing(true);
+
+    try {
+      setError("");
+
+      const data =
+        await getAdminReports(
+          selectedPeriod
+        );
+
+      setReport(data);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Reports and analytics could not be loaded."
+      );
+    } finally {
+      setHeaderRefreshing(false);
+    }
+  }, [
+    headerRefreshing,
+    selectedPeriod,
+  ]);
 
   /*
    * =======================================================
@@ -1087,17 +1152,6 @@ export default function AdminReportsScreen() {
             Try Again
           </Text>
         </Pressable>
-
-        <Pressable
-          style={styles.backTextButton}
-          onPress={() =>
-            router.back()
-          }
-        >
-          <Text style={styles.backText}>
-            Go Back
-          </Text>
-        </Pressable>
       </View>
     );
   }
@@ -1106,13 +1160,11 @@ export default function AdminReportsScreen() {
     return null;
   }
 
-  return (
+   return (
     <View style={styles.container}>
       <ScrollView
         style={styles.mainScroll}
-        showsVerticalScrollIndicator={
-          false
-        }
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={
           styles.scrollContent
         }
@@ -1138,71 +1190,67 @@ export default function AdminReportsScreen() {
          */}
 
         <View style={styles.header}>
-          <View
-            style={styles.headerTop}
-          >
-            <Pressable
+          <View style={styles.headerTop}>
+            <View
               style={
-                styles.headerButton
-              }
-              onPress={() =>
-                router.back()
+                styles.headerTitleContent
               }
             >
-              <Ionicons
-                name="arrow-back"
-                size={21}
-                color="#FFFFFF"
-              />
-            </Pressable>
+              <Text
+                style={
+                  styles.headerEyebrow
+                }
+              >
+                SYSTEM ANALYTICS
+              </Text>
+
+              <Text
+                style={styles.headerTitle}
+              >
+                Reports & Analytics
+              </Text>
+
+              <Text
+                style={
+                  styles.headerSubtitle
+                }
+              >
+                Monitor FLOGRAM&apos;s
+                marketplace performance
+                and financial activity.
+              </Text>
+            </View>
 
             <Pressable
-              style={
-                styles.headerButton
+              style={[
+                styles.headerButton,
+                headerRefreshing &&
+                  styles.headerButtonDisabled,
+              ]}
+              onPress={
+                handleHeaderRefresh
               }
-              onPress={() =>
-                void loadReport(
-                  selectedPeriod,
-                  true
-                )
+              disabled={
+                headerRefreshing
               }
             >
-              <Ionicons
-                name="refresh-outline"
-                size={21}
-                color="#FFFFFF"
-              />
+              {headerRefreshing ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Ionicons
+                  name="refresh-outline"
+                  size={21}
+                  color="#FFFFFF"
+                />
+              )}
             </Pressable>
           </View>
 
-          <Text
-            style={
-              styles.headerEyebrow
-            }
-          >
-            SYSTEM ANALYTICS
-          </Text>
-
-          <Text
-            style={styles.headerTitle}
-          >
-            Reports & Analytics
-          </Text>
-
-          <Text
-            style={
-              styles.headerSubtitle
-            }
-          >
-            Monitor FLOGRAM&apos;s
-            marketplace performance
-            and financial activity.
-          </Text>
-
           <View
-            style={
-              styles.headerSummary
-            }
+            style={styles.headerSummary}
           >
             <View>
               <Text
@@ -1365,7 +1413,7 @@ export default function AdminReportsScreen() {
                 report.overview
                   .commission
               )}
-              detail="15% platform share"
+              detail={`${report.sales.commissionPercentage}% platform share`}
               tone="yellow"
             />
           </View>
@@ -1745,8 +1793,18 @@ export default function AdminReportsScreen() {
             />
           </View>
 
-          <View
+          <Pressable
             style={styles.newUsersCard}
+            onPress={() =>
+              router.push({
+                pathname:
+                  "/(admin)/admin-users",
+                params: {
+                  registrationPeriod:
+                    selectedPeriod,
+                },
+              } as never)
+            }
           >
             <View
               style={
@@ -1868,7 +1926,7 @@ export default function AdminReportsScreen() {
                 </Text>
               </View>
             </View>
-          </View>
+          </Pressable>
 
           <SectionHeader
             eyebrow="COD MONITORING"
@@ -2147,8 +2205,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 30,
   },
-
-  loadingText: {
+    loadingText: {
     marginTop: 14,
     fontSize: 14,
     color: COLORS.secondaryText,
@@ -2199,17 +2256,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  backTextButton: {
-    marginTop: 16,
-    padding: 8,
-  },
-
-  backText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.purpleAccent,
-  },
-
   /*
    * =======================================================
    * HEADER
@@ -2228,10 +2274,13 @@ const styles = StyleSheet.create({
 
   headerTop: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent:
-      "space-between",
-    marginBottom: 24,
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+  },
+
+  headerTitleContent: {
+    flex: 1,
+    paddingRight: 12,
   },
 
   headerButton: {
@@ -2242,6 +2291,10 @@ const styles = StyleSheet.create({
       "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  headerButtonDisabled: {
+    opacity: 0.8,
   },
 
   headerEyebrow: {

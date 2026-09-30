@@ -73,6 +73,26 @@ type CurrentUserResponse = {
   };
 };
 
+type BasicResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: null;
+};
+
+type VerifyResetCodeResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    email: string;
+
+    verified: boolean;
+  };
+};
+
 export type RegisterPayload = {
   firstName: string;
 
@@ -96,6 +116,24 @@ export type LoginPayload = {
   email: string;
 
   password: string;
+};
+
+export type ForgotPasswordPayload = {
+  email: string;
+};
+
+export type VerifyResetCodePayload = {
+  email: string;
+
+  code: string;
+};
+
+export type ResetPasswordPayload = {
+  email: string;
+
+  newPassword: string;
+
+  confirmNewPassword: string;
 };
 
 const TOKEN_KEY =
@@ -165,6 +203,66 @@ export const login =
       response.data.user,
       response.data.accessToken
     );
+
+    return response;
+  };
+
+export const forgotPassword =
+  async (
+    payload: ForgotPasswordPayload
+  ) => {
+    const response =
+      await apiRequest<BasicResponse>(
+        '/auth/forgot-password',
+        {
+          method: 'POST',
+
+          body:
+            JSON.stringify(
+              payload
+            ),
+        }
+      );
+
+    return response;
+  };
+
+export const verifyResetCode =
+  async (
+    payload: VerifyResetCodePayload
+  ) => {
+    const response =
+      await apiRequest<VerifyResetCodeResponse>(
+        '/auth/verify-reset-code',
+        {
+          method: 'POST',
+
+          body:
+            JSON.stringify(
+              payload
+            ),
+        }
+      );
+
+    return response;
+  };
+
+export const resetPassword =
+  async (
+    payload: ResetPasswordPayload
+  ) => {
+    const response =
+      await apiRequest<BasicResponse>(
+        '/auth/reset-password',
+        {
+          method: 'POST',
+
+          body:
+            JSON.stringify(
+              payload
+            ),
+        }
+      );
 
     return response;
   };

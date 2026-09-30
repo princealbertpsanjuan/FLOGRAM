@@ -288,6 +288,8 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     label: "Settings",
     icon: "settings-outline",
     activeIcon: "settings",
+    route:
+      "/(admin)/admin-settings",
   },
 ];
 
@@ -398,6 +400,11 @@ export default function AdminOrdersScreen() {
   ] = useState(false);
 
   const [
+    headerRefreshing,
+    setHeaderRefreshing,
+  ] = useState(false);
+
+  const [
     error,
     setError,
   ] = useState<
@@ -450,6 +457,7 @@ export default function AdminOrdersScreen() {
           );
         } finally {
           setLoading(false);
+
           setRefreshing(
             false
           );
@@ -463,6 +471,36 @@ export default function AdminOrdersScreen() {
       void loadOrders();
     }, [loadOrders])
   );
+
+  const handleHeaderRefresh =
+    useCallback(async () => {
+      if (headerRefreshing) {
+        return;
+      }
+
+      setHeaderRefreshing(true);
+
+      try {
+        const data =
+          await getAdminOrders();
+
+        setOrders(data);
+        setError(null);
+      } catch (err) {
+        console.error(
+          "Failed to refresh admin orders:",
+          err
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load orders."
+        );
+      } finally {
+        setHeaderRefreshing(false);
+      }
+    }, [headerRefreshing]);
 
   const filteredOrders =
     useMemo(() => {
@@ -597,74 +635,67 @@ export default function AdminOrdersScreen() {
           />
         }
       >
-        <View
-          style={
-            styles.header
-          }
-        >
-          <View
-            style={
-              styles.headerTop
-            }
-          >
-            <Pressable
+        {/*
+         * =================================================
+         * HEADER
+         * =================================================
+         */}
+
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View
               style={
-                styles.backButton
-              }
-              onPress={() =>
-                router.back()
+                styles.headerTitleContent
               }
             >
-              <Ionicons
-                name="arrow-back"
-                size={20}
-                color="#FFFFFF"
-              />
-            </Pressable>
+              <Text
+                style={styles.eyebrow}
+              >
+                ORDER MONITORING
+              </Text>
+
+              <Text
+                style={styles.title}
+              >
+                Orders
+              </Text>
+
+              <Text
+                style={styles.subtitle}
+              >
+                Monitor marketplace
+                transactions and
+                fulfillment.
+              </Text>
+            </View>
 
             <Pressable
-              style={
-                styles.refreshButton
+              style={[
+                styles.refreshButton,
+                headerRefreshing &&
+                  styles.refreshButtonDisabled,
+              ]}
+              onPress={
+                handleHeaderRefresh
               }
-              onPress={() =>
-                void loadOrders(
-                  true
-                )
+              disabled={
+                headerRefreshing
               }
             >
-              <Ionicons
-                name="refresh"
-                size={19}
-                color="#FFFFFF"
-              />
+              {headerRefreshing ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Ionicons
+                  name="refresh"
+                  size={19}
+                  color="#FFFFFF"
+                />
+              )}
             </Pressable>
           </View>
-
-          <Text
-            style={
-              styles.eyebrow
-            }
-          >
-            ORDER MONITORING
-          </Text>
-
-          <Text
-            style={
-              styles.title
-            }
-          >
-            Orders
-          </Text>
-
-          <Text
-            style={
-              styles.subtitle
-            }
-          >
-            Monitor marketplace
-            transactions and
-            fulfillment.
-          </Text>
 
           <View
             style={
@@ -716,6 +747,12 @@ export default function AdminOrdersScreen() {
             </Text>
           </View>
         </View>
+
+        {/*
+         * =================================================
+         * BODY
+         * =================================================
+         */}
 
         <View
           style={
@@ -1512,43 +1549,38 @@ const styles =
     header: {
       backgroundColor:
         COLORS.purple,
-      paddingHorizontal: 18,
-      paddingTop: 52,
-      paddingBottom: 20,
-      borderBottomLeftRadius:
-        24,
-      borderBottomRightRadius:
-        24,
+      paddingHorizontal: 20,
+      paddingTop: 54,
+      paddingBottom: 26,
+      borderBottomLeftRadius: 28,
+      borderBottomRightRadius: 28,
     },
 
     headerTop: {
       flexDirection: "row",
+      alignItems: "flex-start",
       justifyContent:
         "space-between",
-      alignItems: "center",
-      marginBottom: 18,
     },
 
-    backButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 13,
-      backgroundColor:
-        "rgba(255,255,255,0.12)",
-      justifyContent:
-        "center",
-      alignItems: "center",
+    headerTitleContent: {
+      flex: 1,
+      paddingRight: 12,
     },
 
     refreshButton: {
       width: 40,
       height: 40,
-      borderRadius: 13,
+      borderRadius: 20,
       backgroundColor:
         "rgba(255,255,255,0.12)",
       alignItems: "center",
       justifyContent:
         "center",
+    },
+
+    refreshButtonDisabled: {
+      opacity: 0.8,
     },
 
     eyebrow: {
@@ -2098,15 +2130,12 @@ const styles =
       paddingTop: 7,
       paddingBottom: 9,
       paddingHorizontal: 6,
-
       flexDirection: "row",
       alignItems: "flex-start",
       justifyContent:
         "space-around",
-
       backgroundColor:
         "#FFFFFF",
-
       borderTopWidth: 1,
       borderTopColor:
         COLORS.border,

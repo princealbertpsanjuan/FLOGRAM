@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -91,12 +90,16 @@ function formatStatus(status: AdminRemittanceStatus | string) {
   switch (status) {
     case "pending":
       return "Pending";
+
     case "submitted":
       return "For Verification";
+
     case "verified":
       return "Verified";
+
     case "rejected":
       return "Rejected";
+
     default:
       return status || "Unknown";
   }
@@ -201,6 +204,7 @@ export default function AdminRemittancesScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [headerRefreshing, setHeaderRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadRemittances = useCallback(
@@ -240,14 +244,47 @@ export default function AdminRemittancesScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadRemittances();
+
       return undefined;
     }, [loadRemittances])
   );
 
   const handleRefresh = useCallback(() => {
+    if (refreshing) {
+      return;
+    }
+
     setRefreshing(true);
     void loadRemittances(false);
-  }, [loadRemittances]);
+  }, [loadRemittances, refreshing]);
+
+  const handleHeaderRefresh = useCallback(async () => {
+    if (headerRefreshing) {
+      return;
+    }
+
+    try {
+      setHeaderRefreshing(true);
+      setError(null);
+
+      const data = await getAdminRemittances();
+
+      setRemittances(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(
+        "Failed to refresh Admin remittances:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load rider remittances."
+      );
+    } finally {
+      setHeaderRefreshing(false);
+    }
+  }, [headerRefreshing]);
 
   const filteredRemittances = useMemo(() => {
     if (selectedFilter === "all") {
@@ -309,18 +346,16 @@ export default function AdminRemittancesScreen() {
 
   if (loading && remittances.length === 0) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            size="large"
-            color={COLORS.purpleAccent}
-          />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator
+          size="large"
+          color={COLORS.purpleAccent}
+        />
 
-          <Text style={styles.loadingText}>
-            Loading remittances...
-          </Text>
-        </View>
-      </SafeAreaView>
+        <Text style={styles.loadingText}>
+          Loading remittances...
+        </Text>
+      </View>
     );
   }
 
@@ -336,533 +371,540 @@ export default function AdminRemittancesScreen() {
             : "Pending Remittances";
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => router.back()}
-            >
-              <Ionicons
-                name="arrow-back"
-                size={19}
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={19}
+              color="#FFFFFF"
+            />
+          </Pressable>
+
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerEyebrow}>
+              FINANCIAL MANAGEMENT
+            </Text>
+
+            <Text style={styles.headerTitle}>
+              COD Remittances
+            </Text>
+
+            <Text style={styles.headerSubtitle}>
+              Review rider cash collections
+            </Text>
+          </View>
+
+          <Pressable
+            style={[
+              styles.headerButton,
+              headerRefreshing && styles.headerButtonDisabled,
+            ]}
+            onPress={() => void handleHeaderRefresh()}
+            disabled={headerRefreshing}
+          >
+            {headerRefreshing ? (
+              <ActivityIndicator
+                size="small"
                 color="#FFFFFF"
               />
-            </Pressable>
-
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.headerEyebrow}>
-                FINANCIAL MANAGEMENT
-              </Text>
-
-              <Text style={styles.headerTitle}>
-                COD Remittances
-              </Text>
-
-              <Text style={styles.headerSubtitle}>
-                Review rider cash collections
-              </Text>
-            </View>
-
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => void loadRemittances()}
-            >
+            ) : (
               <Ionicons
                 name="refresh"
                 size={18}
                 color="#FFFFFF"
               />
-            </Pressable>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.highlightCard}>
+          <View style={styles.highlightIcon}>
+            <Ionicons
+              name="wallet-outline"
+              size={21}
+              color="#FFFFFF"
+            />
           </View>
 
-          <View style={styles.highlightCard}>
-            <View style={styles.highlightIcon}>
+          <View style={styles.highlightContent}>
+            <Text style={styles.highlightLabel}>
+              Awaiting Verification
+            </Text>
+
+            <Text style={styles.highlightAmount}>
+              {formatCurrency(awaitingAmount)}
+            </Text>
+
+            <Text style={styles.highlightSubtext}>
+              {submittedCount}{" "}
+              {submittedCount === 1
+                ? "submission"
+                : "submissions"}{" "}
+              waiting for review
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.purpleAccent}
+            colors={[COLORS.purpleAccent]}
+          />
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.introCard}>
+          <View style={styles.introIcon}>
+            <Ionicons
+              name="cash-outline"
+              size={20}
+              color={COLORS.purpleAccent}
+            />
+          </View>
+
+          <View style={styles.introContent}>
+            <Text style={styles.introTitle}>
+              Rider Remittances
+            </Text>
+
+            <Text style={styles.introDescription}>
+              Verify Cash on Delivery collections submitted
+              by riders before they are included in the
+              platform&apos;s verified COD sales.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <View
+              style={[
+                styles.summaryIcon,
+                {
+                  backgroundColor: COLORS.yellowBackground,
+                },
+              ]}
+            >
               <Ionicons
-                name="wallet-outline"
-                size={21}
-                color="#FFFFFF"
+                name="time-outline"
+                size={19}
+                color={COLORS.yellow}
               />
             </View>
 
-            <View style={styles.highlightContent}>
-              <Text style={styles.highlightLabel}>
-                Awaiting Verification
-              </Text>
+            <Text style={styles.summaryValue}>
+              {submittedCount}
+            </Text>
 
-              <Text style={styles.highlightAmount}>
-                {formatCurrency(awaitingAmount)}
-              </Text>
+            <Text style={styles.summaryLabel}>
+              For Review
+            </Text>
+          </View>
 
-              <Text style={styles.highlightSubtext}>
-                {submittedCount}{" "}
-                {submittedCount === 1
-                  ? "submission"
-                  : "submissions"}{" "}
-                waiting for review
-              </Text>
+          <View style={styles.summaryCard}>
+            <View
+              style={[
+                styles.summaryIcon,
+                {
+                  backgroundColor: COLORS.greenBackground,
+                },
+              ]}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={19}
+                color={COLORS.green}
+              />
             </View>
+
+            <Text style={styles.summaryValue}>
+              {verifiedCount}
+            </Text>
+
+            <Text style={styles.summaryLabel}>
+              Verified
+            </Text>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <View
+              style={[
+                styles.summaryIcon,
+                {
+                  backgroundColor: COLORS.redBackground,
+                },
+              ]}
+            >
+              <Ionicons
+                name="close-circle"
+                size={19}
+                color={COLORS.red}
+              />
+            </View>
+
+            <Text style={styles.summaryValue}>
+              {rejectedCount}
+            </Text>
+
+            <Text style={styles.summaryLabel}>
+              Rejected
+            </Text>
           </View>
         </View>
 
         <ScrollView
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.purpleAccent}
-              colors={[COLORS.purpleAccent]}
-            />
-          }
-          contentContainerStyle={styles.scrollContent}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContainer}
         >
-          <View style={styles.introCard}>
-            <View style={styles.introIcon}>
+          {FILTERS.map((filter) => {
+            const active =
+              selectedFilter === filter.key;
+
+            return (
+              <Pressable
+                key={filter.key}
+                style={[
+                  styles.filterButton,
+                  active &&
+                    styles.filterButtonActive,
+                ]}
+                onPress={() =>
+                  setSelectedFilter(filter.key)
+                }
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    active &&
+                      styles.filterTextActive,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {error ? (
+          <View style={styles.errorCard}>
+            <View style={styles.errorIcon}>
               <Ionicons
-                name="cash-outline"
-                size={20}
+                name="alert-circle-outline"
+                size={19}
+                color={COLORS.red}
+              />
+            </View>
+
+            <View style={styles.errorContent}>
+              <Text style={styles.errorTitle}>
+                Unable to load remittances
+              </Text>
+
+              <Text style={styles.errorText}>
+                {error}
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={() =>
+                void loadRemittances()
+              }
+            >
+              <Text style={styles.retryText}>
+                Retry
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionEyebrow}>
+              REMITTANCE RECORDS
+            </Text>
+
+            <Text style={styles.sectionTitle}>
+              {sectionTitle}
+            </Text>
+          </View>
+
+          <View style={styles.sectionCount}>
+            <Text style={styles.sectionCountText}>
+              {filteredRemittances.length}
+            </Text>
+          </View>
+        </View>
+
+        {!error &&
+        filteredRemittances.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIcon}>
+              <Ionicons
+                name="receipt-outline"
+                size={32}
                 color={COLORS.purpleAccent}
               />
             </View>
 
-            <View style={styles.introContent}>
-              <Text style={styles.introTitle}>
-                Rider Remittances
-              </Text>
+            <Text style={styles.emptyTitle}>
+              No remittances
+            </Text>
 
-              <Text style={styles.introDescription}>
-                Verify Cash on Delivery collections submitted
-                by riders before they are included in the
-                platform&apos;s verified COD sales.
-              </Text>
-            </View>
+            <Text style={styles.emptyText}>
+              {selectedFilter === "submitted"
+                ? "There are no rider COD remittances waiting for verification."
+                : "There are no remittances under this status."}
+            </Text>
           </View>
+        ) : null}
 
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <View
-                style={[
-                  styles.summaryIcon,
-                  {
-                    backgroundColor:
-                      COLORS.yellowBackground,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={19}
-                  color={COLORS.yellow}
-                />
-              </View>
+        {filteredRemittances.map(
+          (remittance) => {
+            const statusStyle =
+              getStatusStyle(remittance.status);
 
-              <Text style={styles.summaryValue}>
-                {submittedCount}
-              </Text>
-
-              <Text style={styles.summaryLabel}>
-                For Review
-              </Text>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <View
-                style={[
-                  styles.summaryIcon,
-                  {
-                    backgroundColor:
-                      COLORS.greenBackground,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="checkmark-circle"
-                  size={19}
-                  color={COLORS.green}
-                />
-              </View>
-
-              <Text style={styles.summaryValue}>
-                {verifiedCount}
-              </Text>
-
-              <Text style={styles.summaryLabel}>
-                Verified
-              </Text>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <View
-                style={[
-                  styles.summaryIcon,
-                  {
-                    backgroundColor:
-                      COLORS.redBackground,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="close-circle"
-                  size={19}
-                  color={COLORS.red}
-                />
-              </View>
-
-              <Text style={styles.summaryValue}>
-                {rejectedCount}
-              </Text>
-
-              <Text style={styles.summaryLabel}>
-                Rejected
-              </Text>
-            </View>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterContainer}
-          >
-            {FILTERS.map((filter) => {
-              const active =
-                selectedFilter === filter.key;
-
-              return (
-                <Pressable
-                  key={filter.key}
-                  style={[
-                    styles.filterButton,
-                    active &&
-                      styles.filterButtonActive,
-                  ]}
-                  onPress={() =>
-                    setSelectedFilter(filter.key)
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.filterText,
-                      active &&
-                        styles.filterTextActive,
-                    ]}
-                  >
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          {error ? (
-            <View style={styles.errorCard}>
-              <View style={styles.errorIcon}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={19}
-                  color={COLORS.red}
-                />
-              </View>
-
-              <View style={styles.errorContent}>
-                <Text style={styles.errorTitle}>
-                  Unable to load remittances
-                </Text>
-
-                <Text style={styles.errorText}>
-                  {error}
-                </Text>
-              </View>
-
+            return (
               <Pressable
+                key={remittance.id}
+                style={({ pressed }) => [
+                  styles.remittanceCard,
+                  pressed &&
+                    styles.cardPressed,
+                ]}
                 onPress={() =>
-                  void loadRemittances()
+                  handleOpenRemittance(
+                    remittance
+                  )
                 }
               >
-                <Text style={styles.retryText}>
-                  Retry
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionEyebrow}>
-                REMITTANCE RECORDS
-              </Text>
-
-              <Text style={styles.sectionTitle}>
-                {sectionTitle}
-              </Text>
-            </View>
-
-            <View style={styles.sectionCount}>
-              <Text style={styles.sectionCountText}>
-                {filteredRemittances.length}
-              </Text>
-            </View>
-          </View>
-
-          {!error &&
-          filteredRemittances.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIcon}>
-                <Ionicons
-                  name="receipt-outline"
-                  size={32}
-                  color={COLORS.purpleAccent}
-                />
-              </View>
-
-              <Text style={styles.emptyTitle}>
-                No remittances
-              </Text>
-
-              <Text style={styles.emptyText}>
-                {selectedFilter === "submitted"
-                  ? "There are no rider COD remittances waiting for verification."
-                  : "There are no remittances under this status."}
-              </Text>
-            </View>
-          ) : null}
-
-          {filteredRemittances.map(
-            (remittance) => {
-              const statusStyle =
-                getStatusStyle(remittance.status);
-
-              return (
-                <Pressable
-                  key={remittance.id}
-                  style={({ pressed }) => [
-                    styles.remittanceCard,
-                    pressed && styles.cardPressed,
-                  ]}
-                  onPress={() =>
-                    handleOpenRemittance(
-                      remittance
-                    )
-                  }
-                >
-                  <View style={styles.cardTop}>
-                    <View
-                      style={
-                        styles.riderContainer
-                      }
-                    >
-                      <View style={styles.avatar}>
-                        <Text
-                          style={styles.avatarText}
-                        >
-                          {getInitials(
-                            remittance
-                          )}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={styles.riderInfo}
+                <View style={styles.cardTop}>
+                  <View
+                    style={
+                      styles.riderContainer
+                    }
+                  >
+                    <View style={styles.avatar}>
+                      <Text
+                        style={styles.avatarText}
                       >
-                        <Text
-                          style={styles.riderName}
-                          numberOfLines={1}
-                        >
-                          {getRiderName(
-                            remittance
-                          )}
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.riderVehicle
-                          }
-                          numberOfLines={1}
-                        >
-                          {remittance.rider
-                            ?.vehicleType ||
-                            "Rider"}
-
-                          {remittance.rider
-                            ?.vehiclePlateNumber
-                            ? ` • ${remittance.rider.vehiclePlateNumber}`
-                            : ""}
-                        </Text>
-                      </View>
+                        {getInitials(
+                          remittance
+                        )}
+                      </Text>
                     </View>
 
                     <View
+                      style={styles.riderInfo}
+                    >
+                      <Text
+                        style={styles.riderName}
+                        numberOfLines={1}
+                      >
+                        {getRiderName(
+                          remittance
+                        )}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.riderVehicle
+                        }
+                        numberOfLines={1}
+                      >
+                        {remittance.rider
+                          ?.vehicleType ||
+                          "Rider"}
+
+                        {remittance.rider
+                          ?.vehiclePlateNumber
+                          ? ` • ${remittance.rider.vehiclePlateNumber}`
+                          : ""}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor:
+                          statusStyle.background,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={statusStyle.icon}
+                      size={13}
+                      color={statusStyle.text}
+                    />
+
+                    <Text
                       style={[
-                        styles.statusBadge,
+                        styles.statusText,
                         {
-                          backgroundColor:
-                            statusStyle.background,
+                          color:
+                            statusStyle.text,
                         },
                       ]}
                     >
-                      <Ionicons
-                        name={statusStyle.icon}
-                        size={13}
-                        color={statusStyle.text}
-                      />
-
-                      <Text
-                        style={[
-                          styles.statusText,
-                          {
-                            color:
-                              statusStyle.text,
-                          },
-                        ]}
-                      >
-                        {formatStatus(
-                          remittance.status
-                        )}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  <View style={styles.amountRow}>
-                    <View>
-                      <Text
-                        style={styles.amountLabel}
-                      >
-                        Remittance Amount
-                      </Text>
-
-                      <Text
-                        style={styles.amountValue}
-                      >
-                        {formatCurrency(
-                          remittance.totalAmount
-                        )}
-                      </Text>
-                    </View>
-
-                    <View
-                      style={styles.deliveryBox}
-                    >
-                      <View
-                        style={
-                          styles.deliveryIcon
-                        }
-                      >
-                        <Ionicons
-                          name="bicycle-outline"
-                          size={16}
-                          color={
-                            COLORS.purpleAccent
-                          }
-                        />
-                      </View>
-
-                      <View>
-                        <Text
-                          style={
-                            styles.deliveryCount
-                          }
-                        >
-                          {
-                            remittance.deliveryCount
-                          }
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.deliveryLabel
-                          }
-                        >
-                          {remittance.deliveryCount ===
-                          1
-                            ? "delivery"
-                            : "deliveries"}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View
-                    style={styles.detailsContainer}
-                  >
-                    <DetailRow
-                      icon="calendar-outline"
-                      label="Shift Date"
-                      value={formatDate(
-                        remittance.shiftDate
+                      {formatStatus(
+                        remittance.status
                       )}
-                    />
-
-                    <DetailRow
-                      icon="document-text-outline"
-                      label="Reference"
-                      value={
-                        remittance.referenceNumber ||
-                        "—"
-                      }
-                    />
-
-                    <DetailRow
-                      icon="time-outline"
-                      label="Submitted"
-                      value={formatDateTime(
-                        remittance.submittedAt
-                      )}
-                    />
+                    </Text>
                   </View>
+                </View>
 
-                  {remittance.status ===
-                    "rejected" &&
-                  remittance.adminRemarks ? (
-                    <View
-                      style={styles.rejectionBox}
-                    >
-                      <Ionicons
-                        name="information-circle-outline"
-                        size={18}
-                        color={COLORS.red}
-                      />
+                <View style={styles.divider} />
 
-                      <Text
-                        style={styles.rejectionText}
-                        numberOfLines={2}
-                      >
-                        {remittance.adminRemarks}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  <View
-                    style={styles.viewDetailsRow}
-                  >
+                <View style={styles.amountRow}>
+                  <View>
                     <Text
-                      style={
-                        styles.viewDetailsText
-                      }
+                      style={styles.amountLabel}
                     >
-                      {remittance.status ===
-                      "submitted"
-                        ? "Review Remittance"
-                        : "View Details"}
+                      Remittance Amount
                     </Text>
 
-                    <Ionicons
-                      name="chevron-forward"
-                      size={17}
-                      color={COLORS.purpleAccent}
-                    />
+                    <Text
+                      style={styles.amountValue}
+                    >
+                      {formatCurrency(
+                        remittance.totalAmount
+                      )}
+                    </Text>
                   </View>
-                </Pressable>
-              );
-            }
-          )}
 
-          <View style={styles.bottomSpace} />
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+                  <View
+                    style={styles.deliveryBox}
+                  >
+                    <View
+                      style={
+                        styles.deliveryIcon
+                      }
+                    >
+                      <Ionicons
+                        name="bicycle-outline"
+                        size={16}
+                        color={
+                          COLORS.purpleAccent
+                        }
+                      />
+                    </View>
+
+                    <View>
+                      <Text
+                        style={
+                          styles.deliveryCount
+                        }
+                      >
+                        {
+                          remittance.deliveryCount
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.deliveryLabel
+                        }
+                      >
+                        {remittance.deliveryCount ===
+                        1
+                          ? "delivery"
+                          : "deliveries"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View
+                  style={styles.detailsContainer}
+                >
+                  <DetailRow
+                    icon="calendar-outline"
+                    label="Shift Date"
+                    value={formatDate(
+                      remittance.shiftDate
+                    )}
+                  />
+
+                  <DetailRow
+                    icon="document-text-outline"
+                    label="Reference"
+                    value={
+                      remittance.referenceNumber ||
+                      "—"
+                    }
+                  />
+
+                  <DetailRow
+                    icon="time-outline"
+                    label="Submitted"
+                    value={formatDateTime(
+                      remittance.submittedAt
+                    )}
+                  />
+                </View>
+
+                {remittance.status ===
+                  "rejected" &&
+                remittance.adminRemarks ? (
+                  <View
+                    style={styles.rejectionBox}
+                  >
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={18}
+                      color={COLORS.red}
+                    />
+
+                    <Text
+                      style={styles.rejectionText}
+                      numberOfLines={2}
+                    >
+                      {remittance.adminRemarks}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View
+                  style={styles.viewDetailsRow}
+                >
+                  <Text
+                    style={
+                      styles.viewDetailsText
+                    }
+                  >
+                    {remittance.status ===
+                    "submitted"
+                      ? "Review Remittance"
+                      : "View Details"}
+                  </Text>
+
+                  <Ionicons
+                    name="chevron-forward"
+                    size={17}
+                    color={COLORS.purpleAccent}
+                  />
+                </View>
+              </Pressable>
+            );
+          }
+        )}
+
+        <View style={styles.bottomSpace} />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -906,11 +948,6 @@ function DetailRow({
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.purple,
-  },
-
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -932,7 +969,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: COLORS.purple,
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: 54,
     paddingBottom: 20,
     borderBottomLeftRadius: 26,
     borderBottomRightRadius: 26,
@@ -950,6 +987,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  headerButtonDisabled: {
+    opacity: 0.8,
   },
 
   headerTextContainer: {

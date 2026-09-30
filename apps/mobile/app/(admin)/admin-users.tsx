@@ -1,5 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import React, {
   useCallback,
   useMemo,
@@ -9,7 +13,6 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,6 +27,30 @@ import {
 } from "../../services/admin";
 
 type RoleFilter = "all" | AdminUserRole;
+
+type RegistrationPeriod =
+  | "today"
+  | "7d"
+  | "30d"
+  | "6m"
+  | "1y"
+  | "all";
+
+const VALID_ROLES: AdminUserRole[] = [
+  "customer",
+  "seller",
+  "rider",
+  "admin",
+];
+
+const VALID_REGISTRATION_PERIODS: RegistrationPeriod[] = [
+  "today",
+  "7d",
+  "30d",
+  "6m",
+  "1y",
+  "all",
+];
 
 const COLORS = {
   purple: "#312E81",
@@ -57,55 +84,214 @@ const COLORS = {
  * HELPERS
  * =======================================================*/
 
-function getUserId(user: AdminManagedUser) {
+function getSingleParam(
+  value?: string | string[]
+) {
+  return Array.isArray(value)
+    ? value[0]
+    : value;
+}
+
+function isAdminUserRole(
+  value?: string
+): value is AdminUserRole {
+  return (
+    !!value &&
+    VALID_ROLES.includes(
+      value as AdminUserRole
+    )
+  );
+}
+
+function isRegistrationPeriod(
+  value?: string
+): value is RegistrationPeriod {
+  return (
+    !!value &&
+    VALID_REGISTRATION_PERIODS.includes(
+      value as RegistrationPeriod
+    )
+  );
+}
+
+function getRegistrationPeriodLabel(
+  period: RegistrationPeriod
+) {
+  switch (period) {
+    case "today":
+      return "Today";
+
+    case "7d":
+      return "7 Days";
+
+    case "30d":
+      return "30 Days";
+
+    case "6m":
+      return "6 Months";
+
+    case "1y":
+      return "1 Year";
+
+    case "all":
+    default:
+      return "All Time";
+  }
+}
+
+function isUserRegisteredInPeriod(
+  createdAt: string | undefined,
+  period: RegistrationPeriod | null
+) {
+  if (!period || period === "all") {
+    return true;
+  }
+
+  if (!createdAt) {
+    return false;
+  }
+
+  const createdDate =
+    new Date(createdAt);
+
+  if (
+    Number.isNaN(
+      createdDate.getTime()
+    )
+  ) {
+    return false;
+  }
+
+  const now = new Date();
+
+  const start = new Date(now);
+  start.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+  const end = new Date(now);
+  end.setHours(
+    23,
+    59,
+    59,
+    999
+  );
+
+  switch (period) {
+    case "today":
+      break;
+
+    case "7d":
+      start.setDate(
+        start.getDate() - 6
+      );
+      break;
+
+    case "30d":
+      start.setDate(
+        start.getDate() - 29
+      );
+      break;
+
+    case "6m":
+      start.setMonth(
+        start.getMonth() - 6
+      );
+      break;
+
+    case "1y":
+      start.setFullYear(
+        start.getFullYear() - 1
+      );
+      break;
+  }
+
+  return (
+    createdDate >= start &&
+    createdDate <= end
+  );
+}
+
+function getUserId(
+  user: AdminManagedUser
+) {
   return user._id || user.id || "";
 }
 
-function getFullName(user: AdminManagedUser) {
+function getFullName(
+  user: AdminManagedUser
+) {
   const name =
-    `${user.firstName || ""} ${user.lastName || ""}`.trim();
+    `${user.firstName || ""} ${
+      user.lastName || ""
+    }`.trim();
 
   return name || "Unnamed User";
 }
 
-function getInitials(user: AdminManagedUser) {
+function getInitials(
+  user: AdminManagedUser
+) {
   const first =
-    user.firstName?.trim().charAt(0) || "";
+    user.firstName
+      ?.trim()
+      .charAt(0) || "";
 
   const last =
-    user.lastName?.trim().charAt(0) || "";
+    user.lastName
+      ?.trim()
+      .charAt(0) || "";
 
-  return `${first}${last}`.toUpperCase() || "U";
+  return (
+    `${first}${last}`.toUpperCase() ||
+    "U"
+  );
 }
 
-function formatRole(role: AdminUserRole) {
+function formatRole(
+  role: AdminUserRole
+) {
   return (
     role.charAt(0).toUpperCase() +
     role.slice(1)
   );
 }
 
-function formatDate(value?: string | null) {
+function formatDate(
+  value?: string | null
+) {
   if (!value) {
     return "Never";
   }
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return "Not available";
   }
 
-  return date.toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return date.toLocaleDateString(
+    "en-PH",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }
+  );
 }
 
 function getRoleIcon(
   role: AdminUserRole
-): React.ComponentProps<typeof Ionicons>["name"] {
+): React.ComponentProps<
+  typeof Ionicons
+>["name"] {
   switch (role) {
     case "seller":
       return "storefront-outline";
@@ -121,29 +307,35 @@ function getRoleIcon(
   }
 }
 
-function getRoleStyle(role: AdminUserRole) {
+function getRoleStyle(
+  role: AdminUserRole
+) {
   switch (role) {
     case "seller":
       return {
-        backgroundColor: "#EAF7EF",
+        backgroundColor:
+          "#EAF7EF",
         color: "#4E9A72",
       };
 
     case "rider":
       return {
-        backgroundColor: "#FFF5D9",
+        backgroundColor:
+          "#FFF5D9",
         color: "#B9892D",
       };
 
     case "admin":
       return {
-        backgroundColor: "#FCEAF1",
+        backgroundColor:
+          "#FCEAF1",
         color: "#D65A8A",
       };
 
     default:
       return {
-        backgroundColor: "#EEEAFE",
+        backgroundColor:
+          "#EEEAFE",
         color: "#5B4FCF",
       };
   }
@@ -155,23 +347,32 @@ function getStatusStyle(
   switch (status) {
     case "active":
       return {
-        backgroundColor: COLORS.greenBackground,
-        textColor: COLORS.green,
-        dotColor: COLORS.green,
+        backgroundColor:
+          COLORS.greenBackground,
+        textColor:
+          COLORS.green,
+        dotColor:
+          COLORS.green,
       };
 
     case "suspended":
       return {
-        backgroundColor: COLORS.redBackground,
-        textColor: COLORS.red,
-        dotColor: COLORS.red,
+        backgroundColor:
+          COLORS.redBackground,
+        textColor:
+          COLORS.red,
+        dotColor:
+          COLORS.red,
       };
 
     default:
       return {
-        backgroundColor: "#F1F1F4",
-        textColor: "#777783",
-        dotColor: "#9A9AA5",
+        backgroundColor:
+          "#F1F1F4",
+        textColor:
+          "#777783",
+        dotColor:
+          "#9A9AA5",
       };
   }
 }
@@ -183,122 +384,244 @@ function getStatusStyle(
 export default function AdminUsersScreen() {
   const router = useRouter();
 
-  const [users, setUsers] = useState<
+  const params =
+    useLocalSearchParams<{
+      role?:
+        | string
+        | string[];
+      registrationPeriod?:
+        | string
+        | string[];
+    }>();
+
+  const requestedRole =
+    getSingleParam(
+      params.role
+    );
+
+  const requestedRegistrationPeriod =
+    getSingleParam(
+      params.registrationPeriod
+    );
+
+  const initialRoleFilter: RoleFilter =
+    isAdminUserRole(
+      requestedRole
+    )
+      ? requestedRole
+      : "all";
+
+  const registrationPeriod:
+    | RegistrationPeriod
+    | null =
+    isRegistrationPeriod(
+      requestedRegistrationPeriod
+    )
+      ? requestedRegistrationPeriod
+      : null;
+
+  const [
+    users,
+    setUsers,
+  ] = useState<
     AdminManagedUser[]
   >([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+const [refreshing, setRefreshing] = useState(false);
 
-  const [error, setError] = useState<
+const [headerRefreshing, setHeaderRefreshing] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState<
     string | null
   >(null);
 
-  const [search, setSearch] =
-    useState("");
+  const [
+    search,
+    setSearch,
+  ] = useState("");
 
-  const [roleFilter, setRoleFilter] =
-    useState<RoleFilter>("all");
+  const [
+    roleFilter,
+    setRoleFilter,
+  ] =
+    useState<RoleFilter>(
+      initialRoleFilter
+    );
 
   /* =======================================================
    * LOAD USERS
    * =====================================================*/
 
-  const loadUsers = useCallback(
-    async (showLoader = true) => {
-      try {
-        if (showLoader) {
-          setLoading(true);
-        }
-
-        setError(null);
-
-        const data =
-          await getAdminUsers();
-
-        setUsers(
-          Array.isArray(data) ? data : []
-        );
-      } catch (err) {
-        console.error(
-          "Failed to load users:",
-          err
-        );
-
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load users."
-        );
-      } finally {
-        if (showLoader) {
-          setLoading(false);
-        }
-
-        setRefreshing(false);
-      }
-    },
-    []
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-
-      const fetchUsers = async () => {
+  const loadUsers =
+    useCallback(
+      async (
+        showLoader = true
+      ) => {
         try {
+          if (
+            showLoader
+          ) {
+            setLoading(
+              true
+            );
+          }
+
+          setError(null);
+
           const data =
             await getAdminUsers();
 
-          if (!active) {
-            return;
-          }
-
           setUsers(
-            Array.isArray(data)
+            Array.isArray(
+              data
+            )
               ? data
               : []
           );
-
-          setError(null);
         } catch (err) {
           console.error(
             "Failed to load users:",
             err
           );
 
-          if (!active) {
-            return;
-          }
-
           setError(
-            err instanceof Error
+            err instanceof
+              Error
               ? err.message
               : "Unable to load users."
           );
         } finally {
-          if (active) {
-            setLoading(false);
+          if (
+            showLoader
+          ) {
+            setLoading(
+              false
+            );
           }
+
+          setRefreshing(
+            false
+          );
         }
-      };
+      },
+      []
+    );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active =
+        true;
+
+      const fetchUsers =
+        async () => {
+          try {
+            const data =
+              await getAdminUsers();
+
+            if (
+              !active
+            ) {
+              return;
+            }
+
+            setUsers(
+              Array.isArray(
+                data
+              )
+                ? data
+                : []
+            );
+
+            setError(
+              null
+            );
+          } catch (err) {
+            console.error(
+              "Failed to load users:",
+              err
+            );
+
+            if (
+              !active
+            ) {
+              return;
+            }
+
+            setError(
+              err instanceof
+                Error
+                ? err.message
+                : "Unable to load users."
+            );
+          } finally {
+            if (
+              active
+            ) {
+              setLoading(
+                false
+              );
+            }
+          }
+        };
 
       void fetchUsers();
 
       return () => {
-        active = false;
+        active =
+          false;
       };
     }, [])
   );
 
-  const handleRefresh =
-    useCallback(() => {
-      setRefreshing(true);
-      void loadUsers(false);
-    }, [loadUsers]);
+const handleRefresh = useCallback(() => {
+  if (refreshing) {
+    return;
+  }
+
+  setRefreshing(true);
+  void loadUsers(false);
+}, [loadUsers, refreshing]);
+
+const handleHeaderRefresh = useCallback(async () => {
+  if (headerRefreshing) {
+    return;
+  }
+
+  setHeaderRefreshing(true);
+
+  try {
+    const data = await getAdminUsers();
+
+    setUsers(
+      Array.isArray(data)
+        ? data
+        : []
+    );
+
+    setError(null);
+  } catch (err) {
+    console.error(
+      "Failed to refresh users:",
+      err
+    );
+
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Unable to load users."
+    );
+  } finally {
+    setHeaderRefreshing(false);
+  }
+}, [headerRefreshing]);
 
   /* =======================================================
    * FILTERS
@@ -306,114 +629,148 @@ export default function AdminUsersScreen() {
 
   const filteredUsers =
     useMemo(() => {
-      const query = search
-        .trim()
-        .toLowerCase();
-
-      return users.filter((user) => {
-        if (
-          roleFilter !== "all" &&
-          user.role !== roleFilter
-        ) {
-          return false;
-        }
-
-        if (!query) {
-          return true;
-        }
-
-        const haystack = [
-          user.firstName,
-          user.lastName,
-          user.email,
-          user.phoneNumber,
-          user.role,
-        ]
-          .filter(Boolean)
-          .join(" ")
+      const query =
+        search
+          .trim()
           .toLowerCase();
 
-        return haystack.includes(query);
-      });
+      return users.filter(
+        (user) => {
+          if (
+            !isUserRegisteredInPeriod(
+              user.createdAt,
+              registrationPeriod
+            )
+          ) {
+            return false;
+          }
+
+          if (
+            roleFilter !==
+              "all" &&
+            user.role !==
+              roleFilter
+          ) {
+            return false;
+          }
+
+          if (!query) {
+            return true;
+          }
+
+          const haystack =
+            [
+              user.firstName,
+              user.lastName,
+              user.email,
+              user.phoneNumber,
+              user.role,
+            ]
+              .filter(
+                Boolean
+              )
+              .join(" ")
+              .toLowerCase();
+
+          return haystack.includes(
+            query
+          );
+        }
+      );
     }, [
       users,
       search,
       roleFilter,
+      registrationPeriod,
     ]);
 
   /* =======================================================
    * COUNTS
    * =====================================================*/
 
-  const customerCount = useMemo(
-    () =>
-      users.filter(
-        (user) =>
-          user.role === "customer"
-      ).length,
-    [users]
-  );
+  const customerCount =
+    useMemo(
+      () =>
+        users.filter(
+          (user) =>
+            user.role ===
+            "customer"
+        ).length,
+      [users]
+    );
 
-  const sellerCount = useMemo(
-    () =>
-      users.filter(
-        (user) =>
-          user.role === "seller"
-      ).length,
-    [users]
-  );
+  const sellerCount =
+    useMemo(
+      () =>
+        users.filter(
+          (user) =>
+            user.role ===
+            "seller"
+        ).length,
+      [users]
+    );
 
-  const riderCount = useMemo(
-    () =>
-      users.filter(
-        (user) =>
-          user.role === "rider"
-      ).length,
-    [users]
-  );
+  const riderCount =
+    useMemo(
+      () =>
+        users.filter(
+          (user) =>
+            user.role ===
+            "rider"
+        ).length,
+      [users]
+    );
 
-  const adminCount = useMemo(
-    () =>
-      users.filter(
-        (user) =>
-          user.role === "admin"
-      ).length,
-    [users]
-  );
+  const adminCount =
+    useMemo(
+      () =>
+        users.filter(
+          (user) =>
+            user.role ===
+            "admin"
+        ).length,
+      [users]
+    );
 
-  const activeCount = useMemo(
-    () =>
-      users.filter(
-        (user) =>
-          user.accountStatus ===
-          "active"
-      ).length,
-    [users]
-  );
+  const activeCount =
+    useMemo(
+      () =>
+        users.filter(
+          (user) =>
+            user.accountStatus ===
+            "active"
+        ).length,
+      [users]
+    );
 
   /* =======================================================
    * NAVIGATION
    * =====================================================*/
 
-  const openUser = useCallback(
-    (user: AdminManagedUser) => {
-      const userId =
-        getUserId(user);
+  const openUser =
+    useCallback(
+      (
+        user: AdminManagedUser
+      ) => {
+        const userId =
+          getUserId(
+            user
+          );
 
-      if (!userId) {
-        return;
-      }
+        if (!userId) {
+          return;
+        }
 
-      router.push({
-        pathname:
-          "/(admin)/admin-user-details",
-        params: {
-          userId,
-        },
-      });
-    },
-    [router]
-  );
+        router.push({
+          pathname:
+            "/(admin)/admin-user-details",
+          params: {
+            userId,
+          },
+        });
+      },
+      [router]
+    );
 
   /* =======================================================
    * LOADING
@@ -424,26 +781,26 @@ export default function AdminUsersScreen() {
     users.length === 0
   ) {
     return (
-      <SafeAreaView
-        style={styles.safeArea}
+      <View
+        style={
+          styles.loadingContainer
+        }
       >
-        <View
+        <ActivityIndicator
+          size="large"
+          color={
+            COLORS.purpleAccent
+          }
+        />
+
+        <Text
           style={
-            styles.loadingContainer
+            styles.loadingText
           }
         >
-          <ActivityIndicator
-            size="large"
-            color={COLORS.purpleAccent}
-          />
-
-          <Text
-            style={styles.loadingText}
-          >
-            Loading users...
-          </Text>
-        </View>
-      </SafeAreaView>
+          Loading users...
+        </Text>
+      </View>
     );
   }
 
@@ -452,658 +809,732 @@ export default function AdminUsersScreen() {
    * =====================================================*/
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
+    <View
+      style={
+        styles.container
+      }
     >
-      <View style={styles.container}>
-        <ScrollView
-          showsVerticalScrollIndicator={
-            false
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={
-                COLORS.purpleAccent
-              }
-              colors={[
-                COLORS.purpleAccent,
-              ]}
-            />
-          }
-          contentContainerStyle={
-            styles.scrollContent
-          }
-        >
-          {/* PURPLE HEADER */}
+      <ScrollView
+        style={
+          styles.mainScroll
+        }
+        showsVerticalScrollIndicator={
+          false
+        }
+        refreshControl={
+          <RefreshControl
+  refreshing={refreshing}
+  onRefresh={handleRefresh}
+  tintColor={COLORS.purpleAccent}
+  colors={[COLORS.purpleAccent]}
+/>
+        }
+        contentContainerStyle={
+          styles.scrollContent
+        }
+      >
+        {/* PURPLE HEADER */}
 
-          <View style={styles.header}>
+        <View
+          style={styles.header}
+        >
+          <View
+            style={
+              styles.headerDecoration
+            }
+          />
+
+          <View
+            style={
+              styles.headerTop
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.headerEyebrow
+                }
+              >
+                USER MANAGEMENT
+              </Text>
+
+              <Text
+                style={
+                  styles.headerTitle
+                }
+              >
+                Users
+              </Text>
+
+              <Text
+                style={
+                  styles.headerSubtitle
+                }
+              >
+                Manage platform
+                accounts
+              </Text>
+            </View>
+
+<Pressable
+  style={[
+    styles.refreshButton,
+    headerRefreshing && styles.refreshButtonDisabled,
+  ]}
+  onPress={handleHeaderRefresh}
+  disabled={headerRefreshing}
+>
+  {headerRefreshing ? (
+    <ActivityIndicator
+      size="small"
+      color="#FFFFFF"
+    />
+  ) : (
+    <Ionicons
+      name="refresh"
+      size={20}
+      color="#FFFFFF"
+    />
+  )}
+</Pressable>
+          </View>
+
+          <View
+            style={
+              styles.headerStats
+            }
+          >
+            <HeaderStatCard
+              label="Total Users"
+              value={
+                users.length
+              }
+            />
+
+            <HeaderStatCard
+              label="Active"
+              value={
+                activeCount
+              }
+            />
+          </View>
+        </View>
+
+        {/* MAIN CONTENT */}
+
+        <View
+          style={styles.body}
+        >
+          {/* ROLE SUMMARY */}
+
+          <View
+            style={
+              styles.roleSummaryCard
+            }
+          >
+            <RoleSummaryItem
+              icon="person-outline"
+              label="Customers"
+              value={
+                customerCount
+              }
+              backgroundColor="#FCEAF1"
+              iconColor="#D65A8A"
+            />
+
             <View
               style={
-                styles.headerDecoration
+                styles.summaryDivider
               }
             />
 
+            <RoleSummaryItem
+              icon="storefront-outline"
+              label="Sellers"
+              value={
+                sellerCount
+              }
+              backgroundColor="#EAF7EF"
+              iconColor="#4E9A72"
+            />
+
             <View
-              style={styles.headerTop}
+              style={
+                styles.summaryDivider
+              }
+            />
+
+            <RoleSummaryItem
+              icon="bicycle-outline"
+              label="Riders"
+              value={
+                riderCount
+              }
+              backgroundColor="#FFF5D9"
+              iconColor="#B9892D"
+            />
+          </View>
+
+          {/* SEARCH */}
+
+          <View
+            style={
+              styles.searchContainer
+            }
+          >
+            <Ionicons
+              name="search-outline"
+              size={18}
+              color="#92929E"
+            />
+
+            <TextInput
+              style={
+                styles.searchInput
+              }
+              value={search}
+              onChangeText={
+                setSearch
+              }
+              placeholder="Search users..."
+              placeholderTextColor="#A1A1AA"
+              autoCapitalize="none"
+            />
+
+            {search.length >
+            0 ? (
+              <Pressable
+                onPress={() =>
+                  setSearch(
+                    ""
+                  )
+                }
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={18}
+                  color="#A1A1AA"
+                />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {/* FILTERS */}
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={
+              false
+            }
+            contentContainerStyle={
+              styles.filters
+            }
+          >
+            <FilterButton
+              label="All"
+              active={
+                roleFilter ===
+                "all"
+              }
+              onPress={() =>
+                setRoleFilter(
+                  "all"
+                )
+              }
+            />
+
+            <FilterButton
+              label={`Customers (${customerCount})`}
+              active={
+                roleFilter ===
+                "customer"
+              }
+              onPress={() =>
+                setRoleFilter(
+                  "customer"
+                )
+              }
+            />
+
+            <FilterButton
+              label={`Sellers (${sellerCount})`}
+              active={
+                roleFilter ===
+                "seller"
+              }
+              onPress={() =>
+                setRoleFilter(
+                  "seller"
+                )
+              }
+            />
+
+            <FilterButton
+              label={`Riders (${riderCount})`}
+              active={
+                roleFilter ===
+                "rider"
+              }
+              onPress={() =>
+                setRoleFilter(
+                  "rider"
+                )
+              }
+            />
+
+            <FilterButton
+              label={`Admins (${adminCount})`}
+              active={
+                roleFilter ===
+                "admin"
+              }
+              onPress={() =>
+                setRoleFilter(
+                  "admin"
+                )
+              }
+            />
+          </ScrollView>
+
+          {/* ERROR */}
+
+          {error ? (
+            <View
+              style={
+                styles.errorCard
+              }
             >
-              <View>
+              <View
+                style={
+                  styles.errorIcon
+                }
+              >
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={20}
+                  color={
+                    COLORS.red
+                  }
+                />
+              </View>
+
+              <View
+                style={
+                  styles.errorContent
+                }
+              >
                 <Text
                   style={
-                    styles.headerEyebrow
+                    styles.errorTitle
                   }
                 >
-                  USER MANAGEMENT
+                  Unable to load
+                  users
                 </Text>
 
                 <Text
                   style={
-                    styles.headerTitle
+                    styles.errorText
                   }
                 >
-                  Users
-                </Text>
-
-                <Text
-                  style={
-                    styles.headerSubtitle
-                  }
-                >
-                  Manage platform accounts
+                  {error}
                 </Text>
               </View>
 
               <Pressable
-                style={
-                  styles.refreshButton
-                }
                 onPress={() =>
                   void loadUsers()
                 }
               >
-                <Ionicons
-                  name="refresh"
-                  size={20}
-                  color="#FFFFFF"
-                />
+                <Text
+                  style={
+                    styles.retryText
+                  }
+                >
+                  Retry
+                </Text>
               </Pressable>
             </View>
+          ) : null}
 
-            <View
-              style={styles.headerStats}
-            >
-              <HeaderStatCard
-                label="Total Users"
-                value={users.length}
-              />
+          {/* SECTION */}
 
-              <HeaderStatCard
-                label="Active"
-                value={activeCount}
-              />
+          <View
+            style={
+              styles.sectionHeader
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.sectionTitle
+                }
+              >
+                {registrationPeriod
+                  ? "New Registrations"
+                  : "User Accounts"}
+              </Text>
+
+              <Text
+                style={
+                  styles.sectionSubtitle
+                }
+              >
+                {registrationPeriod
+                  ? `Registered during ${getRegistrationPeriodLabel(
+                      registrationPeriod
+                    )}`
+                  : "Platform registered users"}
+              </Text>
             </View>
+
+            <Text
+              style={
+                styles.resultCount
+              }
+            >
+              {
+                filteredUsers.length
+              }{" "}
+              {filteredUsers.length ===
+              1
+                ? "result"
+                : "results"}
+            </Text>
           </View>
 
-          {/* MAIN CONTENT */}
+          {/* EMPTY */}
 
-          <View style={styles.body}>
-            {/* ROLE SUMMARY */}
-
+          {!error &&
+          filteredUsers.length ===
+            0 ? (
             <View
               style={
-                styles.roleSummaryCard
+                styles.emptyCard
               }
             >
-              <RoleSummaryItem
-                icon="person-outline"
-                label="Customers"
-                value={customerCount}
-                backgroundColor="#FCEAF1"
-                iconColor="#D65A8A"
-              />
-
               <View
                 style={
-                  styles.summaryDivider
+                  styles.emptyIcon
                 }
-              />
-
-              <RoleSummaryItem
-                icon="storefront-outline"
-                label="Sellers"
-                value={sellerCount}
-                backgroundColor="#EAF7EF"
-                iconColor="#4E9A72"
-              />
-
-              <View
-                style={
-                  styles.summaryDivider
-                }
-              />
-
-              <RoleSummaryItem
-                icon="bicycle-outline"
-                label="Riders"
-                value={riderCount}
-                backgroundColor="#FFF5D9"
-                iconColor="#B9892D"
-              />
-            </View>
-
-            {/* SEARCH */}
-
-            <View
-              style={
-                styles.searchContainer
-              }
-            >
-              <Ionicons
-                name="search-outline"
-                size={18}
-                color="#92929E"
-              />
-
-              <TextInput
-                style={styles.searchInput}
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search users..."
-                placeholderTextColor="#A1A1AA"
-                autoCapitalize="none"
-              />
-
-              {search.length > 0 ? (
-                <Pressable
-                  onPress={() =>
-                    setSearch("")
-                  }
-                >
-                  <Ionicons
-                    name="close-circle"
-                    size={18}
-                    color="#A1A1AA"
-                  />
-                </Pressable>
-              ) : null}
-            </View>
-
-            {/* FILTERS */}
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
-                styles.filters
-              }
-            >
-              <FilterButton
-                label="All"
-                active={
-                  roleFilter === "all"
-                }
-                onPress={() =>
-                  setRoleFilter("all")
-                }
-              />
-
-              <FilterButton
-                label={`Customers (${customerCount})`}
-                active={
-                  roleFilter ===
-                  "customer"
-                }
-                onPress={() =>
-                  setRoleFilter(
-                    "customer"
-                  )
-                }
-              />
-
-              <FilterButton
-                label={`Sellers (${sellerCount})`}
-                active={
-                  roleFilter ===
-                  "seller"
-                }
-                onPress={() =>
-                  setRoleFilter(
-                    "seller"
-                  )
-                }
-              />
-
-              <FilterButton
-                label={`Riders (${riderCount})`}
-                active={
-                  roleFilter ===
-                  "rider"
-                }
-                onPress={() =>
-                  setRoleFilter(
-                    "rider"
-                  )
-                }
-              />
-
-              <FilterButton
-                label={`Admins (${adminCount})`}
-                active={
-                  roleFilter ===
-                  "admin"
-                }
-                onPress={() =>
-                  setRoleFilter(
-                    "admin"
-                  )
-                }
-              />
-            </ScrollView>
-
-            {/* ERROR */}
-
-            {error ? (
-              <View
-                style={styles.errorCard}
               >
-                <View
-                  style={styles.errorIcon}
-                >
-                  <Ionicons
-                    name="alert-circle-outline"
-                    size={20}
-                    color={COLORS.red}
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.errorContent
+                <Ionicons
+                  name="people-outline"
+                  size={27}
+                  color={
+                    COLORS.purpleAccent
                   }
-                >
-                  <Text
-                    style={
-                      styles.errorTitle
-                    }
-                  >
-                    Unable to load users
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.errorText
-                    }
-                  >
-                    {error}
-                  </Text>
-                </View>
-
-                <Pressable
-                  onPress={() =>
-                    void loadUsers()
-                  }
-                >
-                  <Text
-                    style={
-                      styles.retryText
-                    }
-                  >
-                    Retry
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            {/* SECTION */}
-
-            <View
-              style={
-                styles.sectionHeader
-              }
-            >
-              <View>
-                <Text
-                  style={
-                    styles.sectionTitle
-                  }
-                >
-                  User Accounts
-                </Text>
-
-                <Text
-                  style={
-                    styles.sectionSubtitle
-                  }
-                >
-                  Platform registered users
-                </Text>
+                />
               </View>
 
               <Text
                 style={
-                  styles.resultCount
+                  styles.emptyTitle
                 }
               >
-                {filteredUsers.length}{" "}
-                results
+                No users found
+              </Text>
+
+              <Text
+                style={
+                  styles.emptyText
+                }
+              >
+                Try changing your
+                search or filter.
               </Text>
             </View>
+          ) : null}
 
-            {/* EMPTY */}
+          {/* USER CARDS */}
 
-            {!error &&
-            filteredUsers.length ===
-              0 ? (
-              <View
-                style={styles.emptyCard}
-              >
-                <View
+          {filteredUsers.map(
+            (user) => {
+              const statusStyle =
+                getStatusStyle(
+                  user.accountStatus
+                );
+
+              const roleStyle =
+                getRoleStyle(
+                  user.role
+                );
+
+              return (
+                <Pressable
+                  key={
+                    getUserId(
+                      user
+                    ) ||
+                    user.email
+                  }
                   style={
-                    styles.emptyIcon
+                    styles.userCard
+                  }
+                  onPress={() =>
+                    openUser(
+                      user
+                    )
                   }
                 >
-                  <Ionicons
-                    name="people-outline"
-                    size={27}
-                    color={
-                      COLORS.purpleAccent
-                    }
-                  />
-                </View>
-
-                <Text
-                  style={
-                    styles.emptyTitle
-                  }
-                >
-                  No users found
-                </Text>
-
-                <Text
-                  style={styles.emptyText}
-                >
-                  Try changing your search
-                  or filter.
-                </Text>
-              </View>
-            ) : null}
-
-            {/* USERS */}
-
-            {filteredUsers.map(
-              (user) => {
-                const statusStyle =
-                  getStatusStyle(
-                    user.accountStatus
-                  );
-
-                const roleStyle =
-                  getRoleStyle(
-                    user.role
-                  );
-
-                return (
-                  <Pressable
-                    key={
-                      getUserId(user) ||
-                      user.email
-                    }
+                  <View
                     style={
-                      styles.userCard
-                    }
-                    onPress={() =>
-                      openUser(user)
+                      styles.userTop
                     }
                   >
                     <View
                       style={
-                        styles.userTop
+                        styles.avatar
                       }
                     >
-                      <View
+                      <Text
                         style={
-                          styles.avatar
+                          styles.avatarText
                         }
                       >
-                        <Text
-                          style={
-                            styles.avatarText
-                          }
-                        >
-                          {getInitials(
-                            user
-                          )}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={
-                          styles.userInfo
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.userName
-                          }
-                          numberOfLines={1}
-                        >
-                          {getFullName(
-                            user
-                          )}
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.userEmail
-                          }
-                          numberOfLines={1}
-                        >
-                          {user.email}
-                        </Text>
-                      </View>
-
-                      <Ionicons
-                        name="chevron-forward"
-                        size={18}
-                        color="#A1A1AA"
-                      />
+                        {getInitials(
+                          user
+                        )}
+                      </Text>
                     </View>
 
                     <View
                       style={
-                        styles.divider
+                        styles.userInfo
                       }
+                    >
+                      <Text
+                        style={
+                          styles.userName
+                        }
+                        numberOfLines={
+                          1
+                        }
+                      >
+                        {getFullName(
+                          user
+                        )}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.userEmail
+                        }
+                        numberOfLines={
+                          1
+                        }
+                      >
+                        {
+                          user.email
+                        }
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color="#A1A1AA"
                     />
+                  </View>
+
+                  <View
+                    style={
+                      styles.divider
+                    }
+                  />
+
+                  <View
+                    style={
+                      styles.userMeta
+                    }
+                  >
+                    <View
+                      style={[
+                        styles.roleBadge,
+                        {
+                          backgroundColor:
+                            roleStyle.backgroundColor,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={getRoleIcon(
+                          user.role
+                        )}
+                        size={12}
+                        color={
+                          roleStyle.color
+                        }
+                      />
+
+                      <Text
+                        style={[
+                          styles.roleText,
+                          {
+                            color:
+                              roleStyle.color,
+                          },
+                        ]}
+                      >
+                        {formatRole(
+                          user.role
+                        )}
+                      </Text>
+                    </View>
 
                     <View
-                      style={
-                        styles.userMeta
-                      }
+                      style={[
+                        styles.statusBadge,
+                        {
+                          backgroundColor:
+                            statusStyle.backgroundColor,
+                        },
+                      ]}
                     >
                       <View
                         style={[
-                          styles.roleBadge,
+                          styles.statusDot,
                           {
                             backgroundColor:
-                              roleStyle.backgroundColor,
+                              statusStyle.dotColor,
                           },
                         ]}
-                      >
-                        <Ionicons
-                          name={getRoleIcon(
-                            user.role
-                          )}
-                          size={12}
-                          color={
-                            roleStyle.color
-                          }
-                        />
+                      />
 
-                        <Text
-                          style={[
-                            styles.roleText,
-                            {
-                              color:
-                                roleStyle.color,
-                            },
-                          ]}
-                        >
-                          {formatRole(
-                            user.role
-                          )}
-                        </Text>
-                      </View>
-
-                      <View
+                      <Text
                         style={[
-                          styles.statusBadge,
+                          styles.statusText,
                           {
-                            backgroundColor:
-                              statusStyle.backgroundColor,
+                            color:
+                              statusStyle.textColor,
                           },
                         ]}
                       >
-                        <View
-                          style={[
-                            styles.statusDot,
-                            {
-                              backgroundColor:
-                                statusStyle.dotColor,
-                            },
-                          ]}
-                        />
+                        {
+                          user.accountStatus
+                        }
+                      </Text>
+                    </View>
+                  </View>
 
-                        <Text
-                          style={[
-                            styles.statusText,
-                            {
-                              color:
-                                statusStyle.textColor,
-                            },
-                          ]}
-                        >
-                          {
-                            user.accountStatus
-                          }
-                        </Text>
-                      </View>
+                  <View
+                    style={
+                      styles.userBottom
+                    }
+                  >
+                    <View
+                      style={
+                        styles.metaItem
+                      }
+                    >
+                      <Ionicons
+                        name="call-outline"
+                        size={13}
+                        color="#9999A5"
+                      />
+
+                      <Text
+                        style={
+                          styles.metaText
+                        }
+                      >
+                        {user.phoneNumber ||
+                          "No phone"}
+                      </Text>
                     </View>
 
                     <View
                       style={
-                        styles.userBottom
+                        styles.metaItem
                       }
                     >
-                      <View
+                      <Ionicons
+                        name="time-outline"
+                        size={13}
+                        color="#9999A5"
+                      />
+
+                      <Text
                         style={
-                          styles.metaItem
+                          styles.metaText
                         }
                       >
-                        <Ionicons
-                          name="call-outline"
-                          size={13}
-                          color="#9999A5"
-                        />
-
-                        <Text
-                          style={
-                            styles.metaText
-                          }
-                        >
-                          {user.phoneNumber ||
-                            "No phone"}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={
-                          styles.metaItem
-                        }
-                      >
-                        <Ionicons
-                          name="time-outline"
-                          size={13}
-                          color="#9999A5"
-                        />
-
-                        <Text
-                          style={
-                            styles.metaText
-                          }
-                        >
-                          Last login:{" "}
-                          {formatDate(
-                            user.lastLoginAt
-                          )}
-                        </Text>
-                      </View>
+                        Last login:{" "}
+                        {formatDate(
+                          user.lastLoginAt
+                        )}
+                      </Text>
                     </View>
-                  </Pressable>
-                );
-              }
-            )}
-
-            <View
-              style={styles.bottomSpace}
-            />
-          </View>
-        </ScrollView>
-
-        {/* BOTTOM NAVIGATION */}
-
-        <View style={styles.bottomNav}>
-          <BottomNavItem
-            icon="grid-outline"
-            label="Dashboard"
-            onPress={() =>
-              router.replace(
-                "/(admin)/admin-dashboard"
-              )
+                  </View>
+                </Pressable>
+              );
             }
-          />
-
-          <BottomNavItem
-            icon="people-outline"
-            label="Users"
-            active
-            onPress={() => undefined}
-          />
-
-          <BottomNavItem
-            icon="diamond-outline"
-            label="Orders"
-            onPress={() =>
-              router.replace(
-                "/(admin)/admin-orders"
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="bar-chart-outline"
-            label="Reports"
-            onPress={() =>
-              router.replace(
-                "/(admin)/admin-reports"
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="settings-outline"
-            label="Settings"
-            onPress={() =>
-              router.replace(
-                "/(admin)/admin-settings"
-              )
-            }
-          />
+          )}
         </View>
+      </ScrollView>
+
+      {/* BOTTOM NAVIGATION */}
+
+      <View
+        style={
+          styles.bottomNavigation
+        }
+      >
+        <BottomNavItem
+          icon="home-outline"
+          activeIcon="home"
+          label="Dashboard"
+          onPress={() =>
+            router.replace(
+              "/(admin)/admin-dashboard"
+            )
+          }
+        />
+
+        <BottomNavItem
+          icon="people-outline"
+          activeIcon="people"
+          label="Users"
+          active
+          onPress={() =>
+            undefined
+          }
+        />
+
+        <BottomNavItem
+          icon="receipt-outline"
+          activeIcon="receipt"
+          label="Orders"
+          onPress={() =>
+            router.replace(
+              "/(admin)/admin-orders"
+            )
+          }
+        />
+
+        <BottomNavItem
+          icon="bar-chart-outline"
+          activeIcon="bar-chart"
+          label="Reports"
+          onPress={() =>
+            router.replace(
+              "/(admin)/admin-reports"
+            )
+          }
+        />
+
+        <BottomNavItem
+          icon="settings-outline"
+          activeIcon="settings"
+          label="Settings"
+          onPress={() =>
+            router.replace(
+              "/(admin)/admin-settings"
+            )
+          }
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1119,12 +1550,24 @@ function HeaderStatCard({
   value: number;
 }) {
   return (
-    <View style={styles.headerStatCard}>
-      <Text style={styles.headerStatLabel}>
+    <View
+      style={
+        styles.headerStatCard
+      }
+    >
+      <Text
+        style={
+          styles.headerStatLabel
+        }
+      >
         {label}
       </Text>
 
-      <Text style={styles.headerStatValue}>
+      <Text
+        style={
+          styles.headerStatValue
+        }
+      >
         {value}
       </Text>
     </View>
@@ -1147,7 +1590,11 @@ function RoleSummaryItem({
   iconColor: string;
 }) {
   return (
-    <View style={styles.roleSummaryItem}>
+    <View
+      style={
+        styles.roleSummaryItem
+      }
+    >
       <View
         style={[
           styles.roleSummaryIcon,
@@ -1164,13 +1611,17 @@ function RoleSummaryItem({
       </View>
 
       <Text
-        style={styles.roleSummaryValue}
+        style={
+          styles.roleSummaryValue
+        }
       >
         {value}
       </Text>
 
       <Text
-        style={styles.roleSummaryLabel}
+        style={
+          styles.roleSummaryLabel
+        }
       >
         {label}
       </Text>
@@ -1211,11 +1662,15 @@ function FilterButton({
 
 function BottomNavItem({
   icon,
+  activeIcon,
   label,
   active = false,
   onPress,
 }: {
   icon: React.ComponentProps<
+    typeof Ionicons
+  >["name"];
+  activeIcon: React.ComponentProps<
     typeof Ionicons
   >["name"];
   label: string;
@@ -1224,24 +1679,38 @@ function BottomNavItem({
 }) {
   return (
     <Pressable
-      style={styles.bottomNavItem}
+      style={
+        styles.bottomNavItem
+      }
       onPress={onPress}
     >
-      <Ionicons
-        name={icon}
-        size={19}
-        color={
-          active
-            ? COLORS.purpleAccent
-            : "#A3A3AD"
-        }
-      />
+      <View
+        style={[
+          styles.bottomNavIconWrap,
+          active &&
+            styles.bottomNavIconWrapActive,
+        ]}
+      >
+        <Ionicons
+          name={
+            active
+              ? activeIcon
+              : icon
+          }
+          size={19}
+          color={
+            active
+              ? COLORS.purpleAccent
+              : COLORS.mutedText
+          }
+        />
+      </View>
 
       <Text
         style={[
-          styles.bottomNavText,
+          styles.bottomNavLabel,
           active &&
-            styles.bottomNavTextActive,
+            styles.bottomNavLabelActive,
         ]}
       >
         {label}
@@ -1254,493 +1723,556 @@ function BottomNavItem({
  * STYLES
  * =======================================================*/
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.purple,
-  },
-
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-  },
-
-  /* HEADER */
-
-  header: {
-    backgroundColor: COLORS.purple,
-    paddingHorizontal: 18,
-    paddingTop: 20,
-    paddingBottom: 22,
-    overflow: "hidden",
-  },
-
-  headerDecoration: {
-    position: "absolute",
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor:
-      "rgba(255,255,255,0.035)",
-    right: -65,
-    top: -90,
-  },
-
-  headerTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-  },
-
-  headerEyebrow: {
-    color: "#C9C5F5",
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-  },
-
-  headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-
-  headerSubtitle: {
-    color: "#D4D2EC",
-    fontSize: 9,
-    marginTop: 2,
-  },
-
-  refreshButton: {
-    width: 37,
-    height: 37,
-    borderRadius: 11,
-    backgroundColor:
-      "rgba(255,255,255,0.09)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  headerStats: {
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 17,
-  },
-
-  headerStatCard: {
-    flex: 1,
-    minHeight: 67,
-    borderRadius: 11,
-    backgroundColor:
-      "rgba(255,255,255,0.11)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-
-  headerStatLabel: {
-    color: "#D6D4EF",
-    fontSize: 9,
-  },
-
-  headerStatValue: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "800",
-    marginTop: 4,
-  },
-
-  /* BODY */
-
-  body: {
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 15,
-    paddingTop: 14,
-  },
-
-  roleSummaryCard: {
-    flexDirection: "row",
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    paddingVertical: 13,
-    paddingHorizontal: 8,
-    marginBottom: 13,
-
-    shadowColor: "#000000",
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: {
-      width: 0,
-      height: 2,
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        COLORS.background,
     },
-    elevation: 2,
-  },
 
-  roleSummaryItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-
-  roleSummaryIcon: {
-    width: 31,
-    height: 31,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 5,
-  },
-
-  roleSummaryValue: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-
-  roleSummaryLabel: {
-    color: COLORS.secondaryText,
-    fontSize: 8,
-    marginTop: 2,
-  },
-
-  summaryDivider: {
-    width: 1,
-    height: 43,
-    backgroundColor: COLORS.border,
-    alignSelf: "center",
-  },
-
-  /* SEARCH */
-
-  searchContainer: {
-    height: 45,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-  },
-
-  searchInput: {
-    flex: 1,
-    color: COLORS.text,
-    fontSize: 11,
-    marginHorizontal: 8,
-  },
-
-  /* FILTERS */
-
-  filters: {
-    gap: 7,
-    paddingBottom: 17,
-  },
-
-  filterButton: {
-    minHeight: 33,
-    paddingHorizontal: 13,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  filterButtonActive: {
-    backgroundColor:
-      COLORS.purpleAccent,
-    borderColor: COLORS.purpleAccent,
-  },
-
-  filterText: {
-    color: "#777783",
-    fontSize: 9,
-    fontWeight: "700",
-  },
-
-  filterTextActive: {
-    color: "#FFFFFF",
-  },
-
-  /* SECTION */
-
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 10,
-  },
-
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-
-  sectionSubtitle: {
-    color: COLORS.mutedText,
-    fontSize: 8,
-    marginTop: 2,
-  },
-
-  resultCount: {
-    color: COLORS.mutedText,
-    fontSize: 8,
-  },
-
-  /* USER CARD */
-
-  userCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 13,
-    marginBottom: 9,
-    borderWidth: 1,
-    borderColor: "#F0F0F3",
-
-    shadowColor: "#000000",
-    shadowOpacity: 0.035,
-    shadowRadius: 6,
-    shadowOffset: {
-      width: 0,
-      height: 2,
+    mainScroll: {
+      flex: 1,
     },
-    elevation: 1,
-  },
 
-  userTop: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    scrollContent: {
+      paddingBottom: 30,
+    },
 
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor:
-      COLORS.purpleLight,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
+    /* HEADER */
 
-  avatarText: {
-    color: COLORS.purpleAccent,
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    header: {
+      backgroundColor:
+        COLORS.purple,
+      paddingHorizontal: 18,
+      paddingTop: 54,
+      paddingBottom: 22,
+      borderBottomLeftRadius: 28,
+      borderBottomRightRadius: 28,
+      overflow: "hidden",
+    },
 
-  userInfo: {
-    flex: 1,
-  },
+    headerDecoration: {
+      position: "absolute",
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor:
+        "rgba(255,255,255,0.035)",
+      right: -65,
+      top: -90,
+    },
 
-  userName: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    headerTop: {
+      flexDirection: "row",
+      alignItems:
+        "flex-start",
+      justifyContent:
+        "space-between",
+    },
 
-  userEmail: {
-    color: COLORS.secondaryText,
-    fontSize: 9,
-    marginTop: 3,
-  },
+    headerEyebrow: {
+      color: "#C9C5F5",
+      fontSize: 9,
+      fontWeight: "700",
+      letterSpacing: 1.1,
+    },
 
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 10,
-  },
+    headerTitle: {
+      color: "#FFFFFF",
+      fontSize: 22,
+      fontWeight: "800",
+      marginTop: 3,
+    },
 
-  userMeta: {
-    flexDirection: "row",
-    gap: 6,
-    marginBottom: 10,
-  },
+    headerSubtitle: {
+      color: "#D4D2EC",
+      fontSize: 9,
+      marginTop: 2,
+    },
 
-  roleBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    gap: 4,
-  },
+    refreshButton: {
+      width: 37,
+      height: 37,
+      borderRadius: 11,
+      backgroundColor:
+        "rgba(255,255,255,0.09)",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+    refreshButtonDisabled: {
+  opacity: 0.8,
+},
 
-  roleText: {
-    fontSize: 8,
-    fontWeight: "800",
-  },
+    headerStats: {
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 17,
+    },
 
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    gap: 4,
-  },
+    headerStatCard: {
+      flex: 1,
+      minHeight: 67,
+      borderRadius: 11,
+      backgroundColor:
+        "rgba(255,255,255,0.11)",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
 
-  statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
+    headerStatLabel: {
+      color: "#D6D4EF",
+      fontSize: 9,
+    },
 
-  statusText: {
-    fontSize: 8,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
+    headerStatValue: {
+      color: "#FFFFFF",
+      fontSize: 20,
+      fontWeight: "800",
+      marginTop: 4,
+    },
 
-  userBottom: {
-    gap: 6,
-  },
+    /* BODY */
 
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
+    body: {
+      backgroundColor:
+        COLORS.background,
+      paddingHorizontal: 15,
+      paddingTop: 14,
+    },
 
-  metaText: {
-    color: COLORS.secondaryText,
-    fontSize: 8,
-  },
+    roleSummaryCard: {
+      flexDirection: "row",
+      backgroundColor:
+        COLORS.card,
+      borderRadius: 14,
+      paddingVertical: 13,
+      paddingHorizontal: 8,
+      marginBottom: 13,
 
-  /* ERROR */
+      shadowColor:
+        "#000000",
+      shadowOpacity: 0.04,
+      shadowRadius: 6,
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      elevation: 2,
+    },
 
-  errorCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor:
-      COLORS.redBackground,
-    borderRadius: 12,
-    padding: 11,
-    marginBottom: 15,
-  },
+    roleSummaryItem: {
+      flex: 1,
+      alignItems: "center",
+    },
 
-  errorIcon: {
-    width: 31,
-    height: 31,
-    borderRadius: 9,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    roleSummaryIcon: {
+      width: 31,
+      height: 31,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginBottom: 5,
+    },
 
-  errorContent: {
-    flex: 1,
-    marginHorizontal: 9,
-  },
+    roleSummaryValue: {
+      color: COLORS.text,
+      fontSize: 15,
+      fontWeight: "800",
+    },
 
-  errorTitle: {
-    color: COLORS.text,
-    fontSize: 10,
-    fontWeight: "700",
-  },
+    roleSummaryLabel: {
+      color:
+        COLORS.secondaryText,
+      fontSize: 8,
+      marginTop: 2,
+    },
 
-  errorText: {
-    color: "#A66A76",
-    fontSize: 8,
-    marginTop: 2,
-  },
+    summaryDivider: {
+      width: 1,
+      height: 43,
+      backgroundColor:
+        COLORS.border,
+      alignSelf: "center",
+    },
 
-  retryText: {
-    color: COLORS.red,
-    fontSize: 9,
-    fontWeight: "800",
-  },
+    /* SEARCH */
 
-  /* EMPTY */
+    searchContainer: {
+      height: 45,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor:
+        COLORS.card,
+      borderWidth: 1,
+      borderColor:
+        COLORS.border,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      marginBottom: 10,
+    },
 
-  emptyCard: {
-    alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    paddingVertical: 35,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
+    searchInput: {
+      flex: 1,
+      color: COLORS.text,
+      fontSize: 11,
+      marginHorizontal: 8,
+    },
 
-  emptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor:
-      COLORS.purpleLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    /* FILTERS */
 
-  emptyTitle: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: "800",
-    marginTop: 10,
-  },
+    filters: {
+      gap: 7,
+      paddingBottom: 17,
+    },
 
-  emptyText: {
-    color: COLORS.secondaryText,
-    fontSize: 9,
-    marginTop: 4,
-  },
+    filterButton: {
+      minHeight: 33,
+      paddingHorizontal: 13,
+      borderRadius: 10,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        COLORS.border,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
 
-  /* LOADING */
+    filterButtonActive: {
+      backgroundColor:
+        COLORS.purpleAccent,
+      borderColor:
+        COLORS.purpleAccent,
+    },
 
-  loadingContainer: {
-    flex: 1,
-    backgroundColor:
-      COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    filterText: {
+      color: "#777783",
+      fontSize: 9,
+      fontWeight: "700",
+    },
 
-  loadingText: {
-    color: COLORS.secondaryText,
-    fontSize: 10,
-    marginTop: 10,
-  },
+    filterTextActive: {
+      color: "#FFFFFF",
+    },
 
-  bottomSpace: {
-    height: 95,
-  },
+    /* SECTION */
 
-  /* BOTTOM NAV */
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent:
+        "space-between",
+      alignItems: "flex-end",
+      marginBottom: 10,
+    },
 
-  bottomNav: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 67,
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: "#ECECF1",
-    paddingTop: 8,
-  },
+    sectionTitle: {
+      color: COLORS.text,
+      fontSize: 14,
+      fontWeight: "800",
+    },
 
-  bottomNavItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 3,
-  },
+    sectionSubtitle: {
+      color:
+        COLORS.mutedText,
+      fontSize: 8,
+      marginTop: 2,
+    },
 
-  bottomNavText: {
-    color: "#A3A3AD",
-    fontSize: 7,
-  },
+    resultCount: {
+      color:
+        COLORS.mutedText,
+      fontSize: 8,
+    },
 
-  bottomNavTextActive: {
-    color: COLORS.purpleAccent,
-    fontWeight: "700",
-  },
-});
+    /* USER CARD */
+
+    userCard: {
+      backgroundColor:
+        COLORS.card,
+      borderRadius: 14,
+      padding: 13,
+      marginBottom: 9,
+      borderWidth: 1,
+      borderColor:
+        "#F0F0F3",
+
+      shadowColor:
+        "#000000",
+      shadowOpacity: 0.035,
+      shadowRadius: 6,
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      elevation: 1,
+    },
+
+    userTop: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    avatar: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      backgroundColor:
+        COLORS.purpleLight,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginRight: 10,
+    },
+
+    avatarText: {
+      color:
+        COLORS.purpleAccent,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    userInfo: {
+      flex: 1,
+    },
+
+    userName: {
+      color: COLORS.text,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    userEmail: {
+      color:
+        COLORS.secondaryText,
+      fontSize: 9,
+      marginTop: 3,
+    },
+
+    divider: {
+      height: 1,
+      backgroundColor:
+        COLORS.border,
+      marginVertical: 10,
+    },
+
+    userMeta: {
+      flexDirection: "row",
+      gap: 6,
+      marginBottom: 10,
+    },
+
+    roleBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      gap: 4,
+    },
+
+    roleText: {
+      fontSize: 8,
+      fontWeight: "800",
+    },
+
+    statusBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      gap: 4,
+    },
+
+    statusDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+    },
+
+    statusText: {
+      fontSize: 8,
+      fontWeight: "800",
+      textTransform:
+        "capitalize",
+    },
+
+    userBottom: {
+      gap: 6,
+    },
+
+    metaItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+
+    metaText: {
+      color:
+        COLORS.secondaryText,
+      fontSize: 8,
+    },
+
+    /* ERROR */
+
+    errorCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor:
+        COLORS.redBackground,
+      borderRadius: 12,
+      padding: 11,
+      marginBottom: 15,
+    },
+
+    errorIcon: {
+      width: 31,
+      height: 31,
+      borderRadius: 9,
+      backgroundColor:
+        "#FFFFFF",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    errorContent: {
+      flex: 1,
+      marginHorizontal: 9,
+    },
+
+    errorTitle: {
+      color: COLORS.text,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+
+    errorText: {
+      color: "#A66A76",
+      fontSize: 8,
+      marginTop: 2,
+    },
+
+    retryText: {
+      color: COLORS.red,
+      fontSize: 9,
+      fontWeight: "800",
+    },
+
+    /* EMPTY */
+
+    emptyCard: {
+      alignItems: "center",
+      backgroundColor:
+        COLORS.card,
+      borderRadius: 14,
+      paddingVertical: 35,
+      borderWidth: 1,
+      borderColor:
+        COLORS.border,
+    },
+
+    emptyIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 15,
+      backgroundColor:
+        COLORS.purpleLight,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    emptyTitle: {
+      color: COLORS.text,
+      fontSize: 13,
+      fontWeight: "800",
+      marginTop: 10,
+    },
+
+    emptyText: {
+      color:
+        COLORS.secondaryText,
+      fontSize: 9,
+      marginTop: 4,
+    },
+
+    /* LOADING */
+
+    loadingContainer: {
+      flex: 1,
+      backgroundColor:
+        COLORS.background,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    loadingText: {
+      color:
+        COLORS.secondaryText,
+      fontSize: 10,
+      marginTop: 10,
+    },
+
+    /* BOTTOM NAVIGATION */
+
+    bottomNavigation: {
+      minHeight: 76,
+      paddingTop: 7,
+      paddingBottom: 9,
+      paddingHorizontal: 6,
+      flexDirection: "row",
+      alignItems:
+        "flex-start",
+      justifyContent:
+        "space-around",
+      backgroundColor:
+        "#FFFFFF",
+      borderTopWidth: 1,
+      borderTopColor:
+        COLORS.border,
+    },
+
+    bottomNavItem: {
+      flex: 1,
+      minHeight: 57,
+      alignItems: "center",
+      justifyContent:
+        "flex-start",
+    },
+
+    bottomNavIconWrap: {
+      width: 36,
+      height: 31,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    bottomNavIconWrapActive: {
+      backgroundColor:
+        COLORS.purpleLight,
+    },
+
+    bottomNavLabel: {
+      marginTop: 2,
+      fontSize: 9,
+      lineHeight: 13,
+      fontWeight: "500",
+      color:
+        COLORS.mutedText,
+      textAlign: "center",
+    },
+
+    bottomNavLabelActive: {
+      fontWeight: "700",
+      color:
+        COLORS.purpleAccent,
+    },
+  });

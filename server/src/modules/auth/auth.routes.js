@@ -1,16 +1,22 @@
 import { Router } from "express";
 
 import {
+  forgotPassword,
   getCurrentUser,
   login,
   logout,
   register,
+  resetPassword,
+  verifyResetCode,
 } from "./auth.controller.js";
 
 import {
+  forgotPasswordValidation,
   loginValidation,
   registerValidation,
+  resetPasswordValidation,
   validateRequest,
+  verifyResetCodeValidation,
 } from "./auth.validation.js";
 
 import authenticate from "../../middleware/authenticate.js";
@@ -30,6 +36,27 @@ authRouter.post(
   loginValidation,
   validateRequest,
   login
+);
+
+authRouter.post(
+  "/forgot-password",
+  forgotPasswordValidation,
+  validateRequest,
+  forgotPassword
+);
+
+authRouter.post(
+  "/verify-reset-code",
+  verifyResetCodeValidation,
+  validateRequest,
+  verifyResetCode
+);
+
+authRouter.post(
+  "/reset-password",
+  resetPasswordValidation,
+  validateRequest,
+  resetPassword
 );
 
 // Authenticated routes

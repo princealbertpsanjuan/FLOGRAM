@@ -67,6 +67,24 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    passwordResetCode: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    passwordResetCodeExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    passwordResetVerified: {
+      type: Boolean,
+      default: false,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -103,6 +121,9 @@ userSchema.methods.toJSON = function toJSON() {
   const userObject = this.toObject();
 
   delete userObject.password;
+  delete userObject.passwordResetCode;
+  delete userObject.passwordResetCodeExpiresAt;
+  delete userObject.passwordResetVerified;
 
   return userObject;
 };

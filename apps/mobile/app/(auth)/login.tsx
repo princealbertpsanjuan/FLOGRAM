@@ -372,12 +372,11 @@ export default function LoginScreen() {
                 styles.forgotButton
               }
               disabled={loading}
-              onPress={() => {
-                Alert.alert(
-                  'Forgot Password',
-                  'Password recovery will be connected later.'
-                );
-              }}
+              onPress={() =>
+                router.push(
+                  '/(auth)/forgot-password'
+                )
+              }
             >
               <Text
                 style={

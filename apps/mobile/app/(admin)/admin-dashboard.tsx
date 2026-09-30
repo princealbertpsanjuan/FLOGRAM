@@ -11,6 +11,8 @@ import {
   View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
+
 import {
   router,
   useFocusEffect,
@@ -26,6 +28,83 @@ import {
   type AdminDashboardData,
   type AdminRecentActivity,
 } from "../../services/admin";
+
+/*
+ * =========================================================
+ * CONSTANTS
+ * =========================================================
+ */
+
+const COLORS = {
+  background: "#F5F5F8",
+  card: "#FFFFFF",
+  purple: "#24245D",
+  purpleAccent: "#5552B9",
+  purpleLight: "#ECECFF",
+  text: "#3B3940",
+  secondaryText: "#77737B",
+  mutedText: "#AAA7AC",
+  border: "#ECECF0",
+  green: "#6AA880",
+  greenLight: "#EAF7EF",
+  yellow: "#D49B35",
+  yellowLight: "#FFF2D8",
+  pink: "#DF6E94",
+  pinkLight: "#FFE7EF",
+  red: "#D95C83",
+  redLight: "#FFF0F3",
+};
+
+/*
+ * =========================================================
+ * ADMIN NAVIGATION
+ * =========================================================
+ */
+
+type AdminNavItem = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+  route:
+    | "/(admin)/admin-dashboard"
+    | "/(admin)/admin-users"
+    | "/(admin)/admin-orders"
+    | "/(admin)/admin-reports"
+    | "/(admin)/admin-settings";
+};
+
+const ADMIN_NAV_ITEMS: AdminNavItem[] = [
+  {
+    label: "Dashboard",
+    icon: "home-outline",
+    activeIcon: "home",
+    route: "/(admin)/admin-dashboard",
+  },
+  {
+    label: "Users",
+    icon: "people-outline",
+    activeIcon: "people",
+    route: "/(admin)/admin-users",
+  },
+  {
+    label: "Orders",
+    icon: "receipt-outline",
+    activeIcon: "receipt",
+    route: "/(admin)/admin-orders",
+  },
+  {
+    label: "Reports",
+    icon: "bar-chart-outline",
+    activeIcon: "bar-chart",
+    route: "/(admin)/admin-reports",
+  },
+  {
+    label: "Settings",
+    icon: "settings-outline",
+    activeIcon: "settings",
+    route: "/(admin)/admin-settings",
+  },
+];
 
 /*
  * =========================================================
@@ -71,11 +150,24 @@ const getFullName = (
     .join(" ")
     .trim();
 
-  return (
-    name ||
-    user.email ||
-    ""
-  );
+  return name || user.email || "";
+};
+
+const formatOrderStatus = (
+  value?: string
+) => {
+  if (!value) {
+    return "Pending";
+  }
+
+  return value
+    .split("_")
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
+    .join(" ");
 };
 
 const formatTimeAgo = (
@@ -96,13 +188,11 @@ const formatTimeAgo = (
   }
 
   const difference =
-    Date.now() -
-    date.getTime();
+    Date.now() - date.getTime();
 
-  const minutes =
-    Math.floor(
-      difference / 60000
-    );
+  const minutes = Math.floor(
+    difference / 60000
+  );
 
   if (minutes < 1) {
     return "Just now";
@@ -112,19 +202,17 @@ const formatTimeAgo = (
     return `${minutes} min`;
   }
 
-  const hours =
-    Math.floor(
-      minutes / 60
-    );
+  const hours = Math.floor(
+    minutes / 60
+  );
 
   if (hours < 24) {
     return `${hours}h`;
   }
 
-  const days =
-    Math.floor(
-      hours / 24
-    );
+  const days = Math.floor(
+    hours / 24
+  );
 
   if (days < 7) {
     return `${days}d`;
@@ -170,6 +258,27 @@ const getActivityColor = (
   }
 };
 
+const getActivityIcon = (
+  type: AdminRecentActivity["type"]
+): keyof typeof Ionicons.glyphMap => {
+  switch (type) {
+    case "seller_verification":
+      return "storefront-outline";
+
+    case "rider_verification":
+      return "bicycle-outline";
+
+    case "remittance":
+      return "cash-outline";
+
+    case "order":
+      return "receipt-outline";
+
+    default:
+      return "ellipse-outline";
+  }
+};
+
 const getActivityTitle = (
   item: AdminRecentActivity
 ) => {
@@ -196,10 +305,9 @@ const getActivitySubtitle = (
 ) => {
   switch (item.type) {
     case "seller_verification": {
-      const owner =
-        getFullName(
-          item.owner
-        );
+      const owner = getFullName(
+        item.owner
+      );
 
       return (
         item.title ||
@@ -209,10 +317,9 @@ const getActivitySubtitle = (
     }
 
     case "rider_verification": {
-      const owner =
-        getFullName(
-          item.owner
-        );
+      const owner = getFullName(
+        item.owner
+      );
 
       return (
         owner ||
@@ -221,10 +328,9 @@ const getActivitySubtitle = (
     }
 
     case "remittance": {
-      const rider =
-        getFullName(
-          item.riderUser
-        );
+      const rider = getFullName(
+        item.riderUser
+      );
 
       return `${rider || "Rider"} • ${formatCurrency(
         item.totalAmount || 0
@@ -233,12 +339,10 @@ const getActivitySubtitle = (
 
     case "order":
       return `${
-        item.title ||
-        "Order"
-      } • ${
-        item.orderStatus ||
-        "pending"
-      }`;
+        item.title || "Order"
+      } • ${formatOrderStatus(
+        item.orderStatus
+      )}`;
 
     default:
       return "";
@@ -252,10 +356,7 @@ const getActivitySubtitle = (
  */
 
 export default function AdminDashboardScreen() {
-  const [
-    user,
-    setUser,
-  ] =
+  const [user, setUser] =
     useState<AuthUser | null>(
       null
     );
@@ -268,22 +369,15 @@ export default function AdminDashboardScreen() {
       null
     );
 
-  const [
-    loading,
-    setLoading,
-  ] =
+  const [loading, setLoading] =
     useState(true);
 
   const [
     refreshing,
     setRefreshing,
-  ] =
-    useState(false);
+  ] = useState(false);
 
-  const [
-    error,
-    setError,
-  ] =
+  const [error, setError] =
     useState("");
 
   /*
@@ -299,9 +393,7 @@ export default function AdminDashboardScreen() {
       ) => {
         try {
           if (refresh) {
-            setRefreshing(
-              true
-            );
+            setRefreshing(true);
           } else {
             setLoading(true);
           }
@@ -311,14 +403,12 @@ export default function AdminDashboardScreen() {
           const [
             storedUser,
             dashboardData,
-          ] =
-            await Promise.all([
-              getStoredUser(),
-              getAdminDashboard(),
-            ]);
+          ] = await Promise.all([
+            getStoredUser(),
+            getAdminDashboard(),
+          ]);
 
           setUser(storedUser);
-
           setDashboard(
             dashboardData
           );
@@ -331,9 +421,7 @@ export default function AdminDashboardScreen() {
           setError(message);
         } finally {
           setLoading(false);
-          setRefreshing(
-            false
-          );
+          setRefreshing(false);
         }
       },
       []
@@ -363,7 +451,9 @@ export default function AdminDashboardScreen() {
       >
         <ActivityIndicator
           size="large"
-          color="#5552B9"
+          color={
+            COLORS.purpleAccent
+          }
         />
 
         <Text
@@ -371,8 +461,7 @@ export default function AdminDashboardScreen() {
             styles.loadingText
           }
         >
-          Loading Admin
-          Dashboard...
+          Loading Admin Dashboard...
         </Text>
       </SafeAreaView>
     );
@@ -394,43 +483,42 @@ export default function AdminDashboardScreen() {
           styles.loadingContainer
         }
       >
-        <Text
-          style={
-            styles.errorSymbol
-          }
+        <View
+          style={styles.errorIcon}
         >
-          !
+          <Ionicons
+            name="alert-circle-outline"
+            size={27}
+            color={COLORS.red}
+          />
+        </View>
+
+        <Text
+          style={styles.errorTitle}
+        >
+          Unable to load dashboard
         </Text>
 
         <Text
-          style={
-            styles.errorTitle
-          }
-        >
-          Unable to load
-          dashboard
-        </Text>
-
-        <Text
-          style={
-            styles.errorText
-          }
+          style={styles.errorText}
         >
           {error}
         </Text>
 
         <Pressable
-          style={
-            styles.retryButton
-          }
+          style={styles.retryButton}
           onPress={() =>
             void loadDashboard()
           }
         >
+          <Ionicons
+            name="refresh-outline"
+            size={17}
+            color="#FFFFFF"
+          />
+
           <Text
-            style={
-              styles.retryText
-            }
+            style={styles.retryText}
           >
             Try Again
           </Text>
@@ -446,8 +534,7 @@ export default function AdminDashboardScreen() {
    */
 
   const firstName =
-    user?.firstName ||
-    "Admin";
+    user?.firstName || "Admin";
 
   const users =
     dashboard?.users ?? {
@@ -489,122 +576,105 @@ export default function AdminDashboardScreen() {
     dashboard?.recentActivity ??
     [];
 
-  /*
-   * Admin action count:
-   *
-   * - seller verification
-   * - rider verification
-   * - submitted COD remittance
-   *
-   * These are immediate Admin
-   * responsibilities.
-   */
-
   const pendingActions =
     verifications.totalPending +
     remittances.awaitingVerification;
 
-  return (
-    <SafeAreaView
-      style={
-        styles.container
-      }
-    >
-      <View
-        style={
-          styles.screen
-        }
-      >
-        {/* =================================================
-            HEADER
-        ================================================= */}
+  /*
+   * =======================================================
+   * NAVIGATION HELPERS
+   * =======================================================
+   */
 
-        <View
-          style={
-            styles.header
+  const openTodayReport = () => {
+    router.push({
+      pathname:
+        "/(admin)/admin-reports",
+      params: {
+        period: "today",
+      },
+    } as never);
+  };
+
+  const openUsers = (
+    role?:
+      | "customer"
+      | "seller"
+      | "rider"
+  ) => {
+    if (!role) {
+      router.push(
+        "/(admin)/admin-users"
+      );
+      return;
+    }
+
+    router.push({
+      pathname:
+        "/(admin)/admin-users",
+      params: {
+        role,
+      },
+    } as never);
+  };
+
+  return (
+  <View style={styles.container}>
+    {/*
+     * =================================================
+     * HEADER
+     * =================================================
+     */}
+
+    <View style={styles.header}>
+      <View style={styles.headerCircleOne} />
+
+      <View style={styles.headerCircleTwo} />
+
+      <View style={styles.headerTop}>
+        <View>
+          <Text style={styles.systemOverview}>
+            System Overview
+          </Text>
+
+          <Text style={styles.title}>
+            Admin Dashboard
+          </Text>
+
+          <Text style={styles.welcomeText}>
+            Welcome, {firstName}
+          </Text>
+        </View>
+
+        <Pressable
+          style={styles.headerMenu}
+          onPress={() =>
+            router.push(
+              "/(admin)/admin-settings"
+            )
           }
         >
-          <View
-            style={
-              styles.headerCircleOne
-            }
+          <Ionicons
+            name="settings-outline"
+            size={21}
+            color="#FFFFFF"
           />
+        </Pressable>
+      </View>
+
+          {/*
+           * ===============================================
+           * SUMMARY
+           * ===============================================
+           */}
 
           <View
-            style={
-              styles.headerCircleTwo
-            }
-          />
-
-          <View
-            style={
-              styles.headerTop
-            }
-          >
-            <View>
-              <Text
-                style={
-                  styles.systemOverview
-                }
-              >
-                System Overview
-              </Text>
-
-              <Text
-                style={
-                  styles.title
-                }
-              >
-                Admin Dashboard
-              </Text>
-
-              <Text
-                style={
-                  styles.welcomeText
-                }
-              >
-                Welcome,{" "}
-                {firstName}
-              </Text>
-            </View>
-
-            <Pressable
-              style={
-                styles.headerMenu
-              }
-              onPress={() =>
-                router.push(
-                  "/(admin)/admin-settings"
-                )
-              }
-            >
-              <Text
-                style={
-                  styles.headerMenuText
-                }
-              >
-                •••
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* ===============================================
-              SUMMARY
-          =============================================== */}
-
-          <View
-            style={
-              styles.summaryGrid
-            }
+            style={styles.summaryGrid}
           >
             <Pressable
-              style={
-                styles.summaryCard
-              }
-              onPress={() =>
-                router.push(
-                  "/(admin)/admin-reports"
-                )
+              style={styles.summaryCard}
+              onPress={
+                openTodayReport
               }
             >
               <Text
@@ -612,7 +682,7 @@ export default function AdminDashboardScreen() {
                   styles.summaryLabel
                 }
               >
-                Todays Revenue
+                Today&apos;s Revenue
               </Text>
 
               <Text
@@ -632,14 +702,12 @@ export default function AdminDashboardScreen() {
                   styles.positiveText
                 }
               >
-                Successful payments
+                Recognized today
               </Text>
             </Pressable>
 
             <Pressable
-              style={
-                styles.summaryCard
-              }
+              style={styles.summaryCard}
               onPress={() =>
                 router.push(
                   "/(admin)/admin-orders"
@@ -669,21 +737,15 @@ export default function AdminDashboardScreen() {
                   styles.summaryMeta
                 }
               >
-                {
-                  orders.total
-                }{" "}
-                total orders
+                {orders.total} total
+                orders
               </Text>
             </Pressable>
 
             <Pressable
-              style={
-                styles.summaryCard
-              }
+              style={styles.summaryCard}
               onPress={() =>
-                router.push(
-                  "/(admin)/admin-users"
-                )
+                openUsers()
               }
             >
               <Text
@@ -714,9 +776,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
 
             <Pressable
-              style={
-                styles.summaryCard
-              }
+              style={styles.summaryCard}
               onPress={() =>
                 router.push(
                   "/(admin)/admin-verifications"
@@ -752,14 +812,14 @@ export default function AdminDashboardScreen() {
           </View>
         </View>
 
-        {/* =================================================
-            CONTENT
-        ================================================= */}
+        {/*
+         * =================================================
+         * CONTENT
+         * =================================================
+         */}
 
         <ScrollView
-          style={
-            styles.scrollView
-          }
+          style={styles.scrollView}
           contentContainerStyle={
             styles.scrollContent
           }
@@ -776,7 +836,9 @@ export default function AdminDashboardScreen() {
                   true
                 )
               }
-              tintColor="#5552B9"
+              tintColor={
+                COLORS.purpleAccent
+              }
             />
           }
         >
@@ -786,6 +848,12 @@ export default function AdminDashboardScreen() {
                 styles.inlineError
               }
             >
+              <Ionicons
+                name="alert-circle-outline"
+                size={17}
+                color={COLORS.red}
+              />
+
               <Text
                 style={
                   styles.inlineErrorText
@@ -796,9 +864,11 @@ export default function AdminDashboardScreen() {
             </View>
           )}
 
-          {/* ===============================================
-              ADMIN ACTIONS
-          =============================================== */}
+          {/*
+           * ===============================================
+           * ADMIN ACTIONS
+           * ===============================================
+           */}
 
           <View
             style={
@@ -824,8 +894,7 @@ export default function AdminDashboardScreen() {
                     styles.sectionSubtitle
                   }
                 >
-                  Items requiring
-                  review
+                  Items requiring review
                 </Text>
               </View>
 
@@ -844,17 +913,15 @@ export default function AdminDashboardScreen() {
               </View>
             </View>
 
-            {/* SELLER VERIFICATION */}
-
             <Pressable
               style={
                 styles.adminActionRow
               }
               onPress={() =>
-  router.push(
-    "/(admin)/admin-seller-verification"
-  )
-}
+                router.push(
+                  "/(admin)/admin-seller-verification"
+                )
+              }
             >
               <View
                 style={[
@@ -862,13 +929,11 @@ export default function AdminDashboardScreen() {
                   styles.sellerActionIcon,
                 ]}
               >
-                <Text
-                  style={
-                    styles.actionIconText
-                  }
-                >
-                  S
-                </Text>
+                <Ionicons
+                  name="storefront-outline"
+                  size={17}
+                  color={COLORS.green}
+                />
               </View>
 
               <View
@@ -881,8 +946,7 @@ export default function AdminDashboardScreen() {
                     styles.actionTitle
                   }
                 >
-                  Seller
-                  Verification
+                  Seller Verification
                 </Text>
 
                 <Text
@@ -918,13 +982,13 @@ export default function AdminDashboardScreen() {
                 </Text>
               </View>
 
-              <Text
-                style={
-                  styles.chevron
+              <Ionicons
+                name="chevron-forward"
+                size={17}
+                color={
+                  COLORS.mutedText
                 }
-              >
-                ›
-              </Text>
+              />
             </Pressable>
 
             <View
@@ -933,17 +997,15 @@ export default function AdminDashboardScreen() {
               }
             />
 
-            {/* RIDER VERIFICATION */}
-
             <Pressable
               style={
                 styles.adminActionRow
               }
-           onPress={() =>
-  router.push(
-    "/(admin)/admin-rider-verification"
-  )
-}
+              onPress={() =>
+                router.push(
+                  "/(admin)/admin-rider-verification"
+                )
+              }
             >
               <View
                 style={[
@@ -951,13 +1013,11 @@ export default function AdminDashboardScreen() {
                   styles.riderActionIcon,
                 ]}
               >
-                <Text
-                  style={
-                    styles.actionIconText
-                  }
-                >
-                  R
-                </Text>
+                <Ionicons
+                  name="bicycle-outline"
+                  size={17}
+                  color={COLORS.yellow}
+                />
               </View>
 
               <View
@@ -970,8 +1030,7 @@ export default function AdminDashboardScreen() {
                     styles.actionTitle
                   }
                 >
-                  Rider
-                  Verification
+                  Rider Verification
                 </Text>
 
                 <Text
@@ -1007,13 +1066,13 @@ export default function AdminDashboardScreen() {
                 </Text>
               </View>
 
-              <Text
-                style={
-                  styles.chevron
+              <Ionicons
+                name="chevron-forward"
+                size={17}
+                color={
+                  COLORS.mutedText
                 }
-              >
-                ›
-              </Text>
+              />
             </Pressable>
 
             <View
@@ -1021,8 +1080,6 @@ export default function AdminDashboardScreen() {
                 styles.rowDivider
               }
             />
-
-            {/* COD REMITTANCE */}
 
             <Pressable
               style={
@@ -1040,13 +1097,13 @@ export default function AdminDashboardScreen() {
                   styles.remittanceActionIcon,
                 ]}
               >
-                <Text
-                  style={
-                    styles.actionIconText
+                <Ionicons
+                  name="cash-outline"
+                  size={17}
+                  color={
+                    COLORS.purpleAccent
                   }
-                >
-                  ₱
-                </Text>
+                />
               </View>
 
               <View
@@ -1091,19 +1148,21 @@ export default function AdminDashboardScreen() {
                 </Text>
               </View>
 
-              <Text
-                style={
-                  styles.chevron
+              <Ionicons
+                name="chevron-forward"
+                size={17}
+                color={
+                  COLORS.mutedText
                 }
-              >
-                ›
-              </Text>
+              />
             </Pressable>
           </View>
 
-          {/* ===============================================
-              STAKEHOLDER COUNTS
-          =============================================== */}
+          {/*
+           * ===============================================
+           * PLATFORM USERS
+           * ===============================================
+           */}
 
           <Text
             style={
@@ -1124,9 +1183,7 @@ export default function AdminDashboardScreen() {
                 styles.customerCard,
               ]}
               onPress={() =>
-                router.push(
-                  "/(admin)/admin-users"
-                )
+                openUsers("customer")
               }
             >
               <Text
@@ -1154,9 +1211,7 @@ export default function AdminDashboardScreen() {
                 styles.sellerCard,
               ]}
               onPress={() =>
-                router.push(
-                  "/(admin)/admin-users"
-                )
+                openUsers("seller")
               }
             >
               <Text
@@ -1184,9 +1239,7 @@ export default function AdminDashboardScreen() {
                 styles.riderCard,
               ]}
               onPress={() =>
-                router.push(
-                  "/(admin)/admin-users"
-                )
+                openUsers("rider")
               }
             >
               <Text
@@ -1208,80 +1261,158 @@ export default function AdminDashboardScreen() {
               </Text>
             </Pressable>
           </View>
-
-          {/* ===============================================
-              ORDER MONITORING
-          =============================================== */}
+                    {/*
+           * ===============================================
+           * ORDER MONITORING
+           * ===============================================
+           */}
 
           <View
             style={
-              styles.orderCard
+              styles.sectionHeadingRow
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.contentHeading
+                }
+              >
+                Order Monitoring
+              </Text>
+
+              <Text
+                style={
+                  styles.contentSubheading
+                }
+              >
+                Marketplace order
+                activity
+              </Text>
+            </View>
+
+            <Pressable
+              style={
+                styles.viewAllButton
+              }
+              onPress={() =>
+                router.push(
+                  "/(admin)/admin-orders"
+                )
+              }
+            >
+              <Text
+                style={
+                  styles.viewAllText
+                }
+              >
+                View All
+              </Text>
+
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={
+                  COLORS.purpleAccent
+                }
+              />
+            </Pressable>
+          </View>
+
+          <View
+            style={
+              styles.orderOverviewCard
             }
           >
             <View
               style={
-                styles.sectionHeader
-              }
-            >
-              <View>
-                <Text
-                  style={
-                    styles.sectionTitle
-                  }
-                >
-                  Order Monitoring
-                </Text>
-
-                <Text
-                  style={
-                    styles.sectionSubtitle
-                  }
-                >
-                  Platform-wide
-                  order status
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() =>
-                  router.push(
-                    "/(admin)/admin-orders"
-                  )
-                }
-              >
-                <Text
-                  style={
-                    styles.viewAllText
-                  }
-                >
-                  View All
-                </Text>
-              </Pressable>
-            </View>
-
-            <View
-              style={
-                styles.orderStatsRow
+                styles.orderOverviewRow
               }
             >
               <View
                 style={
-                  styles.orderStat
+                  styles.orderMetric
                 }
               >
+                <View
+                  style={[
+                    styles.orderMetricIcon,
+                    {
+                      backgroundColor:
+                        COLORS.purpleLight,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="receipt-outline"
+                    size={19}
+                    color={
+                      COLORS.purpleAccent
+                    }
+                  />
+                </View>
+
                 <Text
                   style={
-                    styles.activeOrderValue
+                    styles.orderMetricValue
                   }
                 >
-                  {
-                    orders.active
-                  }
+                  {formatNumber(
+                    orders.total
+                  )}
                 </Text>
 
                 <Text
                   style={
-                    styles.orderStatLabel
+                    styles.orderMetricLabel
+                  }
+                >
+                  Total Orders
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.metricDivider
+                }
+              />
+
+              <View
+                style={
+                  styles.orderMetric
+                }
+              >
+                <View
+                  style={[
+                    styles.orderMetricIcon,
+                    {
+                      backgroundColor:
+                        COLORS.yellowLight,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={19}
+                    color={
+                      COLORS.yellow
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.orderMetricValue
+                  }
+                >
+                  {formatNumber(
+                    orders.active
+                  )}
+                </Text>
+
+                <Text
+                  style={
+                    styles.orderMetricLabel
                   }
                 >
                   Active
@@ -1290,73 +1421,178 @@ export default function AdminDashboardScreen() {
 
               <View
                 style={
-                  styles.orderDivider
+                  styles.metricDivider
                 }
               />
 
               <View
                 style={
-                  styles.orderStat
+                  styles.orderMetric
                 }
               >
+                <View
+                  style={[
+                    styles.orderMetricIcon,
+                    {
+                      backgroundColor:
+                        COLORS.greenLight,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={19}
+                    color={
+                      COLORS.green
+                    }
+                  />
+                </View>
+
                 <Text
                   style={
-                    styles.completedOrderValue
+                    styles.orderMetricValue
                   }
                 >
-                  {
+                  {formatNumber(
                     orders.completed
-                  }
+                  )}
                 </Text>
 
                 <Text
                   style={
-                    styles.orderStatLabel
+                    styles.orderMetricLabel
                   }
                 >
                   Completed
                 </Text>
               </View>
+            </View>
 
+            <View
+              style={
+                styles.orderFooter
+              }
+            >
               <View
                 style={
-                  styles.orderDivider
-                }
-              />
-
-              <View
-                style={
-                  styles.orderStat
+                  styles.orderFooterItem
                 }
               >
-                <Text
-                  style={
-                    styles.cancelledOrderValue
-                  }
-                >
-                  {
-                    orders.cancelled
-                  }
-                </Text>
+                <Ionicons
+                  name="close-circle-outline"
+                  size={15}
+                  color={COLORS.red}
+                />
 
                 <Text
                   style={
-                    styles.orderStatLabel
+                    styles.orderFooterLabel
                   }
                 >
                   Cancelled
                 </Text>
+
+                <Text
+                  style={
+                    styles.orderFooterValue
+                  }
+                >
+                  {formatNumber(
+                    orders.cancelled
+                  )}
+                </Text>
               </View>
+
+              <Pressable
+                style={
+                  styles.orderFooterLink
+                }
+                onPress={() =>
+                  router.push(
+                    "/(admin)/admin-orders"
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.orderFooterLinkText
+                  }
+                >
+                  Monitor orders
+                </Text>
+
+                <Ionicons
+                  name="arrow-forward"
+                  size={14}
+                  color={
+                    COLORS.purpleAccent
+                  }
+                />
+              </Pressable>
             </View>
           </View>
 
-          {/* ===============================================
-              FINANCIAL OVERVIEW
-          =============================================== */}
+          {/*
+           * ===============================================
+           * FINANCIAL OVERVIEW
+           * ===============================================
+           */}
+
+          <View
+            style={
+              styles.sectionHeadingRow
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.contentHeading
+                }
+              >
+                Financial Overview
+              </Text>
+
+              <Text
+                style={
+                  styles.contentSubheading
+                }
+              >
+                Recognized marketplace
+                transactions
+              </Text>
+            </View>
+
+            <Pressable
+              style={
+                styles.viewAllButton
+              }
+              onPress={() =>
+                router.push(
+                  "/(admin)/admin-reports"
+                )
+              }
+            >
+              <Text
+                style={
+                  styles.viewAllText
+                }
+              >
+                View Report
+              </Text>
+
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={
+                  COLORS.purpleAccent
+                }
+              />
+            </Pressable>
+          </View>
 
           <Pressable
             style={
-              styles.financeCard
+              styles.financialCard
             }
             onPress={() =>
               router.push(
@@ -1366,99 +1602,153 @@ export default function AdminDashboardScreen() {
           >
             <View
               style={
-                styles.financeTop
+                styles.financialHeader
               }
             >
-              <View>
+              <View
+                style={
+                  styles.financialIcon
+                }
+              >
+                <Ionicons
+                  name="analytics-outline"
+                  size={21}
+                  color="#FFFFFF"
+                />
+              </View>
+
+              <View
+                style={
+                  styles.financialHeaderText
+                }
+              >
                 <Text
                   style={
-                    styles.sectionTitle
+                    styles.financialEyebrow
                   }
                 >
-                  Financial
-                  Overview
+                  RECOGNIZED SALES
                 </Text>
 
                 <Text
                   style={
-                    styles.sectionSubtitle
+                    styles.financialTitle
                   }
                 >
-                  Successful
-                  platform
-                  transactions
+                  Marketplace Revenue
                 </Text>
               </View>
 
-              <Text
-                style={
-                  styles.chevron
-                }
-              >
-                ›
-              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color="rgba(255,255,255,0.65)"
+              />
             </View>
 
             <Text
               style={
-                styles.totalRevenueLabel
+                styles.financialValue
               }
-            >
-              Total Revenue
-            </Text>
-
-            <Text
-              style={
-                styles.totalRevenueValue
-              }
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
               {formatCurrency(
                 revenue.total
               )}
             </Text>
 
-            <Text
+            <View
               style={
-                styles.commissionNote
+                styles.financialDivider
+              }
+            />
+
+            <View
+              style={
+                styles.financialBottom
               }
             >
-              Commission,
-              payout and
-              detailed financial
-              analytics are
-              available in
-              Reports.
-            </Text>
+              <View>
+                <Text
+                  style={
+                    styles.financialSmallLabel
+                  }
+                >
+                  Today
+                </Text>
+
+                <Text
+                  style={
+                    styles.financialSmallValue
+                  }
+                >
+                  {formatCurrency(
+                    revenue.today
+                  )}
+                </Text>
+              </View>
+
+              <Pressable
+                style={
+                  styles.todayReportButton
+                }
+                onPress={
+                  openTodayReport
+                }
+              >
+                <Text
+                  style={
+                    styles.todayReportText
+                  }
+                >
+                  Today&apos;s Report
+                </Text>
+
+                <Ionicons
+                  name="arrow-forward"
+                  size={14}
+                  color="#FFFFFF"
+                />
+              </Pressable>
+            </View>
           </Pressable>
 
-          {/* ===============================================
-              SYSTEM ACTIVITY
-          =============================================== */}
+          {/*
+           * ===============================================
+           * SYSTEM ACTIVITY
+           * ===============================================
+           */}
+
+          <View
+            style={
+              styles.sectionHeadingRow
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.contentHeading
+                }
+              >
+                System Activity
+              </Text>
+
+              <Text
+                style={
+                  styles.contentSubheading
+                }
+              >
+                Recent platform activity
+              </Text>
+            </View>
+          </View>
 
           <View
             style={
               styles.activityCard
             }
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              System Activity
-            </Text>
-
-            <Text
-              style={
-                styles.sectionSubtitle
-              }
-            >
-              Recent orders,
-              verification
-              requests and
-              remittances
-            </Text>
-
             {activities.length ===
             0 ? (
               <View
@@ -1466,23 +1756,135 @@ export default function AdminDashboardScreen() {
                   styles.emptyActivity
                 }
               >
+                <View
+                  style={
+                    styles.emptyActivityIcon
+                  }
+                >
+                  <Ionicons
+                    name="notifications-outline"
+                    size={23}
+                    color={
+                      COLORS.mutedText
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.emptyActivityTitle
+                  }
+                >
+                  No recent activity
+                </Text>
+
                 <Text
                   style={
                     styles.emptyActivityText
                   }
                 >
-                  No recent
-                  activity.
+                  Recent orders,
+                  verification requests,
+                  and remittances will
+                  appear here.
                 </Text>
               </View>
             ) : (
               activities.map(
-                (item) => (
-                  <ActivityRow
-                    key={`${item.type}-${item.id}`}
-                    item={item}
-                  />
-                )
+                (
+                  activity,
+                  index
+                ) => {
+                  const color =
+                    getActivityColor(
+                      activity.type
+                    );
+
+                  return (
+                    <View
+                      key={`${activity.type}-${activity.id}-${index}`}
+                    >
+                      <View
+                        style={
+                          styles.activityRow
+                        }
+                      >
+                        <View
+                          style={[
+                            styles.activityIcon,
+                            {
+                              backgroundColor: `${color}18`,
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={getActivityIcon(
+                              activity.type
+                            )}
+                            size={17}
+                            color={
+                              color
+                            }
+                          />
+                        </View>
+
+                        <View
+                          style={
+                            styles.activityInfo
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.activityTitle
+                            }
+                            numberOfLines={
+                              1
+                            }
+                          >
+                            {getActivityTitle(
+                              activity
+                            )}
+                          </Text>
+
+                          <Text
+                            style={
+                              styles.activitySubtitle
+                            }
+                            numberOfLines={
+                              1
+                            }
+                          >
+                            {getActivitySubtitle(
+                              activity
+                            )}
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={
+                            styles.activityTime
+                          }
+                        >
+                          {formatTimeAgo(
+                            getActivityDate(
+                              activity
+                            )
+                          )}
+                        </Text>
+                      </View>
+
+                      {index <
+                        activities.length -
+                          1 && (
+                        <View
+                          style={
+                            styles.activityDivider
+                          }
+                        />
+                      )}
+                    </View>
+                  );
+                }
               )
             )}
           </View>
@@ -1494,228 +1896,66 @@ export default function AdminDashboardScreen() {
           />
         </ScrollView>
 
-        {/* =================================================
-            BOTTOM NAVIGATION
-        ================================================= */}
+        {/*
+         * =================================================
+         * BOTTOM NAVIGATION
+         * =================================================
+         */}
 
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                "/(admin)/admin-dashboard"
-              )
-            }
-          >
-            <View
-              style={
-                styles.activeNavIcon
-              }
-            >
-              <Text
-                style={
-                  styles.activeNavSymbol
+        <View style={styles.bottomNavigation}>
+        {ADMIN_NAV_ITEMS.map((item) => {
+          const isActive =
+            item.label === "Dashboard";
+
+          return (
+            <Pressable
+              key={item.label}
+              style={styles.bottomNavItem}
+              onPress={() => {
+                if (isActive) {
+                  return;
                 }
+
+                router.replace(
+                  item.route
+                );
+              }}
+            >
+              <View
+                style={[
+                  styles.bottomNavIconWrap,
+                  isActive &&
+                    styles.bottomNavIconWrapActive,
+                ]}
               >
-                ⌂
+                <Ionicons
+                  name={
+                    isActive
+                      ? item.activeIcon
+                      : item.icon
+                  }
+                  size={19}
+                  color={
+                    isActive
+                      ? COLORS.purpleAccent
+                      : COLORS.mutedText
+                  }
+                />
+              </View>
+
+              <Text
+                style={[
+                  styles.bottomNavLabel,
+                  isActive &&
+                    styles.bottomNavLabelActive,
+                ]}
+              >
+                {item.label}
               </Text>
-            </View>
-
-            <Text
-              style={
-                styles.activeNavText
-              }
-            >
-              Dashboard
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(admin)/admin-users"
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              ♙
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Users
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(admin)/admin-orders"
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              ◈
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Orders
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(admin)/admin-reports"
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              ▥
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Reports
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(admin)/admin-settings"
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              ⚙
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Settings
-            </Text>
-          </Pressable>
-        </View>
+            </Pressable>
+          );
+        })}
       </View>
-    </SafeAreaView>
-  );
-}
-
-/*
- * =========================================================
- * ACTIVITY ROW
- * =========================================================
- */
-
-function ActivityRow({
-  item,
-}: {
-  item: AdminRecentActivity;
-}) {
-  return (
-    <View
-      style={
-        styles.activityRow
-      }
-    >
-      <View
-        style={[
-          styles.activityDot,
-          {
-            backgroundColor:
-              getActivityColor(
-                item.type
-              ),
-          },
-        ]}
-      />
-
-      <View
-        style={
-          styles.activityInfo
-        }
-      >
-        <Text
-          style={
-            styles.activityTitle
-          }
-        >
-          {getActivityTitle(
-            item
-          )}
-        </Text>
-
-        <Text
-          style={
-            styles.activitySubtitle
-          }
-          numberOfLines={1}
-        >
-          {getActivitySubtitle(
-            item
-          )}
-        </Text>
-      </View>
-
-      <Text
-        style={
-          styles.activityTime
-        }
-      >
-        {formatTimeAgo(
-          getActivityDate(
-            item
-          )
-        )}
-      </Text>
     </View>
   );
 }
@@ -1731,85 +1971,93 @@ const styles =
     container: {
       flex: 1,
       backgroundColor:
-        "#F5F5F8",
+        COLORS.background,
     },
 
     screen: {
       flex: 1,
       backgroundColor:
-        "#F5F5F8",
+        COLORS.background,
     },
 
     loadingContainer: {
       flex: 1,
-      backgroundColor:
-        "#F5F5F8",
       alignItems: "center",
-      justifyContent:
-        "center",
+      justifyContent: "center",
+      backgroundColor:
+        COLORS.background,
       paddingHorizontal: 28,
     },
 
     loadingText: {
-      marginTop: 12,
-      color: "#88858E",
-      fontSize: 12,
+      marginTop: 13,
+      fontSize: 13,
+      color:
+        COLORS.secondaryText,
     },
 
-    errorSymbol: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+    errorIcon: {
+      width: 54,
+      height: 54,
+      borderRadius: 27,
       backgroundColor:
-        "#FFF0F3",
-      color: "#E56391",
-      textAlign: "center",
-      lineHeight: 46,
-      fontSize: 24,
-      fontWeight: "800",
+        COLORS.redLight,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 14,
     },
 
     errorTitle: {
-      marginTop: 13,
-      color: "#3B3940",
-      fontSize: 17,
+      fontSize: 18,
       fontWeight: "800",
+      color: COLORS.text,
+      textAlign: "center",
     },
 
     errorText: {
-      color: "#99949A",
-      fontSize: 11,
-      textAlign: "center",
-      lineHeight: 17,
       marginTop: 7,
+      fontSize: 12,
+      lineHeight: 18,
+      color:
+        COLORS.secondaryText,
+      textAlign: "center",
     },
 
     retryButton: {
-      marginTop: 17,
+      marginTop: 18,
+      paddingHorizontal: 20,
+      minHeight: 44,
+      borderRadius: 13,
       backgroundColor:
-        "#5552B9",
-      borderRadius: 12,
-      paddingHorizontal: 22,
-      paddingVertical: 11,
+        COLORS.purpleAccent,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 7,
     },
 
     retryText: {
-      color: "#FFFFFF",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "700",
+      color: "#FFFFFF",
     },
 
     /*
+     * =====================================================
      * HEADER
+     * =====================================================
      */
 
     header: {
-      backgroundColor:
-        "#24245D",
-      paddingHorizontal: 19,
-      paddingTop: 18,
-      paddingBottom: 18,
-      overflow: "hidden",
+position: "relative",
+  overflow: "hidden",
+  backgroundColor: COLORS.purple,
+  paddingTop: 54,
+  paddingHorizontal: 18,
+  paddingBottom: 23,
+  borderBottomLeftRadius: 26,
+  borderBottomRightRadius: 26,
     },
 
     headerCircleOne: {
@@ -1819,19 +2067,19 @@ const styles =
       borderRadius: 90,
       backgroundColor:
         "rgba(255,255,255,0.035)",
-      top: -100,
-      right: -55,
+      right: -70,
+      top: -80,
     },
 
     headerCircleTwo: {
       position: "absolute",
-      width: 140,
-      height: 140,
-      borderRadius: 70,
+      width: 110,
+      height: 110,
+      borderRadius: 55,
       backgroundColor:
         "rgba(255,255,255,0.025)",
-      bottom: -80,
-      left: -45,
+      left: -55,
+      bottom: -45,
     },
 
     headerTop: {
@@ -1843,94 +2091,96 @@ const styles =
     },
 
     systemOverview: {
-      color: "#A8A8CA",
       fontSize: 9,
-      marginTop: 4,
+      fontWeight: "800",
+      letterSpacing: 1.3,
+      color:
+        "rgba(255,255,255,0.62)",
       textTransform:
         "uppercase",
-      letterSpacing: 0.6,
     },
 
     title: {
-      color: "#FFFFFF",
-      fontSize: 20,
+      marginTop: 4,
+      fontSize: 25,
       fontWeight: "800",
-      marginTop: 2,
+      color: "#FFFFFF",
     },
 
     welcomeText: {
-      color: "#A8A8CA",
-      fontSize: 8,
-      marginTop: 3,
+      marginTop: 5,
+      fontSize: 11,
+      color:
+        "rgba(255,255,255,0.65)",
     },
 
     headerMenu: {
-      width: 40,
-      height: 40,
+      width: 39,
+      height: 39,
+      borderRadius: 20,
+      backgroundColor:
+        "rgba(255,255,255,0.10)",
       alignItems: "center",
-      justifyContent:
-        "center",
+      justifyContent: "center",
     },
-
-    headerMenuText: {
-      color: "#FFFFFF",
-      fontSize: 18,
-      fontWeight: "800",
-    },
-
-    /*
-     * SUMMARY
-     */
 
     summaryGrid: {
+      marginTop: 20,
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: 9,
-      marginTop: 15,
+      justifyContent:
+        "space-between",
+      rowGap: 10,
     },
 
     summaryCard: {
       width: "48.5%",
-      minHeight: 72,
+      minHeight: 100,
+      padding: 13,
+      borderRadius: 16,
       backgroundColor:
-        "#3A3975",
-      borderRadius: 13,
-      paddingHorizontal: 11,
-      paddingVertical: 10,
+        "rgba(255,255,255,0.10)",
     },
 
     summaryLabel: {
-      color: "#B8B8D3",
-      fontSize: 8,
+      fontSize: 9,
+      fontWeight: "600",
+      color:
+        "rgba(255,255,255,0.68)",
     },
 
     summaryValue: {
-      color: "#FFFFFF",
-      fontSize: 17,
+      marginTop: 5,
+      fontSize: 21,
       fontWeight: "800",
-      marginTop: 3,
-    },
-
-    positiveText: {
-      color: "#76CE9B",
-      fontSize: 7,
-      marginTop: 4,
-    },
-
-    warningText: {
-      color: "#F2C36B",
-      fontSize: 7,
-      marginTop: 4,
+      color: "#FFFFFF",
     },
 
     summaryMeta: {
-      color: "#B8B8D3",
-      fontSize: 7,
       marginTop: 4,
+      fontSize: 9,
+      color:
+        "rgba(255,255,255,0.54)",
+    },
+
+    positiveText: {
+      marginTop: 4,
+      fontSize: 9,
+      fontWeight: "600",
+      color: "#A7E2BB",
+    },
+
+    warningText: {
+      marginTop: 4,
+      fontSize: 9,
+      fontWeight: "600",
+      color: "#FFD98C",
     },
 
     /*
-     * CONTENT
+     * =====================================================
+     * SCROLL CONTENT
+     * =====================================================
      */
 
     scrollView: {
@@ -1938,41 +2188,79 @@ const styles =
     },
 
     scrollContent: {
-      paddingHorizontal: 16,
-      paddingTop: 14,
+      paddingHorizontal: 18,
+      paddingTop: 18,
     },
 
     inlineError: {
+      marginBottom: 13,
+      padding: 11,
+      borderRadius: 12,
       backgroundColor:
-        "#FFF0F3",
-      borderRadius: 10,
-      padding: 10,
-      marginBottom: 12,
+        COLORS.redLight,
+      flexDirection: "row",
+      alignItems:
+        "flex-start",
+      gap: 7,
     },
 
     inlineErrorText: {
-      color: "#D95C83",
-      fontSize: 9,
+      flex: 1,
+      fontSize: 11,
+      lineHeight: 16,
+      color: COLORS.red,
     },
 
     contentHeading: {
-      color: "#3B3940",
-      fontSize: 11,
+      fontSize: 16,
       fontWeight: "800",
-      marginTop: 14,
-      marginBottom: 7,
+      color: COLORS.text,
     },
 
-    /*
+    contentSubheading: {
+      marginTop: 2,
+      fontSize: 10,
+      color:
+        COLORS.secondaryText,
+    },
+
+    sectionHeadingRow: {
+      marginTop: 21,
+      marginBottom: 11,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    viewAllButton: {
+      minHeight: 32,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 2,
+      paddingHorizontal: 7,
+    },
+
+    viewAllText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color:
+        COLORS.purpleAccent,
+    },
+        /*
+     * =====================================================
      * ADMIN ACTIONS
+     * =====================================================
      */
 
     verificationCard: {
+      padding: 15,
+      borderRadius: 18,
       backgroundColor:
-        "#FFFFFF",
-      borderRadius: 15,
-      padding: 13,
-      elevation: 2,
+        COLORS.card,
+      borderWidth: 1,
+      borderColor:
+        COLORS.border,
     },
 
     sectionHeader: {
@@ -1980,406 +2268,541 @@ const styles =
       alignItems: "center",
       justifyContent:
         "space-between",
-      marginBottom: 5,
+      marginBottom: 9,
     },
 
     sectionTitle: {
-      color: "#3B3940",
-      fontSize: 11,
+      fontSize: 15,
       fontWeight: "800",
+      color: COLORS.text,
     },
 
     sectionSubtitle: {
-      color: "#AAA7AC",
-      fontSize: 7,
-      marginTop: 3,
+      marginTop: 2,
+      fontSize: 9,
+      color:
+        COLORS.secondaryText,
     },
 
     countBadge: {
-      minWidth: 23,
-      height: 23,
-      borderRadius: 12,
-      paddingHorizontal: 7,
+      minWidth: 28,
+      height: 28,
+      paddingHorizontal: 8,
+      borderRadius: 14,
       backgroundColor:
-        "#E96291",
+        COLORS.purpleLight,
       alignItems: "center",
-      justifyContent:
-        "center",
+      justifyContent: "center",
     },
 
     countText: {
-      color: "#FFFFFF",
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: "800",
+      color:
+        COLORS.purpleAccent,
     },
 
     adminActionRow: {
-      minHeight: 53,
+      minHeight: 62,
       flexDirection: "row",
       alignItems: "center",
     },
 
     actionIcon: {
-      width: 31,
-      height: 31,
-      borderRadius: 16,
+      width: 36,
+      height: 36,
+      borderRadius: 12,
       alignItems: "center",
-      justifyContent:
-        "center",
-      marginRight: 9,
+      justifyContent: "center",
+      marginRight: 10,
     },
 
     sellerActionIcon: {
       backgroundColor:
-        "#EAF7EF",
+        COLORS.greenLight,
     },
 
     riderActionIcon: {
       backgroundColor:
-        "#FFF2D8",
+        COLORS.yellowLight,
     },
 
     remittanceActionIcon: {
       backgroundColor:
-        "#ECECFF",
-    },
-
-    actionIconText: {
-      color: "#5552B9",
-      fontSize: 10,
-      fontWeight: "800",
+        COLORS.purpleLight,
     },
 
     actionInfo: {
       flex: 1,
+      minWidth: 0,
     },
 
     actionTitle: {
-      color: "#4A474D",
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: "700",
+      color: COLORS.text,
     },
 
     actionMeta: {
-      color: "#AAA7AC",
-      fontSize: 7,
       marginTop: 3,
+      fontSize: 9,
+      color:
+        COLORS.secondaryText,
     },
 
     actionCount: {
-      minWidth: 25,
-      height: 22,
-      borderRadius: 11,
+      minWidth: 27,
+      height: 27,
       paddingHorizontal: 7,
+      borderRadius: 14,
       backgroundColor:
-        "#F3F3F7",
+        COLORS.background,
       alignItems: "center",
-      justifyContent:
-        "center",
+      justifyContent: "center",
+      marginRight: 5,
     },
 
     actionCountText: {
-      color: "#6F6C74",
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "800",
-    },
-
-    chevron: {
-      color: "#AAA7AC",
-      fontSize: 19,
-      marginLeft: 6,
+      color: COLORS.text,
     },
 
     rowDivider: {
       height: 1,
+      marginLeft: 46,
       backgroundColor:
-        "#F0F0F3",
-      marginLeft: 40,
+        COLORS.border,
     },
 
     /*
-     * USER COUNTS
+     * =====================================================
+     * PLATFORM USERS
+     * =====================================================
      */
 
     userStatsRow: {
+      marginTop: 11,
       flexDirection: "row",
+      justifyContent:
+        "space-between",
       gap: 8,
     },
 
     userStatCard: {
       flex: 1,
-      height: 61,
-      borderRadius: 13,
+      minHeight: 86,
+      paddingHorizontal: 10,
+      paddingVertical: 13,
+      borderRadius: 16,
       alignItems: "center",
-      justifyContent:
-        "center",
+      justifyContent: "center",
+      borderWidth: 1,
     },
 
     customerCard: {
       backgroundColor:
-        "#FFE7EF",
+        "#F0EEFF",
+      borderColor:
+        "#E2DEFF",
     },
 
     sellerCard: {
       backgroundColor:
-        "#EAF7EF",
+        COLORS.greenLight,
+      borderColor:
+        "#D8EFE0",
     },
 
     riderCard: {
       backgroundColor:
-        "#FFF2D8",
+        COLORS.yellowLight,
+      borderColor:
+        "#F5E4BE",
     },
 
     customerValue: {
-      color: "#DF6E94",
-      fontSize: 16,
+      fontSize: 21,
       fontWeight: "800",
+      color:
+        COLORS.purpleAccent,
     },
 
     sellerValue: {
-      color: "#6AA880",
-      fontSize: 16,
+      fontSize: 21,
       fontWeight: "800",
+      color: COLORS.green,
     },
 
     riderValue: {
-      color: "#D49B35",
-      fontSize: 16,
+      fontSize: 21,
       fontWeight: "800",
+      color: COLORS.yellow,
     },
 
     userStatLabel: {
-      color: "#99949A",
-      fontSize: 7,
       marginTop: 4,
+      fontSize: 9,
+      fontWeight: "600",
+      color:
+        COLORS.secondaryText,
     },
 
     /*
-     * ORDERS
+     * =====================================================
+     * ORDER MONITORING
+     * =====================================================
      */
 
-    orderCard: {
+    orderOverviewCard: {
+      padding: 15,
+      borderRadius: 18,
       backgroundColor:
-        "#FFFFFF",
-      borderRadius: 15,
-      padding: 13,
-      marginTop: 13,
-      elevation: 2,
+        COLORS.card,
+      borderWidth: 1,
+      borderColor:
+        COLORS.border,
     },
 
-    viewAllText: {
-      color: "#5552B9",
-      fontSize: 8,
-      fontWeight: "700",
-    },
-
-    orderStatsRow: {
+    orderOverviewRow: {
       flexDirection: "row",
-      alignItems: "center",
-      marginTop: 13,
+      alignItems: "stretch",
     },
 
-    orderStat: {
+    orderMetric: {
       flex: 1,
       alignItems: "center",
+      paddingVertical: 4,
     },
 
-    orderDivider: {
+    orderMetricIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 8,
+    },
+
+    orderMetricValue: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: COLORS.text,
+    },
+
+    orderMetricLabel: {
+      marginTop: 2,
+      fontSize: 8,
+      fontWeight: "600",
+      color:
+        COLORS.secondaryText,
+      textAlign: "center",
+    },
+
+    metricDivider: {
       width: 1,
-      height: 29,
       backgroundColor:
-        "#ECECF0",
+        COLORS.border,
+      marginHorizontal: 5,
     },
 
-    activeOrderValue: {
-      color: "#D49B35",
-      fontSize: 15,
-      fontWeight: "800",
-    },
-
-    completedOrderValue: {
-      color: "#6AA880",
-      fontSize: 15,
-      fontWeight: "800",
-    },
-
-    cancelledOrderValue: {
-      color: "#DF6E94",
-      fontSize: 15,
-      fontWeight: "800",
-    },
-
-    orderStatLabel: {
-      color: "#99949A",
-      fontSize: 7,
-      marginTop: 4,
-    },
-
-    /*
-     * FINANCE
-     */
-
-    financeCard: {
-      backgroundColor:
-        "#FFFFFF",
-      borderRadius: 15,
-      padding: 13,
-      marginTop: 13,
-      elevation: 2,
-    },
-
-    financeTop: {
+    orderFooter: {
+      marginTop: 14,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor:
+        COLORS.border,
       flexDirection: "row",
       alignItems: "center",
       justifyContent:
         "space-between",
     },
 
-    totalRevenueLabel: {
-      color: "#99949A",
-      fontSize: 7,
-      marginTop: 13,
+    orderFooterItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
     },
 
-    totalRevenueValue: {
-      color: "#5552B9",
-      fontSize: 19,
+    orderFooterLabel: {
+      fontSize: 9,
+      color:
+        COLORS.secondaryText,
+    },
+
+    orderFooterValue: {
+      fontSize: 10,
       fontWeight: "800",
-      marginTop: 2,
+      color: COLORS.red,
     },
 
-    commissionNote: {
-      color: "#AAA7AC",
-      fontSize: 7,
-      lineHeight: 11,
-      marginTop: 5,
+    orderFooterLink: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+    },
+
+    orderFooterLinkText: {
+      fontSize: 9,
+      fontWeight: "700",
+      color:
+        COLORS.purpleAccent,
     },
 
     /*
-     * ACTIVITY
+     * =====================================================
+     * FINANCIAL OVERVIEW
+     * =====================================================
+     */
+
+    financialCard: {
+      overflow: "hidden",
+      padding: 17,
+      borderRadius: 19,
+      backgroundColor:
+        COLORS.purple,
+    },
+
+    financialHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    financialIcon: {
+      width: 39,
+      height: 39,
+      borderRadius: 12,
+      backgroundColor:
+        "rgba(255,255,255,0.11)",
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 10,
+    },
+
+    financialHeaderText: {
+      flex: 1,
+    },
+
+    financialEyebrow: {
+      fontSize: 8,
+      fontWeight: "800",
+      letterSpacing: 1,
+      color:
+        "rgba(255,255,255,0.55)",
+    },
+
+    financialTitle: {
+      marginTop: 2,
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+
+    financialValue: {
+      marginTop: 18,
+      fontSize: 27,
+      fontWeight: "800",
+      color: "#FFFFFF",
+    },
+
+    financialDivider: {
+      height: 1,
+      marginTop: 17,
+      marginBottom: 13,
+      backgroundColor:
+        "rgba(255,255,255,0.10)",
+    },
+
+    financialBottom: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    financialSmallLabel: {
+      fontSize: 8,
+      color:
+        "rgba(255,255,255,0.55)",
+    },
+
+    financialSmallValue: {
+      marginTop: 2,
+      fontSize: 13,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+
+    todayReportButton: {
+      minHeight: 33,
+      paddingHorizontal: 11,
+      borderRadius: 17,
+      backgroundColor:
+        "rgba(255,255,255,0.11)",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+    },
+
+    todayReportText: {
+      fontSize: 9,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+
+    /*
+     * =====================================================
+     * SYSTEM ACTIVITY
+     * =====================================================
      */
 
     activityCard: {
+      overflow: "hidden",
+      borderRadius: 18,
       backgroundColor:
-        "#FFFFFF",
-      borderRadius: 15,
-      paddingHorizontal: 13,
-      paddingVertical: 13,
-      marginTop: 13,
-      elevation: 2,
+        COLORS.card,
+      borderWidth: 1,
+      borderColor:
+        COLORS.border,
     },
 
     activityRow: {
+      minHeight: 65,
+      paddingHorizontal: 14,
       flexDirection: "row",
       alignItems: "center",
-      minHeight: 43,
-      borderBottomWidth: 1,
-      borderBottomColor:
-        "#F2F2F5",
     },
 
-    activityDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      marginRight: 8,
+    activityIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 10,
     },
 
     activityInfo: {
       flex: 1,
+      minWidth: 0,
     },
 
     activityTitle: {
-      color: "#4A474D",
-      fontSize: 8,
+      fontSize: 10,
       fontWeight: "700",
+      color: COLORS.text,
     },
 
     activitySubtitle: {
-      color: "#AAA7AC",
-      fontSize: 7,
-      marginTop: 2,
+      marginTop: 3,
+      fontSize: 9,
+      color:
+        COLORS.secondaryText,
     },
 
     activityTime: {
-      color: "#B6B3B7",
-      fontSize: 7,
-      marginLeft: 7,
+      marginLeft: 8,
+      fontSize: 8,
+      color:
+        COLORS.mutedText,
+    },
+
+    activityDivider: {
+      height: 1,
+      marginLeft: 60,
+      backgroundColor:
+        COLORS.border,
     },
 
     emptyActivity: {
-      minHeight: 60,
+      paddingHorizontal: 20,
+      paddingVertical: 27,
       alignItems: "center",
-      justifyContent:
-        "center",
+    },
+
+    emptyActivityIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor:
+        COLORS.background,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 9,
+    },
+
+    emptyActivityTitle: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: COLORS.text,
     },
 
     emptyActivityText: {
-      color: "#AAA7AC",
-      fontSize: 8,
+      marginTop: 4,
+      maxWidth: 250,
+      fontSize: 9,
+      lineHeight: 14,
+      color:
+        COLORS.secondaryText,
+      textAlign: "center",
     },
 
     bottomSpacer: {
-      height: 20,
+      height: 25,
     },
+/*
+ * =====================================================
+ * BOTTOM NAVIGATION
+ * =====================================================
+ */
 
-    /*
-     * BOTTOM NAVIGATION
-     */
+bottomNavigation: {
+  minHeight: 76,
+  paddingTop: 7,
+  paddingBottom: 9,
+  paddingHorizontal: 6,
 
-    bottomNavigation: {
-      height: 70,
-      backgroundColor:
-        "#FFFFFF",
-      borderTopWidth: 1,
-      borderTopColor:
-        "#ECECF0",
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent:
-        "space-around",
-      paddingBottom: 3,
-    },
+  flexDirection: "row",
+  alignItems: "flex-start",
+  justifyContent: "space-around",
 
-    navItem: {
-      flex: 1,
-      height: "100%",
-      alignItems: "center",
-      justifyContent:
-        "center",
-    },
+  backgroundColor: "#FFFFFF",
 
-    activeNavIcon: {
-      width: 34,
-      height: 29,
-      borderRadius: 15,
-      backgroundColor:
-        "#ECECFF",
-      alignItems: "center",
-      justifyContent:
-        "center",
-    },
+  borderTopWidth: 1,
+  borderTopColor: COLORS.border,
+},
 
-    activeNavSymbol: {
-      color: "#5652C9",
-      fontSize: 16,
-    },
+bottomNavItem: {
+  flex: 1,
+  minHeight: 57,
+  alignItems: "center",
+  justifyContent: "flex-start",
+},
 
-    navIcon: {
-      color: "#9A99A4",
-      fontSize: 16,
-    },
+bottomNavIconWrap: {
+  width: 36,
+  height: 31,
+  borderRadius: 16,
+  alignItems: "center",
+  justifyContent: "center",
+},
 
-    activeNavText: {
-      color: "#5652C9",
-      fontSize: 8,
-      fontWeight: "700",
-      marginTop: 3,
-    },
+bottomNavIconWrapActive: {
+  backgroundColor: COLORS.purpleLight,
+},
 
-    navText: {
-      color: "#9D9CA5",
-      fontSize: 8,
-      marginTop: 4,
-    },
-  });
+bottomNavLabel: {
+  marginTop: 2,
+  fontSize: 9,
+  lineHeight: 13,
+  fontWeight: "500",
+  color: COLORS.mutedText,
+  textAlign: "center",
+},
+
+bottomNavLabelActive: {
+  fontWeight: "700",
+  color: COLORS.purpleAccent,
+},
+});

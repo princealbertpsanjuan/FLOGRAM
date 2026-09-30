@@ -9,7 +9,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -57,10 +56,7 @@ function getFloristId(florist: AdminFlorist) {
 }
 
 function getOwner(florist: AdminFlorist) {
-  if (
-    florist.owner &&
-    typeof florist.owner === "object"
-  ) {
+  if (florist.owner && typeof florist.owner === "object") {
     return florist.owner;
   }
 
@@ -131,7 +127,11 @@ export default function AdminSellerVerificationScreen() {
 
   const [florists, setFlorists] = useState<AdminFlorist[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Pull-to-refresh and header refresh are intentionally separate.
   const [refreshing, setRefreshing] = useState(false);
+  const [headerRefreshing, setHeaderRefreshing] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   const [processingId, setProcessingId] = useState<string | null>(
@@ -228,41 +228,70 @@ export default function AdminSellerVerificationScreen() {
     void loadFlorists(false);
   }, [loadFlorists]);
 
+  const handleHeaderRefresh = useCallback(async () => {
+    if (headerRefreshing || processingId) {
+      return;
+    }
+
+    try {
+      setHeaderRefreshing(true);
+      setError(null);
+
+      const data = await getPendingFlorists();
+
+      setFlorists(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to refresh pending sellers:", err);
+
+      Alert.alert(
+        "Unable to Refresh",
+        err instanceof Error
+          ? err.message
+          : "The seller applications could not be refreshed."
+      );
+    } finally {
+      setHeaderRefreshing(false);
+    }
+  }, [headerRefreshing, processingId]);
+
   /* =======================================================
    * DETAILS
    * =======================================================*/
 
-  const openDetails = useCallback(async (florist: AdminFlorist) => {
-    const floristId = getFloristId(florist);
+  const openDetails = useCallback(
+    async (florist: AdminFlorist) => {
+      const floristId = getFloristId(florist);
 
-    if (!floristId) {
-      Alert.alert(
-        "Unable to Open",
-        "The seller profile ID is missing."
-      );
-      return;
-    }
+      if (!floristId) {
+        Alert.alert(
+          "Unable to Open",
+          "The seller profile ID is missing."
+        );
+        return;
+      }
 
-    setSelectedFlorist(florist);
-    setDetailsVisible(true);
-    setDetailsLoading(true);
+      setSelectedFlorist(florist);
+      setDetailsVisible(true);
+      setDetailsLoading(true);
 
-    try {
-      const fullFlorist = await getAdminFloristById(floristId);
-      setSelectedFlorist(fullFlorist);
-    } catch (err) {
-      console.error("Failed to load seller details:", err);
+      try {
+        const fullFlorist = await getAdminFloristById(floristId);
+        setSelectedFlorist(fullFlorist);
+      } catch (err) {
+        console.error("Failed to load seller details:", err);
 
-      Alert.alert(
-        "Unable to Load Details",
-        err instanceof Error
-          ? err.message
-          : "Seller details could not be loaded."
-      );
-    } finally {
-      setDetailsLoading(false);
-    }
-  }, []);
+        Alert.alert(
+          "Unable to Load Details",
+          err instanceof Error
+            ? err.message
+            : "Seller details could not be loaded."
+        );
+      } finally {
+        setDetailsLoading(false);
+      }
+    },
+    []
+  );
 
   /* =======================================================
    * APPROVE
@@ -405,18 +434,16 @@ export default function AdminSellerVerificationScreen() {
 
   if (loading && florists.length === 0) {
     return (
-      <SafeAreaView style={styles.loadingSafeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            size="large"
-            color={COLORS.purpleAccent}
-          />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator
+          size="large"
+          color={COLORS.purpleAccent}
+        />
 
-          <Text style={styles.loadingText}>
-            Loading seller applications...
-          </Text>
-        </View>
-      </SafeAreaView>
+        <Text style={styles.loadingText}>
+          Loading seller applications...
+        </Text>
+      </View>
     );
   }
 
@@ -425,668 +452,794 @@ export default function AdminSellerVerificationScreen() {
    * =======================================================*/
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.purpleAccent}
-              colors={[COLORS.purpleAccent]}
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerDecoration} />
+
+        <View style={styles.headerTop}>
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={19}
+              color="#FFFFFF"
             />
-          }
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* HEADER */}
+          </Pressable>
 
-          <View style={styles.header}>
-            <View style={styles.headerDecoration} />
+          <View style={styles.headerContent}>
+            <Text style={styles.headerEyebrow}>
+              VERIFICATIONS
+            </Text>
 
-            <View style={styles.headerTop}>
-              <Pressable
-                style={styles.headerButton}
-                onPress={() => router.back()}
-              >
-                <Ionicons
-                  name="arrow-back"
-                  size={19}
-                  color="#FFFFFF"
-                />
-              </Pressable>
+            <Text style={styles.headerTitle}>
+              Seller Verification
+            </Text>
 
-              <View style={styles.headerContent}>
-                <Text style={styles.headerEyebrow}>
-                  VERIFICATIONS
-                </Text>
+            <Text style={styles.headerSubtitle}>
+              Review florist applications
+            </Text>
+          </View>
 
-                <Text style={styles.headerTitle}>
-                  Seller Verification
-                </Text>
+          <Pressable
+            style={[
+              styles.headerButton,
+              (headerRefreshing || Boolean(processingId)) &&
+                styles.headerButtonDisabled,
+            ]}
+            disabled={
+              headerRefreshing || Boolean(processingId)
+            }
+            onPress={() => void handleHeaderRefresh()}
+          >
+            {headerRefreshing ? (
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+              />
+            ) : (
+              <Ionicons
+                name="refresh"
+                size={18}
+                color="#FFFFFF"
+              />
+            )}
+          </Pressable>
+        </View>
 
-                <Text style={styles.headerSubtitle}>
-                  Review florist applications
-                </Text>
-              </View>
+        <View style={styles.headerSummary}>
+          <View style={styles.headerSummaryIcon}>
+            <Ionicons
+              name="storefront-outline"
+              size={20}
+              color="#FFFFFF"
+            />
+          </View>
 
-              <Pressable
-                style={styles.headerButton}
-                onPress={() => void loadFlorists()}
-              >
-                <Ionicons
-                  name="refresh"
-                  size={18}
-                  color="#FFFFFF"
-                />
-              </Pressable>
+          <View style={styles.headerSummaryContent}>
+            <Text style={styles.headerSummaryLabel}>
+              Pending Seller Applications
+            </Text>
+
+            <Text style={styles.headerSummarySubtext}>
+              Waiting for Admin review
+            </Text>
+          </View>
+
+          <Text style={styles.headerSummaryValue}>
+            {florists.length}
+          </Text>
+        </View>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.purpleAccent}
+            colors={[COLORS.purpleAccent]}
+          />
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.body}>
+          <View style={styles.introCard}>
+            <View style={styles.introIcon}>
+              <Ionicons
+                name="shield-outline"
+                size={20}
+                color={COLORS.purpleAccent}
+              />
             </View>
 
-            <View style={styles.headerSummary}>
-              <View style={styles.headerSummaryIcon}>
+            <View style={styles.introContent}>
+              <Text style={styles.introTitle}>
+                Seller Applications
+              </Text>
+
+              <Text style={styles.introText}>
+                Review florist shop information before allowing
+                sellers to operate on FLOGRAM.
+              </Text>
+            </View>
+          </View>
+
+          {error ? (
+            <View style={styles.errorCard}>
+              <View style={styles.errorIcon}>
                 <Ionicons
-                  name="storefront-outline"
-                  size={20}
-                  color="#FFFFFF"
+                  name="alert-circle-outline"
+                  size={19}
+                  color={COLORS.red}
                 />
               </View>
 
-              <View style={styles.headerSummaryContent}>
-                <Text style={styles.headerSummaryLabel}>
-                  Pending Seller Applications
+              <View style={styles.errorContent}>
+                <Text style={styles.errorTitle}>
+                  Unable to load sellers
                 </Text>
 
-                <Text style={styles.headerSummarySubtext}>
-                  Waiting for Admin review
+                <Text style={styles.errorText}>
+                  {error}
                 </Text>
               </View>
 
-              <Text style={styles.headerSummaryValue}>
+              <Pressable
+                onPress={() => void loadFlorists()}
+              >
+                <Text style={styles.retryText}>
+                  Retry
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>
+                Pending Applications
+              </Text>
+
+              <Text style={styles.sectionSubtitle}>
+                Florists awaiting verification
+              </Text>
+            </View>
+
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>
                 {florists.length}
               </Text>
             </View>
           </View>
 
-          {/* BODY */}
-
-          <View style={styles.body}>
-            <View style={styles.introCard}>
-              <View style={styles.introIcon}>
+          {!error && florists.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
                 <Ionicons
-  name="shield-outline"
-  size={20}
-  color={COLORS.purpleAccent}
-/>
-              </View>
-
-              <View style={styles.introContent}>
-                <Text style={styles.introTitle}>
-                  Seller Applications
-                </Text>
-
-                <Text style={styles.introText}>
-                  Review florist shop information before allowing
-                  sellers to operate on FLOGRAM.
-                </Text>
-              </View>
-            </View>
-
-            {error ? (
-              <View style={styles.errorCard}>
-                <View style={styles.errorIcon}>
-                  <Ionicons
-                    name="alert-circle-outline"
-                    size={19}
-                    color={COLORS.red}
-                  />
-                </View>
-
-                <View style={styles.errorContent}>
-                  <Text style={styles.errorTitle}>
-                    Unable to load sellers
-                  </Text>
-
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-
-                <Pressable onPress={() => void loadFlorists()}>
-                  <Text style={styles.retryText}>Retry</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>
-                  Pending Applications
-                </Text>
-
-                <Text style={styles.sectionSubtitle}>
-                  Florists awaiting verification
-                </Text>
-              </View>
-
-              <View style={styles.countBadge}>
-                <Text style={styles.countText}>
-                  {florists.length}
-                </Text>
-              </View>
-            </View>
-
-            {!error && florists.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <View style={styles.emptyIcon}>
-          <Ionicons
-  name="checkmark-circle"
-  size={29}
-  color={COLORS.green}
-/>
-                </View>
-
-                <Text style={styles.emptyTitle}>
-                  No pending sellers
-                </Text>
-
-                <Text style={styles.emptyText}>
-                  There are currently no florist applications
-                  waiting for verification.
-                </Text>
-              </View>
-            ) : null}
-
-            {florists.map((florist) => {
-              const floristId = getFloristId(florist);
-              const owner = getOwner(florist);
-              const processing = processingId === floristId;
-
-              return (
-                <View
-                  key={
-                    floristId ||
-                    `${florist.shopName}-${florist.createdAt}`
-                  }
-                  style={styles.sellerCard}
-                >
-                  <Pressable
-                    style={styles.sellerTop}
-                    disabled={processing}
-                    onPress={() => void openDetails(florist)}
-                  >
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>
-                        {getInitials(florist)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.sellerInfo}>
-                      <Text
-                        style={styles.shopName}
-                        numberOfLines={1}
-                      >
-                        {florist.shopName || "Unnamed Shop"}
-                      </Text>
-
-                      <Text
-                        style={styles.ownerName}
-                        numberOfLines={1}
-                      >
-                        {getOwnerName(florist)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.pendingBadge}>
-                      <View style={styles.pendingDot} />
-
-                      <Text style={styles.pendingText}>
-                        Pending
-                      </Text>
-                    </View>
-                  </Pressable>
-
-                  <View style={styles.divider} />
-
-                  <View style={styles.contactContainer}>
-                    <ContactRow
-                      icon="mail-outline"
-                      value={
-                        florist.businessEmail ||
-                        owner?.email ||
-                        "Not provided"
-                      }
-                    />
-
-                    <ContactRow
-                      icon="call-outline"
-                      value={
-                        florist.contactNumber ||
-                        owner?.phoneNumber ||
-                        "Not provided"
-                      }
-                    />
-
-                    <ContactRow
-                      icon="calendar-outline"
-                      value={`Applied ${formatDate(
-                        florist.createdAt
-                      )}`}
-                    />
-                  </View>
-
-                  {florist.description ? (
-                    <Pressable
-                      style={styles.descriptionBox}
-                      onPress={() => void openDetails(florist)}
-                    >
-                      <Text
-                        style={styles.descriptionText}
-                        numberOfLines={2}
-                      >
-                        {florist.description}
-                      </Text>
-
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color={COLORS.mutedText}
-                      />
-                    </Pressable>
-                  ) : null}
-
-                  <View style={styles.cardActions}>
-                    <Pressable
-                      style={[
-                        styles.rejectButton,
-                        processing && styles.disabledButton,
-                      ]}
-                      disabled={processing}
-                      onPress={() => openReject(florist)}
-                    >
-                      <Ionicons
-                        name="close"
-                        size={17}
-                        color={COLORS.red}
-                      />
-
-                      <Text style={styles.rejectText}>
-                        Reject
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={[
-                        styles.approveButton,
-                        processing && styles.disabledButton,
-                      ]}
-                      disabled={processing}
-                      onPress={() => handleApprove(florist)}
-                    >
-                      {processing ? (
-                        <ActivityIndicator
-                          size="small"
-                          color="#FFFFFF"
-                        />
-                      ) : (
-                        <>
-                          <Ionicons
-                            name="checkmark"
-                            size={17}
-                            color="#FFFFFF"
-                          />
-
-                          <Text style={styles.approveText}>
-                            Approve
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-
-            <View style={styles.bottomSpace} />
-          </View>
-        </ScrollView>
-
-        {/* DETAILS MODAL */}
-
-        <Modal
-          visible={detailsVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            if (!processingId) {
-              setDetailsVisible(false);
-            }
-          }}
-        >
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => {
-                if (!processingId) {
-                  setDetailsVisible(false);
-                }
-              }}
-            />
-
-            {selectedFlorist ? (
-              <View style={styles.detailsModal}>
-                <View style={styles.modalHeader}>
-                  <View>
-                    <Text style={styles.modalEyebrow}>
-                      SELLER VERIFICATION
-                    </Text>
-
-                    <Text style={styles.modalTitle}>
-                      Seller Details
-                    </Text>
-
-                    <Text style={styles.modalSubtitle}>
-                      Review florist application
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    style={styles.closeButton}
-                    disabled={Boolean(processingId)}
-                    onPress={() => setDetailsVisible(false)}
-                  >
-                    <Ionicons
-                      name="close"
-                      size={19}
-                      color={COLORS.text}
-                    />
-                  </Pressable>
-                </View>
-
-                {detailsLoading ? (
-                  <View style={styles.detailsLoading}>
-                    <ActivityIndicator
-                      size="small"
-                      color={COLORS.purpleAccent}
-                    />
-
-                    <Text style={styles.detailsLoadingText}>
-                      Loading seller details...
-                    </Text>
-                  </View>
-                ) : (
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                  >
-                    <View style={styles.modalProfile}>
-                      <View style={styles.largeAvatar}>
-                        <Text style={styles.largeAvatarText}>
-                          {getInitials(selectedFlorist)}
-                        </Text>
-                      </View>
-
-                      <Text style={styles.modalShopName}>
-                        {selectedFlorist.shopName ||
-                          "Unnamed Shop"}
-                      </Text>
-
-                      <Text style={styles.modalOwnerName}>
-                        Owned by {getOwnerName(selectedFlorist)}
-                      </Text>
-
-                      <View style={styles.modalPendingBadge}>
-                        <View style={styles.pendingDot} />
-
-                        <Text style={styles.modalPendingText}>
-                          Pending Verification
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.modalSectionTitle}>
-                      Shop Information
-                    </Text>
-
-                    <View style={styles.modalInfoCard}>
-                      <ModalInfoRow
-                        icon="storefront-outline"
-                        label="Shop Name"
-                        value={
-                          selectedFlorist.shopName ||
-                          "Not provided"
-                        }
-                      />
-
-                      <ModalInfoRow
-                        icon="mail-outline"
-                        label="Business Email"
-                        value={
-                          selectedFlorist.businessEmail ||
-                          "Not provided"
-                        }
-                      />
-
-                      <ModalInfoRow
-                        icon="call-outline"
-                        label="Contact Number"
-                        value={
-                          selectedFlorist.contactNumber ||
-                          "Not provided"
-                        }
-                      />
-
-                      <ModalInfoRow
-                        icon="calendar-outline"
-                        label="Application Date"
-                        value={formatDate(
-                          selectedFlorist.createdAt
-                        )}
-                        last
-                      />
-                    </View>
-
-                    <Text style={styles.modalSectionTitle}>
-                      Seller Information
-                    </Text>
-
-                    <View style={styles.modalInfoCard}>
-                      <ModalInfoRow
-                        icon="person-outline"
-                        label="Seller"
-                        value={getOwnerName(selectedFlorist)}
-                      />
-
-                      <ModalInfoRow
-                        icon="mail-outline"
-                        label="Email"
-                        value={
-                          getOwner(selectedFlorist)?.email ||
-                          "Not provided"
-                        }
-                      />
-
-                      <ModalInfoRow
-                        icon="call-outline"
-                        label="Phone"
-                        value={
-                          getOwner(selectedFlorist)
-                            ?.phoneNumber || "Not provided"
-                        }
-                        last
-                      />
-                    </View>
-
-                    <Text style={styles.modalSectionTitle}>
-                      Shop Description
-                    </Text>
-
-                    <View style={styles.descriptionModalCard}>
-                      <Text style={styles.descriptionModalText}>
-                        {selectedFlorist.description ||
-                          "No shop description was provided."}
-                      </Text>
-                    </View>
-                  </ScrollView>
-                )}
-
-                {!detailsLoading ? (
-                  <View style={styles.modalActions}>
-                    <Pressable
-                      style={[
-                        styles.modalRejectButton,
-                        processingId && styles.disabledButton,
-                      ]}
-                      disabled={Boolean(processingId)}
-                      onPress={() => openReject(selectedFlorist)}
-                    >
-                      <Ionicons
-                        name="close"
-                        size={17}
-                        color={COLORS.red}
-                      />
-
-                      <Text style={styles.modalRejectText}>
-                        Reject
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={[
-                        styles.modalApproveButton,
-                        processingId && styles.disabledButton,
-                      ]}
-                      disabled={Boolean(processingId)}
-                      onPress={() =>
-                        handleApprove(selectedFlorist)
-                      }
-                    >
-                      {processingId ? (
-                        <ActivityIndicator
-                          size="small"
-                          color="#FFFFFF"
-                        />
-                      ) : (
-                        <>
-                          <Ionicons
-                            name="checkmark"
-                            size={17}
-                            color="#FFFFFF"
-                          />
-
-                          <Text style={styles.modalApproveText}>
-                            Approve Seller
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        </Modal>
-
-        {/* REJECTION MODAL */}
-
-        <Modal
-          visible={rejectVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            if (!processingId) {
-              setRejectVisible(false);
-            }
-          }}
-        >
-          <KeyboardAvoidingView
-            style={styles.modalOverlay}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-          >
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => {
-                if (!processingId) {
-                  setRejectVisible(false);
-                }
-              }}
-            />
-
-            <View style={styles.rejectModal}>
-              <View style={styles.rejectModalIcon}>
-                <Ionicons
-                  name="close-circle-outline"
+                  name="checkmark-circle"
                   size={29}
-                  color={COLORS.red}
+                  color={COLORS.green}
                 />
               </View>
 
-              <Text style={styles.rejectModalTitle}>
-                Reject Seller
+              <Text style={styles.emptyTitle}>
+                No pending sellers
               </Text>
 
-              <Text style={styles.rejectModalDescription}>
-                Enter the reason for rejecting{" "}
-                {selectedFlorist?.shopName || "this seller"}.
-                This reason will be saved with the verification
-                result.
+              <Text style={styles.emptyText}>
+                There are currently no florist applications
+                waiting for verification.
               </Text>
+            </View>
+          ) : null}
 
-              <Text style={styles.inputLabel}>
-                Rejection Reason
-              </Text>
+          {florists.map((florist) => {
+            const floristId = getFloristId(florist);
+            const owner = getOwner(florist);
+            const processing =
+              processingId === floristId;
 
-              <TextInput
-                style={styles.reasonInput}
-                value={rejectionReason}
-                onChangeText={setRejectionReason}
-                placeholder="Enter the reason for rejection..."
-                placeholderTextColor={COLORS.mutedText}
-                multiline
-                maxLength={500}
-                editable={!processingId}
-                textAlignVertical="top"
-              />
-
-              <Text style={styles.characterCount}>
-                {rejectionReason.length}/500
-              </Text>
-
-              <View style={styles.rejectModalActions}>
+            return (
+              <View
+                key={
+                  floristId ||
+                  `${florist.shopName}-${florist.createdAt}`
+                }
+                style={styles.sellerCard}
+              >
                 <Pressable
-                  style={styles.cancelButton}
-                  disabled={Boolean(processingId)}
-                  onPress={() => {
-                    setRejectVisible(false);
-                    setRejectionReason("");
-                  }}
+                  style={styles.sellerTop}
+                  disabled={processing}
+                  onPress={() =>
+                    void openDetails(florist)
+                  }
                 >
-                  <Text style={styles.cancelText}>
-                    Cancel
-                  </Text>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {getInitials(florist)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.sellerInfo}>
+                    <Text
+                      style={styles.shopName}
+                      numberOfLines={1}
+                    >
+                      {florist.shopName ||
+                        "Unnamed Shop"}
+                    </Text>
+
+                    <Text
+                      style={styles.ownerName}
+                      numberOfLines={1}
+                    >
+                      {getOwnerName(florist)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.pendingBadge}>
+                    <View style={styles.pendingDot} />
+
+                    <Text style={styles.pendingText}>
+                      Pending
+                    </Text>
+                  </View>
                 </Pressable>
 
-                <Pressable
-                  style={[
-                    styles.confirmRejectButton,
-                    processingId && styles.disabledButton,
-                  ]}
-                  disabled={Boolean(processingId)}
-                  onPress={() => void confirmReject()}
-                >
-                  {processingId ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#FFFFFF"
-                    />
-                  ) : (
-                    <Text style={styles.confirmRejectText}>
-                      Reject Seller
+                <View style={styles.divider} />
+
+                <View style={styles.contactContainer}>
+                  <ContactRow
+                    icon="mail-outline"
+                    value={
+                      florist.businessEmail ||
+                      owner?.email ||
+                      "Not provided"
+                    }
+                  />
+
+                  <ContactRow
+                    icon="call-outline"
+                    value={
+                      florist.contactNumber ||
+                      owner?.phoneNumber ||
+                      "Not provided"
+                    }
+                  />
+
+                  <ContactRow
+                    icon="calendar-outline"
+                    value={`Applied ${formatDate(
+                      florist.createdAt
+                    )}`}
+                  />
+                </View>
+
+                {florist.description ? (
+                  <Pressable
+                    style={styles.descriptionBox}
+                    onPress={() =>
+                      void openDetails(florist)
+                    }
+                  >
+                    <Text
+                      style={styles.descriptionText}
+                      numberOfLines={2}
+                    >
+                      {florist.description}
                     </Text>
-                  )}
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={16}
+                      color={COLORS.mutedText}
+                    />
+                  </Pressable>
+                ) : null}
+
+                <View style={styles.cardActions}>
+                  <Pressable
+                    style={[
+                      styles.rejectButton,
+                      processing &&
+                        styles.disabledButton,
+                    ]}
+                    disabled={processing}
+                    onPress={() =>
+                      openReject(florist)
+                    }
+                  >
+                    <Ionicons
+                      name="close"
+                      size={17}
+                      color={COLORS.red}
+                    />
+
+                    <Text style={styles.rejectText}>
+                      Reject
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.approveButton,
+                      processing &&
+                        styles.disabledButton,
+                    ]}
+                    disabled={processing}
+                    onPress={() =>
+                      handleApprove(florist)
+                    }
+                  >
+                    {processing ? (
+                      <ActivityIndicator
+                        size="small"
+                        color="#FFFFFF"
+                      />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="checkmark"
+                          size={17}
+                          color="#FFFFFF"
+                        />
+
+                        <Text
+                          style={styles.approveText}
+                        >
+                          Approve
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+
+          <View style={styles.bottomSpace} />
+        </View>
+      </ScrollView>
+
+      {/* DETAILS MODAL */}
+
+      <Modal
+        visible={detailsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!processingId) {
+            setDetailsVisible(false);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (!processingId) {
+                setDetailsVisible(false);
+              }
+            }}
+          />
+
+          {selectedFlorist ? (
+            <View style={styles.detailsModal}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalEyebrow}>
+                    SELLER VERIFICATION
+                  </Text>
+
+                  <Text style={styles.modalTitle}>
+                    Seller Details
+                  </Text>
+
+                  <Text style={styles.modalSubtitle}>
+                    Review florist application
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={styles.closeButton}
+                  disabled={Boolean(processingId)}
+                  onPress={() =>
+                    setDetailsVisible(false)
+                  }
+                >
+                  <Ionicons
+                    name="close"
+                    size={19}
+                    color={COLORS.text}
+                  />
                 </Pressable>
               </View>
+
+              {detailsLoading ? (
+                <View style={styles.detailsLoading}>
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.purpleAccent}
+                  />
+
+                  <Text
+                    style={styles.detailsLoadingText}
+                  >
+                    Loading seller details...
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.modalProfile}>
+                    <View style={styles.largeAvatar}>
+                      <Text
+                        style={
+                          styles.largeAvatarText
+                        }
+                      >
+                        {getInitials(
+                          selectedFlorist
+                        )}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={styles.modalShopName}
+                    >
+                      {selectedFlorist.shopName ||
+                        "Unnamed Shop"}
+                    </Text>
+
+                    <Text
+                      style={styles.modalOwnerName}
+                    >
+                      Owned by{" "}
+                      {getOwnerName(
+                        selectedFlorist
+                      )}
+                    </Text>
+
+                    <View
+                      style={
+                        styles.modalPendingBadge
+                      }
+                    >
+                      <View
+                        style={styles.pendingDot}
+                      />
+
+                      <Text
+                        style={
+                          styles.modalPendingText
+                        }
+                      >
+                        Pending Verification
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={
+                      styles.modalSectionTitle
+                    }
+                  >
+                    Shop Information
+                  </Text>
+
+                  <View
+                    style={styles.modalInfoCard}
+                  >
+                    <ModalInfoRow
+                      icon="storefront-outline"
+                      label="Shop Name"
+                      value={
+                        selectedFlorist.shopName ||
+                        "Not provided"
+                      }
+                    />
+
+                    <ModalInfoRow
+                      icon="mail-outline"
+                      label="Business Email"
+                      value={
+                        selectedFlorist.businessEmail ||
+                        "Not provided"
+                      }
+                    />
+
+                    <ModalInfoRow
+                      icon="call-outline"
+                      label="Contact Number"
+                      value={
+                        selectedFlorist.contactNumber ||
+                        "Not provided"
+                      }
+                    />
+
+                    <ModalInfoRow
+                      icon="calendar-outline"
+                      label="Application Date"
+                      value={formatDate(
+                        selectedFlorist.createdAt
+                      )}
+                      last
+                    />
+                  </View>
+
+                  <Text
+                    style={
+                      styles.modalSectionTitle
+                    }
+                  >
+                    Seller Information
+                  </Text>
+
+                  <View
+                    style={styles.modalInfoCard}
+                  >
+                    <ModalInfoRow
+                      icon="person-outline"
+                      label="Seller"
+                      value={getOwnerName(
+                        selectedFlorist
+                      )}
+                    />
+
+                    <ModalInfoRow
+                      icon="mail-outline"
+                      label="Email"
+                      value={
+                        getOwner(selectedFlorist)
+                          ?.email ||
+                        "Not provided"
+                      }
+                    />
+
+                    <ModalInfoRow
+                      icon="call-outline"
+                      label="Phone"
+                      value={
+                        getOwner(selectedFlorist)
+                          ?.phoneNumber ||
+                        "Not provided"
+                      }
+                      last
+                    />
+                  </View>
+
+                  <Text
+                    style={
+                      styles.modalSectionTitle
+                    }
+                  >
+                    Shop Description
+                  </Text>
+
+                  <View
+                    style={
+                      styles.descriptionModalCard
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.descriptionModalText
+                      }
+                    >
+                      {selectedFlorist.description ||
+                        "No shop description was provided."}
+                    </Text>
+                  </View>
+                </ScrollView>
+              )}
+
+              {!detailsLoading ? (
+                <View style={styles.modalActions}>
+                  <Pressable
+                    style={[
+                      styles.modalRejectButton,
+                      processingId &&
+                        styles.disabledButton,
+                    ]}
+                    disabled={Boolean(
+                      processingId
+                    )}
+                    onPress={() =>
+                      openReject(selectedFlorist)
+                    }
+                  >
+                    <Ionicons
+                      name="close"
+                      size={17}
+                      color={COLORS.red}
+                    />
+
+                    <Text
+                      style={
+                        styles.modalRejectText
+                      }
+                    >
+                      Reject
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.modalApproveButton,
+                      processingId &&
+                        styles.disabledButton,
+                    ]}
+                    disabled={Boolean(
+                      processingId
+                    )}
+                    onPress={() =>
+                      handleApprove(
+                        selectedFlorist
+                      )
+                    }
+                  >
+                    {processingId ? (
+                      <ActivityIndicator
+                        size="small"
+                        color="#FFFFFF"
+                      />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="checkmark"
+                          size={17}
+                          color="#FFFFFF"
+                        />
+
+                        <Text
+                          style={
+                            styles.modalApproveText
+                          }
+                        >
+                          Approve Seller
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </View>
-    </SafeAreaView>
+          ) : null}
+        </View>
+      </Modal>
+
+      {/* REJECTION MODAL */}
+
+      <Modal
+        visible={rejectVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!processingId) {
+            setRejectVisible(false);
+          }
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : undefined
+          }
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (!processingId) {
+                setRejectVisible(false);
+              }
+            }}
+          />
+
+          <View style={styles.rejectModal}>
+            <View style={styles.rejectModalIcon}>
+              <Ionicons
+                name="close-circle-outline"
+                size={29}
+                color={COLORS.red}
+              />
+            </View>
+
+            <Text style={styles.rejectModalTitle}>
+              Reject Seller
+            </Text>
+
+            <Text
+              style={
+                styles.rejectModalDescription
+              }
+            >
+              Enter the reason for rejecting{" "}
+              {selectedFlorist?.shopName ||
+                "this seller"}
+              . This reason will be saved with the
+              verification result.
+            </Text>
+
+            <Text style={styles.inputLabel}>
+              Rejection Reason
+            </Text>
+
+            <TextInput
+              style={styles.reasonInput}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              placeholder="Enter the reason for rejection..."
+              placeholderTextColor={
+                COLORS.mutedText
+              }
+              multiline
+              maxLength={500}
+              editable={!processingId}
+              textAlignVertical="top"
+            />
+
+            <Text style={styles.characterCount}>
+              {rejectionReason.length}/500
+            </Text>
+
+            <View
+              style={styles.rejectModalActions}
+            >
+              <Pressable
+                style={styles.cancelButton}
+                disabled={Boolean(
+                  processingId
+                )}
+                onPress={() => {
+                  setRejectVisible(false);
+                  setRejectionReason("");
+                }}
+              >
+                <Text style={styles.cancelText}>
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.confirmRejectButton,
+                  processingId &&
+                    styles.disabledButton,
+                ]}
+                disabled={Boolean(
+                  processingId
+                )}
+                onPress={() =>
+                  void confirmReject()
+                }
+              >
+                {processingId ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.confirmRejectText
+                    }
+                  >
+                    Reject Seller
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
@@ -1095,11 +1248,16 @@ export default function AdminSellerVerificationScreen() {
  * =======================================================*/
 
 type ContactRowProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: React.ComponentProps<
+    typeof Ionicons
+  >["name"];
   value: string;
 };
 
-function ContactRow({ icon, value }: ContactRowProps) {
+function ContactRow({
+  icon,
+  value,
+}: ContactRowProps) {
   return (
     <View style={styles.contactRow}>
       <View style={styles.contactIcon}>
@@ -1110,7 +1268,10 @@ function ContactRow({ icon, value }: ContactRowProps) {
         />
       </View>
 
-      <Text style={styles.contactText} numberOfLines={1}>
+      <Text
+        style={styles.contactText}
+        numberOfLines={1}
+      >
         {value}
       </Text>
     </View>
@@ -1118,7 +1279,9 @@ function ContactRow({ icon, value }: ContactRowProps) {
 }
 
 type ModalInfoRowProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: React.ComponentProps<
+    typeof Ionicons
+  >["name"];
   label: string;
   value: string;
   last?: boolean;
@@ -1137,7 +1300,11 @@ function ModalInfoRow({
         last && styles.modalInfoRowLast,
       ]}
     >
-      <View style={styles.modalInfoLabelContainer}>
+      <View
+        style={
+          styles.modalInfoLabelContainer
+        }
+      >
         <View style={styles.modalInfoIcon}>
           <Ionicons
             name={icon}
@@ -1163,19 +1330,13 @@ function ModalInfoRow({
  * =======================================================*/
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.purple,
-  },
-
-  loadingSafeArea: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+
+  scrollView: {
+    flex: 1,
   },
 
   scrollContent: {
@@ -1187,8 +1348,10 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: COLORS.purple,
     paddingHorizontal: 18,
-    paddingTop: 14,
+    paddingTop: 54,
     paddingBottom: 21,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     overflow: "hidden",
   },
 
@@ -1197,7 +1360,8 @@ const styles = StyleSheet.create({
     width: 190,
     height: 190,
     borderRadius: 95,
-    backgroundColor: "rgba(255,255,255,0.035)",
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
     right: -70,
     top: -90,
   },
@@ -1211,9 +1375,14 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.09)",
+    backgroundColor:
+      "rgba(255,255,255,0.09)",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  headerButtonDisabled: {
+    opacity: 0.7,
   },
 
   headerContent: {
@@ -1247,14 +1416,16 @@ const styles = StyleSheet.create({
     marginTop: 18,
     padding: 12,
     borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      "rgba(255,255,255,0.10)",
   },
 
   headerSummaryIcon: {
     width: 38,
     height: 38,
     borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor:
+      "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1478,7 +1649,8 @@ const styles = StyleSheet.create({
   pendingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.yellowBackground,
+    backgroundColor:
+      COLORS.yellowBackground,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 5,
@@ -1637,7 +1809,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: 20,
-    backgroundColor: "rgba(24,24,27,0.55)",
+    backgroundColor:
+      "rgba(24,24,27,0.55)",
   },
 
   detailsModal: {
@@ -1741,7 +1914,8 @@ const styles = StyleSheet.create({
   modalPendingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.yellowBackground,
+    backgroundColor:
+      COLORS.yellowBackground,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 5,

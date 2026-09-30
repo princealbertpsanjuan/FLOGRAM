@@ -1,5 +1,19 @@
 import { body, validationResult } from "express-validator";
 
+const passwordValidationRules = (fieldName, label = "Password") => {
+  return body(fieldName)
+    .notEmpty()
+    .withMessage(`${label} is required.`)
+    .isLength({ min: 8 })
+    .withMessage(`${label} must contain at least 8 characters.`)
+    .matches(/[a-z]/)
+    .withMessage(`${label} must contain a lowercase letter.`)
+    .matches(/[A-Z]/)
+    .withMessage(`${label} must contain an uppercase letter.`)
+    .matches(/[0-9]/)
+    .withMessage(`${label} must contain a number.`);
+};
+
 export const registerValidation = [
   body("firstName")
     .trim()
@@ -32,17 +46,7 @@ export const registerValidation = [
       "Enter a valid Philippine phone number, such as 09171234567."
     ),
 
-  body("password")
-    .notEmpty()
-    .withMessage("Password is required.")
-    .isLength({ min: 8 })
-    .withMessage("Password must contain at least 8 characters.")
-    .matches(/[a-z]/)
-    .withMessage("Password must contain a lowercase letter.")
-    .matches(/[A-Z]/)
-    .withMessage("Password must contain an uppercase letter.")
-    .matches(/[0-9]/)
-    .withMessage("Password must contain a number."),
+  passwordValidationRules("password"),
 
   body("confirmPassword")
     .notEmpty()
@@ -73,6 +77,65 @@ export const loginValidation = [
   body("password")
     .notEmpty()
     .withMessage("Password is required."),
+];
+
+/*
+ * Validate the email address used to request a password reset code.
+ */
+export const forgotPasswordValidation = [
+  body("email")
+    .trim()
+    .notEmpty()
+    .withMessage("Email address is required.")
+    .isEmail()
+    .withMessage("Enter a valid email address.")
+    .normalizeEmail(),
+];
+
+/*
+ * Validate the email address and six-digit reset code.
+ */
+export const verifyResetCodeValidation = [
+  body("email")
+    .trim()
+    .notEmpty()
+    .withMessage("Email address is required.")
+    .isEmail()
+    .withMessage("Enter a valid email address.")
+    .normalizeEmail(),
+
+  body("code")
+    .trim()
+    .notEmpty()
+    .withMessage("Password reset code is required.")
+    .matches(/^\d{6}$/)
+    .withMessage("Password reset code must contain exactly 6 digits."),
+];
+
+/*
+ * Validate the new password after the reset code has been verified.
+ */
+export const resetPasswordValidation = [
+  body("email")
+    .trim()
+    .notEmpty()
+    .withMessage("Email address is required.")
+    .isEmail()
+    .withMessage("Enter a valid email address.")
+    .normalizeEmail(),
+
+  passwordValidationRules("newPassword", "New password"),
+
+  body("confirmNewPassword")
+    .notEmpty()
+    .withMessage("New password confirmation is required.")
+    .custom((confirmNewPassword, { req }) => {
+      if (confirmNewPassword !== req.body.newPassword) {
+        throw new Error("New password confirmation does not match.");
+      }
+
+      return true;
+    }),
 ];
 
 /*

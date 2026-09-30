@@ -1,7 +1,10 @@
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import User from "./auth.model.js";
 
 const allowedRegistrationRoles = ["customer", "seller", "rider"];
+
+const RESET_CODE_EXPIRATION_MINUTES = 10;
 
 const generateAccessToken = (user) => {
   if (!process.env.JWT_SECRET) {
@@ -18,6 +21,14 @@ const generateAccessToken = (user) => {
       expiresIn: process.env.JWT_EXPIRES_IN || "7d",
     }
   );
+};
+
+const generateResetCode = () => {
+  return crypto.randomInt(100000, 1000000).toString();
+};
+
+const hashResetCode = (code) => {
+  return crypto.createHash("sha256").update(code).digest("hex");
 };
 
 export const registerUser = async (userData) => {
@@ -125,4 +136,154 @@ export const getUserById = async (userId) => {
   }
 
   return user;
+};
+
+/*
+ * Create a temporary six-digit password reset code.
+ *
+ * The plain code is returned only so the controller/email service can send
+ * it to the user's registered email address. Only a SHA-256 hash of the
+ * code is stored in MongoDB.
+ */
+export const createPasswordResetCode = async (email) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const user = await User.findOne({
+    email: normalizedEmail,
+  }).select(
+    "+passwordResetCode +passwordResetCodeExpiresAt +passwordResetVerified"
+  );
+
+  if (!user) {
+    /*
+     * Do not reveal whether an email address is registered.
+     */
+    return {
+      userExists: false,
+      resetCode: null,
+      email: normalizedEmail,
+    };
+  }
+
+  const resetCode = generateResetCode();
+
+  user.passwordResetCode = hashResetCode(resetCode);
+  user.passwordResetCodeExpiresAt = new Date(
+    Date.now() + RESET_CODE_EXPIRATION_MINUTES * 60 * 1000
+  );
+  user.passwordResetVerified = false;
+
+  await user.save();
+
+  return {
+    userExists: true,
+    resetCode,
+    email: user.email,
+    firstName: user.firstName,
+  };
+};
+
+/*
+ * Verify the six-digit code that was sent to the user's email address.
+ */
+export const verifyPasswordResetCode = async ({ email, code }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedCode = code.trim();
+
+  const user = await User.findOne({
+    email: normalizedEmail,
+  }).select(
+    "+passwordResetCode +passwordResetCodeExpiresAt +passwordResetVerified"
+  );
+
+  if (!user || !user.passwordResetCode || !user.passwordResetCodeExpiresAt) {
+    const error = new Error("Invalid or expired password reset code.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (user.passwordResetCodeExpiresAt.getTime() < Date.now()) {
+    user.passwordResetCode = null;
+    user.passwordResetCodeExpiresAt = null;
+    user.passwordResetVerified = false;
+
+    await user.save();
+
+    const error = new Error("Password reset code has expired.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const submittedCodeHash = hashResetCode(normalizedCode);
+
+  if (submittedCodeHash !== user.passwordResetCode) {
+    const error = new Error("Invalid password reset code.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  user.passwordResetVerified = true;
+  await user.save();
+
+  return {
+    email: user.email,
+    verified: true,
+  };
+};
+
+/*
+ * Replace the password after the reset code has been successfully verified.
+ */
+export const resetUserPassword = async ({ email, newPassword }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const user = await User.findOne({
+    email: normalizedEmail,
+  }).select(
+    "+password +passwordResetCode +passwordResetCodeExpiresAt +passwordResetVerified"
+  );
+
+  if (!user) {
+    const error = new Error("Password reset request is invalid or expired.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    !user.passwordResetVerified ||
+    !user.passwordResetCode ||
+    !user.passwordResetCodeExpiresAt
+  ) {
+    const error = new Error(
+      "Verify your password reset code before changing your password."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (user.passwordResetCodeExpiresAt.getTime() < Date.now()) {
+    user.passwordResetCode = null;
+    user.passwordResetCodeExpiresAt = null;
+    user.passwordResetVerified = false;
+
+    await user.save();
+
+    const error = new Error(
+      "Password reset request has expired. Request a new code."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  user.password = newPassword;
+
+  user.passwordResetCode = null;
+  user.passwordResetCodeExpiresAt = null;
+  user.passwordResetVerified = false;
+
+  await user.save();
+
+  return {
+    email: user.email,
+  };
 };

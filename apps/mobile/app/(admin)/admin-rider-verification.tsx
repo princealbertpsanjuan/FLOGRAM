@@ -9,7 +9,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -133,6 +132,7 @@ export default function AdminRiderVerificationScreen() {
   const [riders, setRiders] = useState<AdminRiderVerification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [headerRefreshing, setHeaderRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -217,6 +217,32 @@ export default function AdminRiderVerificationScreen() {
     void loadRiders(false);
   }, [loadRiders]);
 
+  const handleHeaderRefresh = useCallback(async () => {
+    if (headerRefreshing || processingId) {
+      return;
+    }
+
+    try {
+      setHeaderRefreshing(true);
+      setError(null);
+
+      const data = await getPendingRiders();
+
+      setRiders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to refresh pending riders:", err);
+
+      Alert.alert(
+        "Unable to Refresh",
+        err instanceof Error
+          ? err.message
+          : "The rider applications could not be refreshed."
+      );
+    } finally {
+      setHeaderRefreshing(false);
+    }
+  }, [headerRefreshing, processingId]);
+
   const pendingCount = riders.length;
 
   const motorcycleCount = useMemo(
@@ -242,9 +268,7 @@ export default function AdminRiderVerificationScreen() {
 
     Alert.alert(
       "Approve Rider",
-      `Approve ${getRiderName(
-        rider
-      )} as a verified FLOGRAM rider?`,
+      `Approve ${getRiderName(rider)} as a verified FLOGRAM rider?`,
       [
         {
           text: "Cancel",
@@ -259,9 +283,7 @@ export default function AdminRiderVerificationScreen() {
               await approveAdminRider(riderId);
 
               setRiders((current) =>
-                current.filter(
-                  (item) => getRiderId(item) !== riderId
-                )
+                current.filter((item) => getRiderId(item) !== riderId)
               );
 
               setDetailsVisible(false);
@@ -269,9 +291,7 @@ export default function AdminRiderVerificationScreen() {
 
               Alert.alert(
                 "Rider Approved",
-                `${getRiderName(
-                  rider
-                )} has been approved successfully.`
+                `${getRiderName(rider)} has been approved successfully.`
               );
             } catch (err) {
               console.error("Failed to approve rider:", err);
@@ -329,9 +349,7 @@ export default function AdminRiderVerificationScreen() {
       await rejectAdminRider(riderId, reason);
 
       setRiders((current) =>
-        current.filter(
-          (item) => getRiderId(item) !== riderId
-        )
+        current.filter((item) => getRiderId(item) !== riderId)
       );
 
       setRejectVisible(false);
@@ -358,735 +376,738 @@ export default function AdminRiderVerificationScreen() {
 
   if (loading && riders.length === 0) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            size="large"
-            color={COLORS.purpleAccent}
-          />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.purpleAccent} />
 
-          <Text style={styles.loadingText}>
-            Loading rider applications...
-          </Text>
-        </View>
-      </SafeAreaView>
+        <Text style={styles.loadingText}>
+          Loading rider applications...
+        </Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => router.back()}
-            >
-              <Ionicons
-                name="arrow-back"
-                size={19}
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={19}
+              color="#FFFFFF"
+            />
+          </Pressable>
+
+          <View style={styles.headerContent}>
+            <Text style={styles.headerEyebrow}>
+              VERIFICATIONS
+            </Text>
+
+            <Text style={styles.headerTitle}>
+              Rider Verification
+            </Text>
+
+            <Text style={styles.headerSubtitle}>
+              Review rider applications
+            </Text>
+          </View>
+
+          <Pressable
+            style={[
+              styles.headerButton,
+              (headerRefreshing || Boolean(processingId)) &&
+                styles.headerButtonDisabled,
+            ]}
+            disabled={headerRefreshing || Boolean(processingId)}
+            onPress={() => void handleHeaderRefresh()}
+          >
+            {headerRefreshing ? (
+              <ActivityIndicator
+                size="small"
                 color="#FFFFFF"
               />
-            </Pressable>
-
-            <View style={styles.headerContent}>
-              <Text style={styles.headerEyebrow}>
-                VERIFICATIONS
-              </Text>
-
-              <Text style={styles.headerTitle}>
-                Rider Verification
-              </Text>
-
-              <Text style={styles.headerSubtitle}>
-                Review rider applications
-              </Text>
-            </View>
-
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => void loadRiders()}
-            >
+            ) : (
               <Ionicons
                 name="refresh"
                 size={18}
                 color="#FFFFFF"
               />
-            </Pressable>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.headerSummary}>
+          <View style={styles.headerSummaryIcon}>
+            <Ionicons
+              name="bicycle-outline"
+              size={20}
+              color="#FFFFFF"
+            />
           </View>
 
-          <View style={styles.headerSummary}>
-            <View style={styles.headerSummaryIcon}>
-              <Ionicons
-                name="bicycle-outline"
-                size={20}
-                color="#FFFFFF"
-              />
-            </View>
+          <View style={styles.headerSummaryContent}>
+            <Text style={styles.headerSummaryLabel}>
+              Pending Rider Applications
+            </Text>
 
-            <View style={styles.headerSummaryContent}>
-              <Text style={styles.headerSummaryLabel}>
-                Pending Rider Applications
-              </Text>
+            <Text style={styles.headerSummarySubtext}>
+              Waiting for Admin review
+            </Text>
+          </View>
 
-              <Text style={styles.headerSummarySubtext}>
-                Waiting for Admin review
-              </Text>
-            </View>
+          <Text style={styles.headerSummaryValue}>
+            {pendingCount}
+          </Text>
+        </View>
+      </View>
 
-            <Text style={styles.headerSummaryValue}>
-              {pendingCount}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.purpleAccent}
+            colors={[COLORS.purpleAccent]}
+          />
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.introCard}>
+          <View style={styles.introIcon}>
+            <Ionicons
+              name="shield-outline"
+              size={20}
+              color={COLORS.purpleAccent}
+            />
+          </View>
+
+          <View style={styles.introContent}>
+            <Text style={styles.introTitle}>
+              Rider Applications
+            </Text>
+
+            <Text style={styles.introText}>
+              Review rider and vehicle information before
+              allowing applicants to accept FLOGRAM
+              deliveries.
             </Text>
           </View>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.purpleAccent}
-              colors={[COLORS.purpleAccent]}
-            />
-          }
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.introCard}>
-            <View style={styles.introIcon}>
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <View
+              style={[
+                styles.summaryIcon,
+                styles.pendingSummaryIcon,
+              ]}
+            >
               <Ionicons
-                name="shield-outline"
+                name="time-outline"
+                size={20}
+                color={COLORS.yellow}
+              />
+            </View>
+
+            <View>
+              <Text style={styles.summaryValue}>
+                {pendingCount}
+              </Text>
+
+              <Text style={styles.summaryLabel}>
+                Pending
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <View
+              style={[
+                styles.summaryIcon,
+                styles.motorcycleSummaryIcon,
+              ]}
+            >
+              <Ionicons
+                name="bicycle-outline"
                 size={20}
                 color={COLORS.purpleAccent}
               />
             </View>
 
-            <View style={styles.introContent}>
-              <Text style={styles.introTitle}>
-                Rider Applications
+            <View>
+              <Text style={styles.summaryValue}>
+                {motorcycleCount}
               </Text>
 
-              <Text style={styles.introText}>
-                Review rider and vehicle information before
-                allowing applicants to accept FLOGRAM
-                deliveries.
+              <Text style={styles.summaryLabel}>
+                Motorcycle
               </Text>
             </View>
           </View>
+        </View>
 
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <View
-                style={[
-                  styles.summaryIcon,
-                  styles.pendingSummaryIcon,
-                ]}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={20}
-                  color={COLORS.yellow}
-                />
-              </View>
-
-              <View>
-                <Text style={styles.summaryValue}>
-                  {pendingCount}
-                </Text>
-
-                <Text style={styles.summaryLabel}>
-                  Pending
-                </Text>
-              </View>
+        {error ? (
+          <View style={styles.errorCard}>
+            <View style={styles.errorIcon}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={19}
+                color={COLORS.red}
+              />
             </View>
 
-            <View style={styles.summaryCard}>
-              <View
-                style={[
-                  styles.summaryIcon,
-                  styles.motorcycleSummaryIcon,
-                ]}
-              >
-                <Ionicons
-                  name="bicycle-outline"
-                  size={20}
-                  color={COLORS.purpleAccent}
-                />
-              </View>
+            <View style={styles.errorContent}>
+              <Text style={styles.errorTitle}>
+                Unable to load riders
+              </Text>
 
-              <View>
-                <Text style={styles.summaryValue}>
-                  {motorcycleCount}
-                </Text>
-
-                <Text style={styles.summaryLabel}>
-                  Motorcycle
-                </Text>
-              </View>
+              <Text style={styles.errorText}>
+                {error}
+              </Text>
             </View>
+
+            <Pressable onPress={() => void loadRiders()}>
+              <Text style={styles.retryText}>
+                Retry
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionEyebrow}>
+              APPLICATIONS
+            </Text>
+
+            <Text style={styles.sectionTitle}>
+              Pending Riders
+            </Text>
           </View>
 
-          {error ? (
-            <View style={styles.errorCard}>
-              <View style={styles.errorIcon}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={19}
-                  color={COLORS.red}
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>
+              {riders.length}
+            </Text>
+          </View>
+        </View>
+
+        {!error && riders.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons
+                name="checkmark-circle"
+                size={34}
+                color={COLORS.green}
+              />
+            </View>
+
+            <Text style={styles.emptyTitle}>
+              No pending riders
+            </Text>
+
+            <Text style={styles.emptyText}>
+              There are currently no rider applications
+              waiting for verification.
+            </Text>
+          </View>
+        ) : null}
+
+        {riders.map((rider) => {
+          const riderId = getRiderId(rider);
+          const owner = getOwner(rider);
+          const processing =
+            processingId === riderId;
+
+          return (
+            <View
+              key={
+                riderId ||
+                `${owner?.email}-${rider.createdAt}`
+              }
+              style={styles.riderCard}
+            >
+              <Pressable
+                style={styles.riderTop}
+                disabled={processing}
+                onPress={() => openDetails(rider)}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {getInitials(rider)}
+                  </Text>
+                </View>
+
+                <View style={styles.riderInfo}>
+                  <Text
+                    style={styles.riderName}
+                    numberOfLines={1}
+                  >
+                    {getRiderName(rider)}
+                  </Text>
+
+                  <Text
+                    style={styles.riderEmail}
+                    numberOfLines={1}
+                  >
+                    {owner?.email ||
+                      "No email provided"}
+                  </Text>
+                </View>
+
+                <View style={styles.pendingBadge}>
+                  <View style={styles.pendingDot} />
+
+                  <Text style={styles.pendingText}>
+                    Pending
+                  </Text>
+                </View>
+              </Pressable>
+
+              <View style={styles.divider} />
+
+              <View style={styles.details}>
+                <DetailRow
+                  icon="bicycle-outline"
+                  label="Vehicle"
+                  value={formatVehicle(
+                    rider.vehicleType
+                  )}
                 />
-              </View>
 
-              <View style={styles.errorContent}>
-                <Text style={styles.errorTitle}>
-                  Unable to load riders
-                </Text>
+                <DetailRow
+                  icon="card-outline"
+                  label="Plate"
+                  value={
+                    rider.vehiclePlateNumber ||
+                    "Not provided"
+                  }
+                />
 
-                <Text style={styles.errorText}>
-                  {error}
-                </Text>
+                <DetailRow
+                  icon="calendar-outline"
+                  label="Applied"
+                  value={formatDate(
+                    rider.createdAt
+                  )}
+                />
               </View>
 
               <Pressable
-                onPress={() => void loadRiders()}
+                style={styles.addressBox}
+                onPress={() => openDetails(rider)}
               >
-                <Text style={styles.retryText}>
-                  Retry
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionEyebrow}>
-                APPLICATIONS
-              </Text>
-
-              <Text style={styles.sectionTitle}>
-                Pending Riders
-              </Text>
-            </View>
-
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>
-                {riders.length}
-              </Text>
-            </View>
-          </View>
-
-          {!error && riders.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <View style={styles.emptyIcon}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={34}
-                  color={COLORS.green}
-                />
-              </View>
-
-              <Text style={styles.emptyTitle}>
-                No pending riders
-              </Text>
-
-              <Text style={styles.emptyText}>
-                There are currently no rider applications
-                waiting for verification.
-              </Text>
-            </View>
-          ) : null}
-
-          {riders.map((rider) => {
-            const riderId = getRiderId(rider);
-            const owner = getOwner(rider);
-            const processing =
-              processingId === riderId;
-
-            return (
-              <View
-                key={
-                  riderId ||
-                  `${owner?.email}-${rider.createdAt}`
-                }
-                style={styles.riderCard}
-              >
-                <Pressable
-                  style={styles.riderTop}
-                  disabled={processing}
-                  onPress={() => openDetails(rider)}
-                >
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {getInitials(rider)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.riderInfo}>
-                    <Text
-                      style={styles.riderName}
-                      numberOfLines={1}
-                    >
-                      {getRiderName(rider)}
-                    </Text>
-
-                    <Text
-                      style={styles.riderEmail}
-                      numberOfLines={1}
-                    >
-                      {owner?.email ||
-                        "No email provided"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.pendingBadge}>
-                    <View style={styles.pendingDot} />
-
-                    <Text style={styles.pendingText}>
-                      Pending
-                    </Text>
-                  </View>
-                </Pressable>
-
-                <View style={styles.divider} />
-
-                <View style={styles.details}>
-                  <DetailRow
-                    icon="bicycle-outline"
-                    label="Vehicle"
-                    value={formatVehicle(
-                      rider.vehicleType
-                    )}
-                  />
-
-                  <DetailRow
-                    icon="card-outline"
-                    label="Plate"
-                    value={
-                      rider.vehiclePlateNumber ||
-                      "Not provided"
-                    }
-                  />
-
-                  <DetailRow
-                    icon="calendar-outline"
-                    label="Applied"
-                    value={formatDate(
-                      rider.createdAt
-                    )}
-                  />
-                </View>
-
-                <Pressable
-                  style={styles.addressBox}
-                  onPress={() => openDetails(rider)}
-                >
-                  <View style={styles.addressIcon}>
-                    <Ionicons
-                      name="location-outline"
-                      size={17}
-                      color={COLORS.purpleAccent}
-                    />
-                  </View>
-
-                  <Text
-                    style={styles.addressText}
-                    numberOfLines={2}
-                  >
-                    {getAddress(rider)}
-                  </Text>
-
+                <View style={styles.addressIcon}>
                   <Ionicons
-                    name="chevron-forward"
+                    name="location-outline"
                     size={17}
-                    color={COLORS.mutedText}
+                    color={COLORS.purpleAccent}
                   />
-                </Pressable>
-
-                <View style={styles.cardActions}>
-                  <Pressable
-                    style={[
-                      styles.rejectButton,
-                      processing &&
-                        styles.disabledButton,
-                    ]}
-                    disabled={processing}
-                    onPress={() => openReject(rider)}
-                  >
-                    <Ionicons
-                      name="close"
-                      size={18}
-                      color={COLORS.red}
-                    />
-
-                    <Text style={styles.rejectText}>
-                      Reject
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.approveButton,
-                      processing &&
-                        styles.disabledButton,
-                    ]}
-                    disabled={processing}
-                    onPress={() =>
-                      approveRider(rider)
-                    }
-                  >
-                    {processing ? (
-                      <ActivityIndicator
-                        size="small"
-                        color="#FFFFFF"
-                      />
-                    ) : (
-                      <>
-                        <Ionicons
-                          name="checkmark"
-                          size={18}
-                          color="#FFFFFF"
-                        />
-
-                        <Text
-                          style={styles.approveText}
-                        >
-                          Approve
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })}
-
-          <View style={styles.bottomSpace} />
-        </ScrollView>
-
-        <Modal
-          visible={detailsVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() =>
-            setDetailsVisible(false)
-          }
-        >
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() =>
-                setDetailsVisible(false)
-              }
-            />
-
-            {selectedRider ? (
-              <View style={styles.detailsModal}>
-                <View style={styles.modalHeader}>
-                  <View>
-                    <Text style={styles.modalEyebrow}>
-                      APPLICATION DETAILS
-                    </Text>
-
-                    <Text style={styles.modalTitle}>
-                      Rider Details
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    style={styles.closeButton}
-                    onPress={() =>
-                      setDetailsVisible(false)
-                    }
-                  >
-                    <Ionicons
-                      name="close"
-                      size={20}
-                      color={COLORS.text}
-                    />
-                  </Pressable>
                 </View>
 
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
+                <Text
+                  style={styles.addressText}
+                  numberOfLines={2}
                 >
-                  <View style={styles.modalProfile}>
-                    <View style={styles.largeAvatar}>
-                      <Text
-                        style={styles.largeAvatarText}
-                      >
-                        {getInitials(
-                          selectedRider
-                        )}
-                      </Text>
-                    </View>
+                  {getAddress(rider)}
+                </Text>
 
-                    <Text
-                      style={styles.modalRiderName}
-                    >
-                      {getRiderName(
-                        selectedRider
-                      )}
-                    </Text>
-
-                    <Text
-                      style={styles.modalRiderEmail}
-                    >
-                      {getOwner(selectedRider)
-                        ?.email ||
-                        "No email provided"}
-                    </Text>
-
-                    <View
-                      style={
-                        styles.modalPendingBadge
-                      }
-                    >
-                      <View
-                        style={styles.pendingDot}
-                      />
-
-                      <Text
-                        style={
-                          styles.modalPendingText
-                        }
-                      >
-                        Pending Verification
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.modalInfoCard}>
-                    <ModalInfoRow
-                      icon="call-outline"
-                      label="Phone"
-                      value={
-                        getOwner(selectedRider)
-                          ?.phoneNumber ||
-                        "Not provided"
-                      }
-                    />
-
-                    <ModalInfoRow
-                      icon="bicycle-outline"
-                      label="Vehicle"
-                      value={formatVehicle(
-                        selectedRider.vehicleType
-                      )}
-                    />
-
-                    <ModalInfoRow
-                      icon="card-outline"
-                      label="Plate Number"
-                      value={
-                        selectedRider.vehiclePlateNumber ||
-                        "Not provided"
-                      }
-                    />
-
-                    <ModalInfoRow
-                      icon="location-outline"
-                      label="Address"
-                      value={getAddress(
-                        selectedRider
-                      )}
-                    />
-
-                    <ModalInfoRow
-                      icon="calendar-outline"
-                      label="Applied"
-                      value={formatDate(
-                        selectedRider.createdAt
-                      )}
-                      last
-                    />
-                  </View>
-                </ScrollView>
-
-                <View style={styles.modalActions}>
-                  <Pressable
-                    style={
-                      styles.modalRejectButton
-                    }
-                    onPress={() =>
-                      openReject(selectedRider)
-                    }
-                  >
-                    <Ionicons
-                      name="close"
-                      size={18}
-                      color={COLORS.red}
-                    />
-
-                    <Text
-                      style={
-                        styles.modalRejectText
-                      }
-                    >
-                      Reject
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={
-                      styles.modalApproveButton
-                    }
-                    onPress={() =>
-                      approveRider(selectedRider)
-                    }
-                  >
-                    <Ionicons
-                      name="checkmark"
-                      size={18}
-                      color="#FFFFFF"
-                    />
-
-                    <Text
-                      style={
-                        styles.modalApproveText
-                      }
-                    >
-                      Approve Rider
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </View>
-        </Modal>
-
-        <Modal
-          visible={rejectVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            if (!processingId) {
-              setRejectVisible(false);
-            }
-          }}
-        >
-          <KeyboardAvoidingView
-            style={styles.modalOverlay}
-            behavior={
-              Platform.OS === "ios"
-                ? "padding"
-                : undefined
-            }
-          >
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => {
-                if (!processingId) {
-                  setRejectVisible(false);
-                }
-              }}
-            />
-
-            <View style={styles.rejectModal}>
-              <View
-                style={styles.rejectModalIcon}
-              >
                 <Ionicons
-                  name="close-circle-outline"
-                  size={30}
-                  color={COLORS.red}
+                  name="chevron-forward"
+                  size={17}
+                  color={COLORS.mutedText}
                 />
-              </View>
+              </Pressable>
 
-              <Text
-                style={styles.rejectModalTitle}
-              >
-                Reject Rider
-              </Text>
-
-              <Text
-                style={
-                  styles.rejectModalDescription
-                }
-              >
-                Enter the reason for rejecting{" "}
-                {selectedRider
-                  ? getRiderName(selectedRider)
-                  : "this rider"}
-                .
-              </Text>
-
-              <Text style={styles.inputLabel}>
-                Rejection Reason
-              </Text>
-
-              <TextInput
-                style={styles.reasonInput}
-                value={rejectionReason}
-                onChangeText={setRejectionReason}
-                placeholder="Enter the reason for rejection..."
-                placeholderTextColor={
-                  COLORS.mutedText
-                }
-                multiline
-                maxLength={500}
-                editable={!processingId}
-                textAlignVertical="top"
-              />
-
-              <Text
-                style={styles.characterCount}
-              >
-                {rejectionReason.length}/500
-              </Text>
-
-              <View
-                style={styles.rejectModalActions}
-              >
+              <View style={styles.cardActions}>
                 <Pressable
-                  style={styles.cancelButton}
-                  disabled={Boolean(
-                    processingId
-                  )}
-                  onPress={() => {
-                    setRejectVisible(false);
-                    setRejectionReason("");
-                  }}
+                  style={[
+                    styles.rejectButton,
+                    processing &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={processing}
+                  onPress={() => openReject(rider)}
                 >
-                  <Text
-                    style={styles.cancelText}
-                  >
-                    Cancel
+                  <Ionicons
+                    name="close"
+                    size={18}
+                    color={COLORS.red}
+                  />
+
+                  <Text style={styles.rejectText}>
+                    Reject
                   </Text>
                 </Pressable>
 
                 <Pressable
                   style={[
-                    styles.confirmRejectButton,
-                    processingId &&
+                    styles.approveButton,
+                    processing &&
                       styles.disabledButton,
                   ]}
-                  disabled={Boolean(
-                    processingId
-                  )}
+                  disabled={processing}
                   onPress={() =>
-                    void confirmReject()
+                    approveRider(rider)
                   }
                 >
-                  {processingId ? (
+                  {processing ? (
                     <ActivityIndicator
                       size="small"
                       color="#FFFFFF"
                     />
                   ) : (
-                    <Text
-                      style={
-                        styles.confirmRejectText
-                      }
-                    >
-                      Reject Rider
-                    </Text>
+                    <>
+                      <Ionicons
+                        name="checkmark"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+
+                      <Text
+                        style={styles.approveText}
+                      >
+                        Approve
+                      </Text>
+                    </>
                   )}
                 </Pressable>
               </View>
             </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </View>
-    </SafeAreaView>
+          );
+        })}
+
+        <View style={styles.bottomSpace} />
+      </ScrollView>
+
+      <Modal
+        visible={detailsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          setDetailsVisible(false)
+        }
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() =>
+              setDetailsVisible(false)
+            }
+          />
+
+          {selectedRider ? (
+            <View style={styles.detailsModal}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalEyebrow}>
+                    APPLICATION DETAILS
+                  </Text>
+
+                  <Text style={styles.modalTitle}>
+                    Rider Details
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={styles.closeButton}
+                  onPress={() =>
+                    setDetailsVisible(false)
+                  }
+                >
+                  <Ionicons
+                    name="close"
+                    size={20}
+                    color={COLORS.text}
+                  />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.modalProfile}>
+                  <View style={styles.largeAvatar}>
+                    <Text
+                      style={styles.largeAvatarText}
+                    >
+                      {getInitials(
+                        selectedRider
+                      )}
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={styles.modalRiderName}
+                  >
+                    {getRiderName(
+                      selectedRider
+                    )}
+                  </Text>
+
+                  <Text
+                    style={styles.modalRiderEmail}
+                  >
+                    {getOwner(selectedRider)
+                      ?.email ||
+                      "No email provided"}
+                  </Text>
+
+                  <View
+                    style={
+                      styles.modalPendingBadge
+                    }
+                  >
+                    <View
+                      style={styles.pendingDot}
+                    />
+
+                    <Text
+                      style={
+                        styles.modalPendingText
+                      }
+                    >
+                      Pending Verification
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalInfoCard}>
+                  <ModalInfoRow
+                    icon="call-outline"
+                    label="Phone"
+                    value={
+                      getOwner(selectedRider)
+                        ?.phoneNumber ||
+                      "Not provided"
+                    }
+                  />
+
+                  <ModalInfoRow
+                    icon="bicycle-outline"
+                    label="Vehicle"
+                    value={formatVehicle(
+                      selectedRider.vehicleType
+                    )}
+                  />
+
+                  <ModalInfoRow
+                    icon="card-outline"
+                    label="Plate Number"
+                    value={
+                      selectedRider.vehiclePlateNumber ||
+                      "Not provided"
+                    }
+                  />
+
+                  <ModalInfoRow
+                    icon="location-outline"
+                    label="Address"
+                    value={getAddress(
+                      selectedRider
+                    )}
+                  />
+
+                  <ModalInfoRow
+                    icon="calendar-outline"
+                    label="Applied"
+                    value={formatDate(
+                      selectedRider.createdAt
+                    )}
+                    last
+                  />
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={
+                    styles.modalRejectButton
+                  }
+                  onPress={() =>
+                    openReject(selectedRider)
+                  }
+                >
+                  <Ionicons
+                    name="close"
+                    size={18}
+                    color={COLORS.red}
+                  />
+
+                  <Text
+                    style={
+                      styles.modalRejectText
+                    }
+                  >
+                    Reject
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={
+                    styles.modalApproveButton
+                  }
+                  onPress={() =>
+                    approveRider(selectedRider)
+                  }
+                >
+                  <Ionicons
+                    name="checkmark"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={
+                      styles.modalApproveText
+                    }
+                  >
+                    Approve Rider
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal
+        visible={rejectVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!processingId) {
+            setRejectVisible(false);
+          }
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : undefined
+          }
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (!processingId) {
+                setRejectVisible(false);
+              }
+            }}
+          />
+
+          <View style={styles.rejectModal}>
+            <View
+              style={styles.rejectModalIcon}
+            >
+              <Ionicons
+                name="close-circle-outline"
+                size={30}
+                color={COLORS.red}
+              />
+            </View>
+
+            <Text
+              style={styles.rejectModalTitle}
+            >
+              Reject Rider
+            </Text>
+
+            <Text
+              style={
+                styles.rejectModalDescription
+              }
+            >
+              Enter the reason for rejecting{" "}
+              {selectedRider
+                ? getRiderName(selectedRider)
+                : "this rider"}
+              .
+            </Text>
+
+            <Text style={styles.inputLabel}>
+              Rejection Reason
+            </Text>
+
+            <TextInput
+              style={styles.reasonInput}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              placeholder="Enter the reason for rejection..."
+              placeholderTextColor={
+                COLORS.mutedText
+              }
+              multiline
+              maxLength={500}
+              editable={!processingId}
+              textAlignVertical="top"
+            />
+
+            <Text
+              style={styles.characterCount}
+            >
+              {rejectionReason.length}/500
+            </Text>
+
+            <View
+              style={styles.rejectModalActions}
+            >
+              <Pressable
+                style={styles.cancelButton}
+                disabled={Boolean(
+                  processingId
+                )}
+                onPress={() => {
+                  setRejectVisible(false);
+                  setRejectionReason("");
+                }}
+              >
+                <Text
+                  style={styles.cancelText}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.confirmRejectButton,
+                  processingId &&
+                    styles.disabledButton,
+                ]}
+                disabled={Boolean(
+                  processingId
+                )}
+                onPress={() =>
+                  void confirmReject()
+                }
+              >
+                {processingId ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.confirmRejectText
+                    }
+                  >
+                    Reject Rider
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
@@ -1175,11 +1196,6 @@ function ModalInfoRow({
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.purple,
-  },
-
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1201,7 +1217,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: COLORS.purple,
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: 54,
     paddingBottom: 20,
     borderBottomLeftRadius: 26,
     borderBottomRightRadius: 26,
@@ -1219,6 +1235,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.12)",
+  },
+
+  headerButtonDisabled: {
+    opacity: 0.75,
   },
 
   headerContent: {

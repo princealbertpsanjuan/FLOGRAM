@@ -451,6 +451,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
  */
 
 export type AdminReportPeriod =
+  | "today"
   | "7d"
   | "30d"
   | "6m"
@@ -771,6 +772,7 @@ type AdminReportsResponse =
  *
  * Optional:
  *
+ * ?period=today
  * ?period=7d
  * ?period=30d
  * ?period=6m

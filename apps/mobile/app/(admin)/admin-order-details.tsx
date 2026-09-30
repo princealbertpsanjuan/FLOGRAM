@@ -230,34 +230,43 @@ export default function AdminOrderDetailsScreen() {
 
   const [order, setOrder] = useState<AdminOrder | null>(null);
   const [loading, setLoading] = useState(true);
+  const [headerRefreshing, setHeaderRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadOrder = useCallback(async () => {
-    if (!orderId) {
-      setError("Order ID is missing.");
-      setLoading(false);
-      return;
-    }
+  const loadOrder = useCallback(
+    async (showLoader = true) => {
+      if (!orderId) {
+        setError("Order ID is missing.");
+        setLoading(false);
+        return;
+      }
 
-    try {
-      setLoading(true);
-      setError(null);
+      try {
+        if (showLoader) {
+          setLoading(true);
+        }
 
-      const data = await getAdminOrderById(orderId);
+        setError(null);
 
-      setOrder(data);
-    } catch (err) {
-      console.error("Failed to load admin order:", err);
+        const data = await getAdminOrderById(orderId);
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load order details."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [orderId]);
+        setOrder(data);
+      } catch (err) {
+        console.error("Failed to load admin order:", err);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load order details."
+        );
+      } finally {
+        if (showLoader) {
+          setLoading(false);
+        }
+      }
+    },
+    [orderId]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -308,6 +317,32 @@ export default function AdminOrderDetailsScreen() {
       };
     }, [orderId])
   );
+
+  const handleHeaderRefresh = useCallback(async () => {
+    if (!orderId || headerRefreshing) {
+      return;
+    }
+
+    setHeaderRefreshing(true);
+
+    try {
+      setError(null);
+
+      const data = await getAdminOrderById(orderId);
+
+      setOrder(data);
+    } catch (err) {
+      console.error("Failed to refresh admin order:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load order details."
+      );
+    } finally {
+      setHeaderRefreshing(false);
+    }
+  }, [headerRefreshing, orderId]);
 
   if (loading) {
     return (
@@ -385,6 +420,8 @@ export default function AdminOrderDetailsScreen() {
   const statusColors = getStatusColors(order.orderStatus);
   const paymentColors = getStatusColors(order.paymentStatus);
 
+  const isDelivery = order.fulfillmentType === "delivery";
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -405,14 +442,26 @@ export default function AdminOrderDetailsScreen() {
             </Pressable>
 
             <Pressable
-              style={styles.refreshButton}
-              onPress={() => void loadOrder()}
+              style={[
+                styles.refreshButton,
+                headerRefreshing &&
+                  styles.refreshButtonDisabled,
+              ]}
+              onPress={handleHeaderRefresh}
+              disabled={headerRefreshing}
             >
-              <Ionicons
-                name="refresh"
-                size={19}
-                color="#FFFFFF"
-              />
+              {headerRefreshing ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Ionicons
+                  name="refresh"
+                  size={19}
+                  color="#FFFFFF"
+                />
+              )}
             </Pressable>
           </View>
 
@@ -505,38 +554,38 @@ export default function AdminOrderDetailsScreen() {
             title="Order Information"
           />
 
-          <View style={styles.card}>
-            <DetailRow
-              label="Product"
-              value={order.productName}
-            />
+<View style={styles.card}>
+  <DetailRow
+    label="Product"
+    value={order.productName}
+  />
 
-            <DetailRow
-              label="Source"
-              value={formatStatus(order.sourceType)}
-            />
+  <DetailRow
+    label="Order Source"
+    value={formatStatus(order.sourceType)}
+  />
 
-            <DetailRow
-              label="Quantity"
-              value={order.quantity ?? 0}
-            />
+  <DetailRow
+    label="Quantity"
+    value={order.quantity ?? 0}
+  />
 
-            <DetailRow
-              label="Fulfillment"
-              value={formatStatus(order.fulfillmentType)}
-            />
+  <DetailRow
+    label="Fulfillment Method"
+    value={formatStatus(order.fulfillmentType)}
+  />
 
-            <DetailRow
-              label="Pre-order"
-              value={order.isPreOrder ? "Yes" : "No"}
-            />
+  <DetailRow
+    label="Order Type"
+    value={order.isPreOrder ? "Pre-order" : "Regular Order"}
+  />
 
-            <DetailRow
-              label="Created"
-              value={formatDate(order.createdAt)}
-              isLast
-            />
-          </View>
+  <DetailRow
+    label="Order Date"
+    value={formatDate(order.createdAt)}
+    isLast
+  />
+</View>
 
           <SectionHeader
             icon="person-outline"
@@ -589,7 +638,7 @@ export default function AdminOrderDetailsScreen() {
             />
           </View>
 
-          {order.fulfillmentType === "delivery" && (
+          {isDelivery && (
             <>
               <SectionHeader
                 icon="bicycle-outline"
@@ -626,7 +675,9 @@ export default function AdminOrderDetailsScreen() {
 
                 <DetailRow
                   label="Requested Date"
-                  value={formatDate(order.requestedDeliveryDate)}
+                  value={formatDate(
+                    order.requestedDeliveryDate
+                  )}
                 />
 
                 <DetailRow
@@ -654,7 +705,12 @@ export default function AdminOrderDetailsScreen() {
               value={formatStatus(order.paymentMethod)}
             />
 
-            <View style={[styles.detailRow, styles.detailRowBorder]}>
+            <View
+              style={[
+                styles.detailRow,
+                styles.detailRowBorder,
+              ]}
+            >
               <Text style={styles.detailLabel}>
                 Status
               </Text>
@@ -687,7 +743,10 @@ export default function AdminOrderDetailsScreen() {
 
             <DetailRow
               label="Channel"
-              value={order.paymentChannel || "Not available"}
+              value={
+                order.paymentChannel ||
+                "Not available"
+              }
             />
 
             <DetailRow
@@ -750,37 +809,43 @@ export default function AdminOrderDetailsScreen() {
 
           <View style={styles.card}>
             <TimelineRow
-              label="Created"
+              label="Order Placed"
               value={formatDate(order.createdAt)}
               complete={Boolean(order.createdAt)}
             />
 
             <TimelineRow
-              label="Confirmed"
+              label="Order Confirmed"
               value={formatDate(order.confirmedAt)}
               complete={Boolean(order.confirmedAt)}
             />
 
             <TimelineRow
-              label="Preparing"
+              label="Preparing Order"
               value={formatDate(order.preparingAt)}
               complete={Boolean(order.preparingAt)}
             />
 
             <TimelineRow
-              label="Ready"
+              label={
+                isDelivery
+                  ? "Ready for Delivery"
+                  : "Ready for Pickup"
+              }
               value={formatDate(order.readyAt)}
               complete={Boolean(order.readyAt)}
             />
 
-            <TimelineRow
-              label="Delivered"
-              value={formatDate(order.deliveredAt)}
-              complete={Boolean(order.deliveredAt)}
-            />
+            {isDelivery ? (
+              <TimelineRow
+                label="Delivered"
+                value={formatDate(order.deliveredAt)}
+                complete={Boolean(order.deliveredAt)}
+              />
+            ) : null}
 
             <TimelineRow
-              label="Completed"
+              label="Order Completed"
               value={formatDate(order.completedAt)}
               complete={Boolean(order.completedAt)}
               isLast={!order.cancelledAt}
@@ -789,7 +854,7 @@ export default function AdminOrderDetailsScreen() {
             {order.cancelledAt ? (
               <>
                 <TimelineRow
-                  label="Cancelled"
+                  label="Order Cancelled"
                   value={formatDate(order.cancelledAt)}
                   complete
                   danger
@@ -801,7 +866,8 @@ export default function AdminOrderDetailsScreen() {
                   </Text>
 
                   <Text style={styles.cancellationText}>
-                    {order.cancellationReason || "Not provided"}
+                    {order.cancellationReason ||
+                      "Not provided"}
                   </Text>
                 </View>
               </>
@@ -842,7 +908,8 @@ export default function AdminOrderDetailsScreen() {
                   <View
                     style={[
                       styles.noteBox,
-                      order.customerNotes && styles.noteBoxSpacing,
+                      order.customerNotes &&
+                        styles.noteBoxSpacing,
                     ]}
                   >
                     <View style={styles.noteHeader}>
@@ -883,9 +950,10 @@ export default function AdminOrderDetailsScreen() {
               </Text>
 
               <Text style={styles.monitorText}>
-                Admin access to this page is for transaction monitoring.
-                Fulfillment status remains controlled by the appropriate
-                seller, customer, and delivery workflow.
+                Admin access to this page is for transaction
+                monitoring. Fulfillment status remains controlled
+                by the appropriate seller, customer, and delivery
+                workflow.
               </Text>
             </View>
           </View>
@@ -1085,6 +1153,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  refreshButtonDisabled: {
+    opacity: 0.8,
   },
 
   eyebrow: {

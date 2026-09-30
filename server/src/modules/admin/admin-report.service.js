@@ -19,6 +19,7 @@ const COMPLETED_ORDER_STATUSES = [
 ];
 
 const REPORT_PERIODS = {
+  today: 1,
   "7d": 7,
   "30d": 30,
   "6m": 183,
@@ -154,6 +155,7 @@ const getTrendGranularity = (
   period
 ) => {
   if (
+    period === "today" ||
     period === "7d" ||
     period === "30d"
   ) {
