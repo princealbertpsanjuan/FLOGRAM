@@ -4,6 +4,11 @@ import Verification from "../verification/verification.model.js";
 import Delivery from "../deliveries/delivery.model.js";
 import Order from "../orders/order.model.js";
 import RiderRemittance from "./rider-remittance.model.js";
+import RiderPayout from "./rider-payout.model.js";
+import {
+  getRiderWorkShiftStatus,
+  requireActiveApprovedShiftForRider,
+} from "./rider-shift.service.js";
 
 /*
  * =========================================================
@@ -571,6 +576,17 @@ export const updateRiderAvailability =
      * while another delivery is active.
      */
 
+    /*
+     * Rider must have an active approved
+     * work shift before going Online.
+     * Going Offline does not release or
+     * cancel the approved shift slot.
+     */
+
+    await requireActiveApprovedShiftForRider(
+      rider._id
+    );
+
     const activeDelivery =
       await Delivery.findOne({
         rider:
@@ -594,6 +610,7 @@ export const updateRiderAvailability =
        * Ensure database availability
        * remains consistent.
        */
+
       if (
         rider.isAvailable !==
         false
@@ -629,28 +646,6 @@ export const updateRiderAvailability =
  * RIDER
  * DASHBOARD
  * =========================================================
- *
- * Dashboard contains:
- *
- * - Rider availability
- * - Delivery statistics
- * - Total value of delivered orders
- * - Rider rating
- *
- * IMPORTANT:
- *
- * deliveryValue is NOT Rider salary.
- *
- * It represents the monetary value of
- * orders successfully handled/delivered
- * by the Rider.
- *
- * Rider salary/payroll is a separate
- * FLOGRAM feature.
- *
- * Rating remains null until a Rider
- * review module is implemented.
- * =========================================================
  */
 
 export const getRiderDashboard =
@@ -675,14 +670,39 @@ export const getRiderDashboard =
       throw error;
     }
 
-    /*
-     * Dashboard can be accessed whether
-     * the Rider is online or offline.
-     */
-
     validateApprovedActiveRider(
       rider
     );
+
+    /*
+     * =====================================================
+     * WORK SHIFT STATUS
+     * =====================================================
+     */
+
+    const workShift =
+      await getRiderWorkShiftStatus(
+        rider._id
+      );
+
+    /*
+     * If the approved shift has ended,
+     * the Rider must not remain Online
+     * for new delivery requests.
+     *
+     * Active deliveries may still be
+     * completed after the shift ends.
+     */
+
+    if (
+      rider.isAvailable === true &&
+      workShift.canGoOnline !== true
+    ) {
+      rider.isAvailable =
+        false;
+
+      await rider.save();
+    }
 
     /*
      * =====================================================
@@ -746,12 +766,10 @@ export const getRiderDashboard =
      * DELIVERED ORDERS
      * =====================================================
      *
-     * We first obtain deliveries owned
-     * by this Rider.
+     * Rider earnings come from the actual
+     * Order.deliveryFee.
      *
-     * Only deliveries with status
-     * "delivered" contribute to the
-     * dashboard monetary value.
+     * They DO NOT come from Order.totalAmount.
      */
 
     const deliveredDeliveries =
@@ -778,27 +796,6 @@ export const getRiderDashboard =
         )
         .filter(Boolean);
 
-    /*
-     * =====================================================
-     * ORDER VALUES
-     * =====================================================
-     *
-     * totalAmount already represents
-     * the complete amount charged for
-     * the order.
-     *
-     * It already includes applicable
-     * order charges such as:
-     *
-     * - flower/product subtotal
-     * - delivery fee
-     * - pre-order fee, when applicable
-     *
-     * Therefore we DO NOT add
-     * deliveryFee separately.
-     * =====================================================
-     */
-
     const orders =
       orderIds.length > 0
         ? await Order.find({
@@ -808,12 +805,12 @@ export const getRiderDashboard =
             },
           })
             .select(
-              "_id totalAmount"
+              "_id deliveryFee"
             )
             .lean()
         : [];
 
-    const orderValueById =
+    const deliveryFeeByOrderId =
       new Map(
         orders.map(
           (order) => [
@@ -822,7 +819,7 @@ export const getRiderDashboard =
             ),
 
             Number(
-              order.totalAmount ||
+              order.deliveryFee ||
                 0
             ),
           ]
@@ -833,15 +830,6 @@ export const getRiderDashboard =
      * =====================================================
      * PHILIPPINE DATE BOUNDARIES
      * =====================================================
-     *
-     * Dashboard values for:
-     *
-     * - today
-     * - this month
-     *
-     * follow Philippine time (UTC+8),
-     * even if the backend server runs
-     * in UTC.
      */
 
     const now =
@@ -877,46 +865,30 @@ export const getRiderDashboard =
 
     /*
      * =====================================================
-     * DELIVERY VALUE
+     * RIDER DELIVERY-FEE EARNINGS
      * =====================================================
-     *
-     * This is NOT Rider earnings.
-     *
-     * It is the total value of orders
-     * successfully delivered by the
-     * Rider.
      */
 
-    let totalDeliveryValue =
+    let totalDeliveryFees =
       0;
 
-    let todayDeliveryValue =
+    let todayDeliveryFees =
       0;
 
-    let thisMonthDeliveryValue =
+    let thisMonthDeliveryFees =
       0;
 
     deliveredDeliveries.forEach(
       (delivery) => {
-        const orderValue =
-          orderValueById.get(
+        const deliveryFee =
+          deliveryFeeByOrderId.get(
             String(
               delivery.order
             )
           ) || 0;
 
-        /*
-         * Total value includes every
-         * successfully delivered order.
-         */
-
-        totalDeliveryValue +=
-          orderValue;
-
-        /*
-         * Date-specific values require
-         * deliveredAt.
-         */
+        totalDeliveryFees +=
+          deliveryFee;
 
         if (
           !delivery.deliveredAt
@@ -933,253 +905,163 @@ export const getRiderDashboard =
           deliveredTime >=
           todayStartPH
         ) {
-          todayDeliveryValue +=
-            orderValue;
+          todayDeliveryFees +=
+            deliveryFee;
         }
 
         if (
           deliveredTime >=
           monthStartPH
         ) {
-          thisMonthDeliveryValue +=
-            orderValue;
+          thisMonthDeliveryFees +=
+            deliveryFee;
         }
       }
     );
 
     /*
      * =====================================================
+     * WEEKLY DELIVERY STATISTICS
+     * =====================================================
+     */
+
+    const WEEKDAY_LABELS = [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun",
+    ];
+
+    const phDayOfWeek =
+      phNow.getUTCDay();
+
+    const mondayIndex =
+      (phDayOfWeek + 6) %
+      7;
+
+    const weekStartPH =
+      Date.UTC(
+        phNow.getUTCFullYear(),
+        phNow.getUTCMonth(),
+        phNow.getUTCDate() -
+          mondayIndex
+      ) -
+      PH_OFFSET_MS;
+
+    const nextWeekStartPH =
+      weekStartPH +
+      7 *
+        24 *
+        60 *
+        60 *
+        1000;
+
+    const weeklyDeliveryCounts =
+      [0, 0, 0, 0, 0, 0, 0];
+
+    deliveredDeliveries.forEach(
+      (delivery) => {
+        if (
+          !delivery.deliveredAt
+        ) {
+          return;
+        }
+
+        const deliveredTime =
+          new Date(
+            delivery.deliveredAt
+          ).getTime();
+
+        if (
+          deliveredTime <
+            weekStartPH ||
+          deliveredTime >=
+            nextWeekStartPH
+        ) {
+          return;
+        }
+
+        const deliveredPH =
+          new Date(
+            deliveredTime +
+              PH_OFFSET_MS
+          );
+
+        const jsDay =
+          deliveredPH.getUTCDay();
+
+        const dayIndex =
+          (jsDay + 6) %
+          7;
+
+        weeklyDeliveryCounts[
+          dayIndex
+        ] += 1;
+      }
+    );
+
+    const weeklyDeliveries =
+      WEEKDAY_LABELS.map(
+        (
+          day,
+          index
+        ) => ({
+          day,
+
+          value:
+            weeklyDeliveryCounts[
+              index
+            ],
+        })
+      );
+
+    /*
+     * =====================================================
+     * COMPLETION RATE
+     * =====================================================
+     */
+
+    const finishedDeliveries =
+      completed +
+      cancelled;
+
+    const completionRate =
+      finishedDeliveries > 0
+        ? Number(
+            (
+              (
+                completed /
+                finishedDeliveries
+              ) *
+              100
+            ).toFixed(1)
+          )
+        : 0;
+
+    /*
+     * =====================================================
      * RATING
      * =====================================================
      *
-     * Rider rating/review model has not
-     * been implemented yet.
+     * No Rider review/rating source has
+     * been verified yet.
      *
      * Never fabricate a rating.
      */
 
-    /*
- * =====================================================
- * WEEKLY DELIVERY STATISTICS
- * =====================================================
- *
- * Shows successfully completed deliveries
- * for the current Philippine calendar week.
- *
- * Week:
- *
- * Monday -> Sunday
- *
- * IMPORTANT:
- *
- * These values come from real delivered
- * Delivery records.
- *
- * They are NOT hardcoded.
- * =====================================================
- */
+    const rating = {
+      average:
+        null,
 
-const WEEKDAY_LABELS = [
-  "Mon",
-  "Tue",
-  "Wed",
-  "Thu",
-  "Fri",
-  "Sat",
-  "Sun",
-];
+      count:
+        0,
+    };
 
-/*
- * phNow is already shifted to Philippine
- * time above.
- *
- * getUTCDay():
- *
- * Sunday = 0
- * Monday = 1
- * ...
- * Saturday = 6
- */
-
-const phDayOfWeek =
-  phNow.getUTCDay();
-
-/*
- * Convert the JS Sunday-first index into
- * a Monday-first index.
- *
- * Monday = 0
- * Tuesday = 1
- * ...
- * Sunday = 6
- */
-
-const mondayIndex =
-  (phDayOfWeek + 6) %
-  7;
-
-/*
- * Start of the current Monday in
- * Philippine time, converted back to UTC.
- */
-
-const weekStartPH =
-  Date.UTC(
-    phNow.getUTCFullYear(),
-    phNow.getUTCMonth(),
-    phNow.getUTCDate() -
-      mondayIndex
-  ) -
-  PH_OFFSET_MS;
-
-/*
- * Start of next Monday.
- */
-
-const nextWeekStartPH =
-  weekStartPH +
-  7 *
-    24 *
-    60 *
-    60 *
-    1000;
-
-/*
- * Start with zero deliveries for
- * every day.
- */
-
-const weeklyDeliveryCounts =
-  [0, 0, 0, 0, 0, 0, 0];
-
-/*
- * Count only successfully delivered
- * deliveries belonging to the
- * current Philippine week.
- */
-
-deliveredDeliveries.forEach(
-  (delivery) => {
-    if (
-      !delivery.deliveredAt
-    ) {
-      return;
-    }
-
-    const deliveredTime =
-      new Date(
-        delivery.deliveredAt
-      ).getTime();
-
-    /*
-     * Ignore deliveries outside
-     * the current PH week.
-     */
-
-    if (
-      deliveredTime <
-        weekStartPH ||
-      deliveredTime >=
-        nextWeekStartPH
-    ) {
-      return;
-    }
-
-    /*
-     * Determine which Philippine
-     * calendar day this delivery
-     * belongs to.
-     */
-
-    const deliveredPH =
-      new Date(
-        deliveredTime +
-          PH_OFFSET_MS
-      );
-
-    const jsDay =
-      deliveredPH.getUTCDay();
-
-    const dayIndex =
-      (jsDay + 6) %
-      7;
-
-    weeklyDeliveryCounts[
-      dayIndex
-    ] += 1;
-  }
-);
-
-/*
- * Mobile-friendly response.
- */
-
-const weeklyDeliveries =
-  WEEKDAY_LABELS.map(
-    (
-      day,
-      index
-    ) => ({
-      day,
-
-      value:
-        weeklyDeliveryCounts[
-          index
-        ],
-    })
-  );
-
-/*
- * =====================================================
- * COMPLETION RATE
- * =====================================================
- *
- * Percentage of finished delivery
- * attempts that were successfully
- * delivered.
- *
- * Active deliveries are excluded
- * because they are not finished yet.
- */
-
-const finishedDeliveries =
-  completed +
-  cancelled;
-
-const completionRate =
-  finishedDeliveries > 0
-    ? Number(
-        (
-          (
-            completed /
-            finishedDeliveries
-          ) *
-          100
-        ).toFixed(1)
-      )
-    : 0;
-
-/*
- * =====================================================
- * RATING
- * =====================================================
- *
- * Rider rating/review model has not
- * been implemented yet.
- *
- * Never fabricate a rating.
- */
-
-const rating = {
-  average:
-    null,
-
-  count:
-    0,
-};
-
-const owner =
-  rider.owner;
+    const owner =
+      rider.owner;
 
     /*
      * =====================================================
@@ -1215,6 +1097,8 @@ const owner =
           null,
       },
 
+      workShift,
+
       deliveries: {
         total,
         completed,
@@ -1223,61 +1107,29 @@ const owner =
       },
 
       /*
-       * NOT RIDER SALARY.
-       *
-       * Total monetary value of orders
-       * handled through completed
-       * deliveries.
+       * Actual Rider earnings from
+       * completed delivery fees.
        */
-deliveryValue: {
-  /*
-   * NOT RIDER EARNINGS.
-   *
-   * Monetary value of successfully
-   * delivered customer orders.
-   */
+      deliveryFees: {
+        total:
+          totalDeliveryFees,
 
-  total:
-    totalDeliveryValue,
+        today:
+          todayDeliveryFees,
 
-  today:
-    todayDeliveryValue,
+        thisMonth:
+          thisMonthDeliveryFees,
+      },
 
-  thisMonth:
-    thisMonthDeliveryValue,
-},
+      performance: {
+        completionRate,
+      },
 
-/*
- * =====================================================
- * PERFORMANCE
- * =====================================================
- */
+      weeklyDeliveries,
 
-performance: {
-  completionRate,
-},
-
-/*
- * =====================================================
- * CURRENT WEEK
- * =====================================================
- */
-
-weeklyDeliveries,
-
-/*
- * =====================================================
- * RATING
- * =====================================================
- *
- * Remains null until the Review /
- * Rating module is implemented.
- */
-
-rating,
+      rating,
     };
   };
-
 
 /*
  * =========================================================
@@ -1285,20 +1137,12 @@ rating,
  * WALLET
  * =========================================================
  *
- * BUSINESS RULE:
+ * COD REMITTANCE:
  *
- * One Rider + one Philippine calendar day
- * = one shift remittance.
+ * Rider -> FLOGRAM
  *
- * All delivered + paid COD orders completed
- * by the Rider during that day are grouped
- * into ONE remittance.
- *
- * PayMongo / online payments remain visible
- * in transaction history but are never
- * included in Rider remittance.
- *
- * Rider salary/payroll is separate.
+ * This remains separate from Rider
+ * delivery-fee earnings and payouts.
  * =========================================================
  */
 
@@ -1363,12 +1207,6 @@ export const getRiderWallet =
   async (
     userId
   ) => {
-    /*
-     * =====================================================
-     * RIDER PROFILE
-     * =====================================================
-     */
-
     const rider =
       await Rider.findOne({
         owner:
@@ -1391,12 +1229,6 @@ export const getRiderWallet =
       rider
     );
 
-    /*
-     * =====================================================
-     * DELIVERED RIDER ORDERS
-     * =====================================================
-     */
-
     const delivered =
       await Delivery.find({
         rider:
@@ -1413,6 +1245,7 @@ export const getRiderWallet =
           [
             "productName",
             "totalAmount",
+            "deliveryFee",
             "paymentMethod",
             "paymentStatus",
           ].join(" ")
@@ -1425,10 +1258,6 @@ export const getRiderWallet =
     /*
      * =====================================================
      * BUILD COD SHIFT GROUPS
-     * =====================================================
-     *
-     * Each Philippine calendar day becomes
-     * one potential Rider remittance.
      * =====================================================
      */
 
@@ -1461,11 +1290,6 @@ export const getRiderWallet =
           order.paymentStatus ||
             ""
         ).toLowerCase();
-
-      /*
-       * Only delivered + paid COD orders
-       * belong to Rider remittance.
-       */
 
       if (
         paymentMethod !==
@@ -1520,12 +1344,6 @@ export const getRiderWallet =
           order:
             order._id,
 
-          /*
-           * order.totalAmount is already
-           * the complete customer payment.
-           *
-           * Do NOT add deliveryFee again.
-           */
           amount:
             Number(
               order.totalAmount ||
@@ -1537,19 +1355,6 @@ export const getRiderWallet =
     /*
      * =====================================================
      * REMOVE OLD LEGACY REMITTANCE RECORDS
-     * =====================================================
-     *
-     * Old version:
-     *
-     * one delivery = one remittance
-     *
-     * New version:
-     *
-     * one Rider + one Philippine day
-     * = one remittance
-     *
-     * Only legacy records without shiftDate
-     * are removed.
      * =====================================================
      */
 
@@ -1597,10 +1402,6 @@ export const getRiderWallet =
             group.shiftDate,
         });
 
-      /*
-       * No remittance yet for this day.
-       */
-
       if (!existing) {
         const remittance =
           new RiderRemittance({
@@ -1625,12 +1426,6 @@ export const getRiderWallet =
         continue;
       }
 
-      /*
-       * Once submitted or verified,
-       * do not silently modify what
-       * was submitted.
-       */
-
       if (
         [
           "submitted",
@@ -1641,11 +1436,6 @@ export const getRiderWallet =
       ) {
         continue;
       }
-
-      /*
-       * Pending/rejected shifts may
-       * still be synchronized.
-       */
 
       existing.items =
         group.items;
@@ -1715,11 +1505,6 @@ export const getRiderWallet =
      * =====================================================
      * TRANSACTION HISTORY
      * =====================================================
-     *
-     * Individual deliveries remain visible
-     * even though COD remittance is grouped
-     * per shift/day.
-     * =====================================================
      */
 
     const transactions =
@@ -1759,10 +1544,6 @@ export const getRiderWallet =
                 : null;
 
             return {
-              /*
-               * DELIVERY
-               */
-
               deliveryId:
                 String(
                   delivery._id
@@ -1774,10 +1555,6 @@ export const getRiderWallet =
               deliveredAt:
                 delivery.deliveredAt ||
                 null,
-
-              /*
-               * ORDER
-               */
 
               orderId:
                 String(
@@ -1792,13 +1569,19 @@ export const getRiderWallet =
                 delivery.recipientName ||
                 "Recipient",
 
-              /*
-               * PAYMENT
-               */
-
               amount:
                 Number(
                   order.totalAmount ||
+                    0
+                ),
+
+              /*
+               * Actual Rider earning for
+               * this completed delivery.
+               */
+              deliveryFee:
+                Number(
+                  order.deliveryFee ||
                     0
                 ),
 
@@ -1809,10 +1592,6 @@ export const getRiderWallet =
               paymentStatus:
                 order.paymentStatus ||
                 null,
-
-              /*
-               * DAILY REMITTANCE
-               */
 
               remittanceStatus:
                 isCashOnDelivery
@@ -1858,7 +1637,7 @@ export const getRiderWallet =
 
     /*
      * =====================================================
-     * CURRENT PHILIPPINE SHIFT
+     * TODAY'S SHIFT
      * =====================================================
      */
 
@@ -1884,7 +1663,7 @@ export const getRiderWallet =
 
     /*
      * =====================================================
-     * CASH COLLECTED TODAY
+     * WALLET SUMMARY
      * =====================================================
      */
 
@@ -1896,12 +1675,6 @@ export const getRiderWallet =
               0
           )
         : 0;
-
-    /*
-     * =====================================================
-     * TOTAL HISTORICAL COD COLLECTED
-     * =====================================================
-     */
 
     const totalCashCollected =
       transactions
@@ -1924,22 +1697,16 @@ export const getRiderWallet =
         )
         .reduce(
           (
-            total,
+            totalAmount,
             transaction
           ) =>
-            total +
+            totalAmount +
             Number(
               transaction.amount ||
                 0
             ),
           0
         );
-
-    /*
-     * =====================================================
-     * REMITTANCE TOTALS
-     * =====================================================
-     */
 
     const sumRemittancesByStatus =
       (
@@ -1955,10 +1722,10 @@ export const getRiderWallet =
           )
           .reduce(
             (
-              total,
+              totalAmount,
               remittance
             ) =>
-              total +
+              totalAmount +
               Number(
                 remittance
                   .totalAmount ||
@@ -1987,12 +1754,6 @@ export const getRiderWallet =
         "rejected"
       );
 
-    /*
-     * =====================================================
-     * TRANSACTION COUNTS
-     * =====================================================
-     */
-
     const codTransactionCount =
       transactions.filter(
         (
@@ -2018,12 +1779,6 @@ export const getRiderWallet =
           ).toLowerCase() !==
             "cash_on_delivery"
       ).length;
-
-    /*
-     * =====================================================
-     * DAILY REMITTANCE HISTORY
-     * =====================================================
-     */
 
     const dailyRemittances =
       remittances.map(
@@ -2093,16 +1848,6 @@ export const getRiderWallet =
           };
         }
       );
-
-    /*
-     * =====================================================
-     * CURRENT SHIFT SUMMARY
-     * =====================================================
-     *
-     * Mobile Rider Wallet should use this
-     * record for the end-of-day submission.
-     * =====================================================
-     */
 
     const currentShift =
       todayRemittance
@@ -2223,40 +1968,48 @@ export const getRiderWallet =
           ).length,
       },
 
-      /*
-       * Today's shift remittance.
-       */
       currentShift,
 
-      /*
-       * Individual delivered orders.
-       */
       transactions,
 
-      /*
-       * One remittance record per day.
-       */
       remittances:
         dailyRemittances,
     };
   };
-
-/*
+  /*
  * =========================================================
  * RIDER
  * SUBMIT DAILY COD REMITTANCE
  * =========================================================
  *
- * One submission covers every COD delivery
- * included in the selected Rider shift/day.
+ * A Rider submits ONE remittance for the
+ * entire Philippine calendar day.
+ *
+ * Required:
+ *
+ * - referenceNumber
+ * - proofImageUrl
+ *
+ * Optional:
+ *
+ * - riderRemarks
+ *
+ * Allowed status:
  *
  * pending
  *    ↓
  * submitted
- *    ↓
- * Admin verifies/rejects later
  *
- * rejected may be corrected and resubmitted.
+ * rejected
+ *    ↓
+ * submitted
+ *
+ * NOT allowed:
+ *
+ * submitted → submitted
+ * verified  → submitted
+ *
+ * Admin verification is handled separately.
  * =========================================================
  */
 
@@ -2283,7 +2036,7 @@ export const submitRiderRemittance =
 
     /*
      * =====================================================
-     * REMITTANCE OWNERSHIP
+     * REMITTANCE
      * =====================================================
      */
 
@@ -2396,7 +2149,7 @@ export const submitRiderRemittance =
 
     /*
      * =====================================================
-     * VERIFY EVERY DELIVERY / ORDER
+     * REVALIDATE EVERY DELIVERY / ORDER
      * =====================================================
      */
 
@@ -2451,10 +2204,6 @@ export const submitRiderRemittance =
         throw error;
       }
 
-      /*
-       * Delivery and Order must match.
-       */
-
       if (
         String(
           delivery.order
@@ -2486,10 +2235,6 @@ export const submitRiderRemittance =
             ""
         ).toLowerCase();
 
-      /*
-       * Only COD is remitted.
-       */
-
       if (
         paymentMethod !==
         "cash_on_delivery"
@@ -2505,10 +2250,6 @@ export const submitRiderRemittance =
         throw error;
       }
 
-      /*
-       * COD must already be paid.
-       */
-
       if (
         paymentStatus !==
         "paid"
@@ -2523,12 +2264,6 @@ export const submitRiderRemittance =
 
         throw error;
       }
-
-      /*
-       * Verify that this delivery belongs
-       * to the same Philippine calendar
-       * day as the remittance.
-       */
 
       const deliveryShiftKey =
         getShiftDateKey(
@@ -2556,13 +2291,6 @@ export const submitRiderRemittance =
 
         throw error;
       }
-
-      /*
-       * Never trust amount supplied by
-       * the mobile application.
-       *
-       * Rebuild it from Order.totalAmount.
-       */
 
       validatedItems.push({
         delivery:
@@ -2632,7 +2360,7 @@ export const submitRiderRemittance =
 
     /*
      * =====================================================
-     * LOCK AUTHORITATIVE SHIFT CONTENT
+     * SAVE SUBMISSION
      * =====================================================
      */
 
@@ -2654,12 +2382,6 @@ export const submitRiderRemittance =
     remittance.submittedAt =
       new Date();
 
-    /*
-     * Clear previous Admin decision
-     * when a rejected shift is
-     * resubmitted.
-     */
-
     remittance.adminRemarks =
       "";
 
@@ -2669,19 +2391,7 @@ export const submitRiderRemittance =
     remittance.verifiedBy =
       null;
 
-    /*
-     * Your RiderRemittance model should
-     * recalculate totalAmount from items
-     * before validation/save.
-     */
-
     await remittance.save();
-
-    /*
-     * =====================================================
-     * FINAL RESPONSE
-     * =====================================================
-     */
 
     return {
       id:
@@ -2756,23 +2466,10 @@ export const submitRiderRemittance =
     };
   };
 
-  /*
+/*
  * =========================================================
  * ADMIN
  * GET RIDER REMITTANCES
- * =========================================================
- *
- * Used by the Admin remittance management screen.
- *
- * Optional status:
- *
- * submitted
- * verified
- * rejected
- * pending
- *
- * When no status is supplied, all remittances
- * are returned.
  * =========================================================
  */
 
@@ -3079,22 +2776,10 @@ export const getAdminRiderRemittanceById =
         remittance.updatedAt,
     };
   };
-
-/*
+  /*
  * =========================================================
  * ADMIN
  * VERIFY RIDER REMITTANCE
- * =========================================================
- *
- * submitted
- *    ↓
- * verified
- *
- * Only submitted remittances can be verified.
- *
- * verifiedAt is important because the Admin
- * Dashboard uses it to determine when COD
- * sales become recognized.
  * =========================================================
  */
 
@@ -3164,11 +2849,6 @@ export const verifyRiderRemittance =
 
       throw error;
     }
-
-    /*
-     * Recheck the authoritative orders before
-     * approving the remittance.
-     */
 
     for (
       const item
@@ -3288,16 +2968,6 @@ export const verifyRiderRemittance =
  * ADMIN
  * REJECT RIDER REMITTANCE
  * =========================================================
- *
- * submitted
- *    ↓
- * rejected
- *
- * Rejected remittances are NOT included
- * in Admin Dashboard COD sales.
- *
- * Rider may correct and resubmit them.
- * =========================================================
  */
 
 export const rejectRiderRemittance =
@@ -3370,12 +3040,6 @@ export const rejectRiderRemittance =
     remittance.status =
       "rejected";
 
-    /*
-     * verifiedBy identifies the Admin
-     * who reviewed the submission even
-     * when the decision is rejection.
-     */
-
     remittance.verifiedBy =
       adminId;
 
@@ -3391,3 +3055,1132 @@ export const rejectRiderRemittance =
       remittance._id
     );
   };
+  /*
+ * =========================================================
+ * RIDER PAYOUT / DELIVERY-FEE EARNINGS
+ * =========================================================
+ *
+ * Rider earnings are the actual Order.deliveryFee values
+ * from successfully delivered deliveries.
+ *
+ * COD remittance is separate and is never netted against
+ * Rider earnings.
+ * =========================================================
+ */
+
+const getRiderPayoutDeliveryIds = async (riderId) => {
+  const payouts = await RiderPayout.find({
+    rider: riderId,
+    status: { $in: ["pending", "paid"] },
+  })
+    .select("items.delivery")
+    .lean();
+
+  return new Set(
+    payouts.flatMap((payout) =>
+      (Array.isArray(payout.items) ? payout.items : [])
+        .map((item) => item?.delivery)
+        .filter(Boolean)
+        .map(String)
+    )
+  );
+};
+
+const buildRiderEarningItems = async (
+  rider,
+  userId,
+  { periodStart = null, periodEnd = null, excludeReserved = false } = {}
+) => {
+  const filter = {
+    rider: rider._id,
+    riderUser: userId,
+    status: "delivered",
+    deliveredAt: { $ne: null },
+  };
+
+  if (periodStart || periodEnd) {
+    filter.deliveredAt = {};
+
+    if (periodStart) {
+      filter.deliveredAt.$gte = periodStart;
+    }
+
+    if (periodEnd) {
+      filter.deliveredAt.$lte = periodEnd;
+    }
+  }
+
+  const deliveries = await Delivery.find(filter)
+    .select("_id order deliveredAt")
+    .lean();
+
+  const reservedDeliveryIds = excludeReserved
+    ? await getRiderPayoutDeliveryIds(rider._id)
+    : new Set();
+
+  const eligibleDeliveries = deliveries.filter(
+    (delivery) => !reservedDeliveryIds.has(String(delivery._id))
+  );
+
+  const orderIds = eligibleDeliveries
+    .map((delivery) => delivery.order)
+    .filter(Boolean);
+
+  const orders = orderIds.length
+    ? await Order.find({ _id: { $in: orderIds } })
+        .select("_id deliveryFee")
+        .lean()
+    : [];
+
+  const orderById = new Map(
+    orders.map((order) => [String(order._id), order])
+  );
+
+  return eligibleDeliveries
+    .map((delivery) => {
+      const order = orderById.get(String(delivery.order));
+
+      if (!order || !delivery.deliveredAt) {
+        return null;
+      }
+
+      const deliveryFee = Number(order.deliveryFee || 0);
+
+      if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
+        return null;
+      }
+
+      return {
+        delivery: delivery._id,
+        order: order._id,
+        deliveryFee,
+        deliveredAt: delivery.deliveredAt,
+      };
+    })
+    .filter(Boolean);
+};
+
+const formatRiderPayout = (payout) => ({
+  id: String(payout._id),
+  rider: payout.rider || null,
+  riderUser: payout.riderUser || null,
+  periodStart: payout.periodStart,
+  periodEnd: payout.periodEnd,
+  deliveryCount: Array.isArray(payout.items) ? payout.items.length : 0,
+
+  items: (Array.isArray(payout.items) ? payout.items : []).map((item) => ({
+    delivery: item.delivery || null,
+    order: item.order || null,
+
+    deliveryId: item.delivery?._id
+      ? String(item.delivery._id)
+      : item.delivery
+        ? String(item.delivery)
+        : null,
+
+    orderId: item.order?._id
+      ? String(item.order._id)
+      : item.order
+        ? String(item.order)
+        : null,
+
+    deliveryFee: Number(item.deliveryFee || 0),
+    deliveredAt: item.deliveredAt || null,
+  })),
+
+  totalAmount: Number(payout.totalAmount || 0),
+  status: payout.status,
+  paymentMethod: payout.paymentMethod || "",
+  referenceNumber: payout.referenceNumber || "",
+  proofImageUrl: payout.proofImageUrl || null,
+  paidAt: payout.paidAt || null,
+  paidBy: payout.paidBy || null,
+  adminRemarks: payout.adminRemarks || "",
+  cancelledAt: payout.cancelledAt || null,
+  cancelledBy: payout.cancelledBy || null,
+  cancellationReason: payout.cancellationReason || "",
+  createdBy: payout.createdBy || null,
+  createdAt: payout.createdAt,
+  updatedAt: payout.updatedAt,
+});
+
+/*
+ * =========================================================
+ * RIDER
+ * GET EARNINGS
+ * =========================================================
+ */
+
+export const getRiderEarnings = async (userId) => {
+  const rider = await getRiderProfileByUserId(userId);
+
+  validateApprovedActiveRider(rider);
+
+  const items = await buildRiderEarningItems(
+    rider,
+    userId
+  );
+
+  const payouts = await RiderPayout.find({
+    rider: rider._id,
+  })
+    .sort({
+      periodStart: -1,
+      createdAt: -1,
+    })
+    .lean();
+
+  const paidDeliveryIds = new Set(
+    payouts
+      .filter(
+        (payout) =>
+          payout.status === "paid"
+      )
+      .flatMap((payout) =>
+        (
+          Array.isArray(payout.items)
+            ? payout.items
+            : []
+        )
+          .map(
+            (item) =>
+              item?.delivery
+          )
+          .filter(Boolean)
+          .map(String)
+      )
+  );
+
+  const pendingDeliveryIds = new Set(
+    payouts
+      .filter(
+        (payout) =>
+          payout.status === "pending"
+      )
+      .flatMap((payout) =>
+        (
+          Array.isArray(payout.items)
+            ? payout.items
+            : []
+        )
+          .map(
+            (item) =>
+              item?.delivery
+          )
+          .filter(Boolean)
+          .map(String)
+      )
+  );
+
+  const now = new Date();
+
+  const PH_OFFSET_MS =
+    8 *
+    60 *
+    60 *
+    1000;
+
+  const phNow = new Date(
+    now.getTime() +
+      PH_OFFSET_MS
+  );
+
+  const todayStart = new Date(
+    Date.UTC(
+      phNow.getUTCFullYear(),
+      phNow.getUTCMonth(),
+      phNow.getUTCDate()
+    ) -
+      PH_OFFSET_MS
+  );
+
+  const totalEarned =
+    items.reduce(
+      (sum, item) =>
+        sum +
+        Number(
+          item.deliveryFee ||
+            0
+        ),
+      0
+    );
+
+  const today =
+    items
+      .filter(
+        (item) =>
+          new Date(
+            item.deliveredAt
+          ) >=
+          todayStart
+      )
+      .reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.deliveryFee ||
+              0
+          ),
+        0
+      );
+
+  const paid =
+    items
+      .filter(
+        (item) =>
+          paidDeliveryIds.has(
+            String(
+              item.delivery
+            )
+          )
+      )
+      .reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.deliveryFee ||
+              0
+          ),
+        0
+      );
+
+  const pendingPayout =
+    items
+      .filter(
+        (item) =>
+          pendingDeliveryIds.has(
+            String(
+              item.delivery
+            )
+          )
+      )
+      .reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.deliveryFee ||
+              0
+          ),
+        0
+      );
+
+  const unpaid =
+    items
+      .filter(
+        (item) =>
+          !paidDeliveryIds.has(
+            String(
+              item.delivery
+            )
+          ) &&
+          !pendingDeliveryIds.has(
+            String(
+              item.delivery
+            )
+          )
+      )
+      .reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.deliveryFee ||
+              0
+          ),
+        0
+      );
+
+  return {
+    summary: {
+      today,
+      totalEarned,
+      unpaid,
+      pendingPayout,
+      paid,
+    },
+
+    payouts:
+      payouts.map(
+        formatRiderPayout
+      ),
+  };
+};
+
+/*
+ * =========================================================
+ * RIDER
+ * GET ONE PAYOUT
+ * =========================================================
+ */
+
+export const getRiderPayoutById = async (
+  userId,
+  payoutId
+) => {
+  const rider =
+    await getRiderProfileByUserId(
+      userId
+    );
+
+  validateApprovedActiveRider(
+    rider
+  );
+
+  const payout =
+    await RiderPayout.findOne({
+      _id:
+        payoutId,
+
+      rider:
+        rider._id,
+
+      riderUser:
+        userId,
+    })
+      .populate(
+        "paidBy",
+        "firstName lastName email"
+      )
+      .populate(
+        "items.delivery",
+        "_id status deliveredAt"
+      )
+      .populate(
+        "items.order",
+        "_id productName deliveryFee orderStatus"
+      )
+      .lean();
+
+  if (!payout) {
+    const error =
+      new Error(
+        "Rider payout record was not found."
+      );
+
+    error.statusCode =
+      404;
+
+    throw error;
+  }
+
+  return formatRiderPayout(
+    payout
+  );
+};
+
+/*
+ * =========================================================
+ * ADMIN
+ * CREATE RIDER PAYOUT
+ * =========================================================
+ */
+
+export const createAdminRiderPayout = async (
+  riderId,
+  adminId,
+  payoutData = {}
+) => {
+  const rider =
+    await Rider.findById(
+      riderId
+    );
+
+  if (!rider) {
+    const error =
+      new Error(
+        "Rider profile was not found."
+      );
+
+    error.statusCode =
+      404;
+
+    throw error;
+  }
+
+  validateApprovedActiveRider(
+    rider
+  );
+
+  const periodStart =
+    new Date(
+      payoutData.periodStart
+    );
+
+  const periodEnd =
+    new Date(
+      payoutData.periodEnd
+    );
+
+  if (
+    Number.isNaN(
+      periodStart.getTime()
+    ) ||
+    Number.isNaN(
+      periodEnd.getTime()
+    )
+  ) {
+    const error =
+      new Error(
+        "A valid payout period start and end are required."
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  if (
+    periodEnd <
+    periodStart
+  ) {
+    const error =
+      new Error(
+        "Payout period end cannot be earlier than its start."
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  const existing =
+    await RiderPayout.findOne({
+      rider:
+        rider._id,
+
+      status: {
+        $in: [
+          "pending",
+          "paid",
+        ],
+      },
+
+      periodStart: {
+        $lte:
+          periodEnd,
+      },
+
+      periodEnd: {
+        $gte:
+          periodStart,
+      },
+    }).lean();
+
+  if (existing) {
+    const error =
+      new Error(
+        "This Rider already has a pending or paid payout that overlaps this payout period."
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
+
+  const items =
+    await buildRiderEarningItems(
+      rider,
+      rider.owner,
+      {
+        periodStart,
+        periodEnd,
+        excludeReserved:
+          true,
+      }
+    );
+
+  if (
+    items.length ===
+    0
+  ) {
+    const error =
+      new Error(
+        "No unpaid completed delivery fees were found for this Rider and payout period."
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  const payout =
+    new RiderPayout({
+      rider:
+        rider._id,
+
+      riderUser:
+        rider.owner,
+
+      periodStart,
+
+      periodEnd,
+
+      items,
+
+      status:
+        "pending",
+
+      createdBy:
+        adminId,
+    });
+
+  await payout.save();
+
+  return getAdminRiderPayoutById(
+    payout._id
+  );
+};
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET RIDER PAYOUTS
+ * =========================================================
+ */
+
+export const getAdminRiderPayouts = async (
+  status = null
+) => {
+  const allowedStatuses = [
+    "pending",
+    "paid",
+    "cancelled",
+  ];
+
+  const filter = {};
+
+  if (status) {
+    if (
+      !allowedStatuses.includes(
+        status
+      )
+    ) {
+      const error =
+        new Error(
+          "Invalid Rider payout status."
+        );
+
+      error.statusCode =
+        400;
+
+      throw error;
+    }
+
+    filter.status =
+      status;
+  }
+
+  const payouts =
+    await RiderPayout.find(
+      filter
+    )
+      .populate(
+        "riderUser",
+        "firstName lastName email phoneNumber"
+      )
+      .populate(
+        "paidBy",
+        "firstName lastName email"
+      )
+      .populate(
+        "createdBy",
+        "firstName lastName email"
+      )
+      .sort({
+        periodStart:
+          -1,
+
+        createdAt:
+          -1,
+      })
+      .lean();
+
+  return payouts.map(
+    formatRiderPayout
+  );
+};
+
+/*
+ * =========================================================
+ * ADMIN
+ * GET ONE RIDER PAYOUT
+ * =========================================================
+ */
+
+export const getAdminRiderPayoutById = async (
+  payoutId
+) => {
+  const payout =
+    await RiderPayout.findById(
+      payoutId
+    )
+      .populate(
+        "riderUser",
+        "firstName lastName email phoneNumber"
+      )
+      .populate({
+        path:
+          "rider",
+
+        select:
+          "owner vehicleType vehiclePlateNumber verificationStatus isActive",
+      })
+      .populate(
+        "paidBy",
+        "firstName lastName email"
+      )
+      .populate(
+        "createdBy",
+        "firstName lastName email"
+      )
+      .populate(
+        "cancelledBy",
+        "firstName lastName email"
+      )
+      .populate(
+        "items.delivery",
+        "_id status deliveredAt"
+      )
+      .populate(
+        "items.order",
+        "_id productName deliveryFee orderStatus"
+      )
+      .lean();
+
+  if (!payout) {
+    const error =
+      new Error(
+        "Rider payout record was not found."
+      );
+
+    error.statusCode =
+      404;
+
+    throw error;
+  }
+
+  return formatRiderPayout(
+    payout
+  );
+};
+
+/*
+ * =========================================================
+ * ADMIN
+ * MARK RIDER PAYOUT AS PAID
+ * =========================================================
+ */
+
+export const markRiderPayoutPaid = async (
+  payoutId,
+  adminId,
+  paymentData = {}
+) => {
+  const payout =
+    await RiderPayout.findById(
+      payoutId
+    );
+
+  if (!payout) {
+    const error =
+      new Error(
+        "Rider payout record was not found."
+      );
+
+    error.statusCode =
+      404;
+
+    throw error;
+  }
+
+  if (
+    payout.status ===
+    "paid"
+  ) {
+    const error =
+      new Error(
+        "This Rider payout has already been marked as paid."
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
+
+  if (
+    payout.status !==
+    "pending"
+  ) {
+    const error =
+      new Error(
+        "Only pending Rider payouts can be marked as paid."
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
+
+  const referenceNumber =
+    String(
+      paymentData.referenceNumber ||
+        ""
+    ).trim();
+
+  const proofImageUrl =
+    String(
+      paymentData.proofImageUrl ||
+        ""
+    ).trim();
+
+  const paymentMethod =
+    String(
+      paymentData.paymentMethod ||
+        "Bank Transfer"
+    ).trim();
+
+  const adminRemarks =
+    String(
+      paymentData.adminRemarks ||
+        ""
+    ).trim();
+
+  if (!referenceNumber) {
+    const error =
+      new Error(
+        "Payment reference number is required."
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  if (!proofImageUrl) {
+    const error =
+      new Error(
+        "Proof of Rider payment is required."
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  /*
+   * =====================================================
+   * DOUBLE-PAYMENT CHECK
+   * =====================================================
+   */
+
+  const paidDeliveryIds =
+    await getRiderPayoutDeliveryIds(
+      payout.rider
+    );
+
+  const currentIds =
+    new Set(
+      (
+        payout.items ||
+        []
+      ).map(
+        (item) =>
+          String(
+            item.delivery
+          )
+      )
+    );
+
+  for (
+    const deliveryId
+    of paidDeliveryIds
+  ) {
+    if (
+      !currentIds.has(
+        deliveryId
+      )
+    ) {
+      continue;
+    }
+
+    const duplicate =
+      await RiderPayout.exists({
+        _id: {
+          $ne:
+            payout._id,
+        },
+
+        status: {
+          $in: [
+            "pending",
+            "paid",
+          ],
+        },
+
+        "items.delivery":
+          deliveryId,
+      });
+
+    if (duplicate) {
+      const error =
+        new Error(
+          "One of the deliveries in this payout is already included in another Rider payout."
+        );
+
+      error.statusCode =
+        409;
+
+      throw error;
+    }
+  }
+
+  /*
+   * =====================================================
+   * REVALIDATE PAYOUT ITEMS
+   * =====================================================
+   */
+
+  const validatedItems =
+    [];
+
+  for (
+    const item
+    of payout.items
+  ) {
+    const delivery =
+      await Delivery.findOne({
+        _id:
+          item.delivery,
+
+        rider:
+          payout.rider,
+
+        riderUser:
+          payout.riderUser,
+
+        status:
+          "delivered",
+      }).lean();
+
+    if (
+      !delivery ||
+      !delivery.deliveredAt
+    ) {
+      const error =
+        new Error(
+          "One of the deliveries in this payout is no longer a valid completed Rider delivery."
+        );
+
+      error.statusCode =
+        409;
+
+      throw error;
+    }
+
+    const order =
+      await Order.findById(
+        item.order
+      )
+        .select(
+          "_id deliveryFee"
+        )
+        .lean();
+
+    if (
+      !order ||
+      String(
+        delivery.order
+      ) !==
+        String(
+          order._id
+        )
+    ) {
+      const error =
+        new Error(
+          "One of the delivery and order records in this Rider payout no longer matches."
+        );
+
+      error.statusCode =
+        409;
+
+      throw error;
+    }
+
+    const authoritativeFee =
+      Number(
+        order.deliveryFee ||
+          0
+      );
+
+    if (
+      authoritativeFee !==
+      Number(
+        item.deliveryFee ||
+          0
+      )
+    ) {
+      const error =
+        new Error(
+          "A Rider delivery fee no longer matches the authoritative Order delivery fee."
+        );
+
+      error.statusCode =
+        409;
+
+      throw error;
+    }
+
+    validatedItems.push({
+      delivery:
+        delivery._id,
+
+      order:
+        order._id,
+
+      deliveryFee:
+        authoritativeFee,
+
+      deliveredAt:
+        delivery.deliveredAt,
+    });
+  }
+
+  /*
+   * =====================================================
+   * RECORD EXTERNAL PAYMENT
+   * =====================================================
+   */
+
+  payout.items =
+    validatedItems;
+
+  payout.paymentMethod =
+    paymentMethod;
+
+  payout.referenceNumber =
+    referenceNumber;
+
+  payout.proofImageUrl =
+    proofImageUrl;
+
+  payout.adminRemarks =
+    adminRemarks;
+
+  payout.paidAt =
+    new Date();
+
+  payout.paidBy =
+    adminId;
+
+  payout.status =
+    "paid";
+
+  await payout.save();
+
+  return getAdminRiderPayoutById(
+    payout._id
+  );
+};
+
+/*
+ * =========================================================
+ * ADMIN
+ * CANCEL RIDER PAYOUT
+ * =========================================================
+ */
+
+export const cancelRiderPayout = async (
+  payoutId,
+  adminId,
+  reason
+) => {
+  const payout =
+    await RiderPayout.findById(
+      payoutId
+    );
+
+  if (!payout) {
+    const error =
+      new Error(
+        "Rider payout record was not found."
+      );
+
+    error.statusCode =
+      404;
+
+    throw error;
+  }
+
+  if (
+    payout.status ===
+    "paid"
+  ) {
+    const error =
+      new Error(
+        "A paid Rider payout cannot be cancelled."
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
+
+  if (
+    payout.status !==
+    "pending"
+  ) {
+    const error =
+      new Error(
+        "Only pending Rider payouts can be cancelled."
+      );
+
+    error.statusCode =
+      409;
+
+    throw error;
+  }
+
+  const cancellationReason =
+    String(
+      reason ||
+        ""
+    ).trim();
+
+  if (!cancellationReason) {
+    const error =
+      new Error(
+        "A Rider payout cancellation reason is required."
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  }
+
+  payout.status =
+    "cancelled";
+
+  payout.cancelledAt =
+    new Date();
+
+  payout.cancelledBy =
+    adminId;
+
+  payout.cancellationReason =
+    cancellationReason;
+
+  await payout.save();
+
+  return getAdminRiderPayoutById(
+    payout._id
+  );
+};

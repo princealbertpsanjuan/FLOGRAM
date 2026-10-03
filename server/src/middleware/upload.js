@@ -45,7 +45,12 @@ const createStorage = (folders) =>
  * which is why PDF remains allowed here.
  * =========================================================
  */
-const fileFilter = (req, file, cb) => {
+
+const fileFilter = (
+  req,
+  file,
+  cb
+) => {
   const allowedTypes = [
     "image/jpeg",
     "image/png",
@@ -53,7 +58,11 @@ const fileFilter = (req, file, cb) => {
     "application/pdf",
   ];
 
-  if (!allowedTypes.includes(file.mimetype)) {
+  if (
+    !allowedTypes.includes(
+      file.mimetype
+    )
+  ) {
     return cb(
       new Error(
         "Only JPG, PNG, and PDF files are allowed."
@@ -70,12 +79,17 @@ const fileFilter = (req, file, cb) => {
  * IMAGE-ONLY FILE FILTER
  * =========================================================
  *
- * Proof of Delivery must be an actual
- * image captured/selected by the rider.
+ * Used for image-only uploads such as:
+ *
+ * - Proof of Delivery
+ * - Rider COD remittance proof
+ * - Rider payout payment proof
+ * - Custom bouquet inspiration images
  *
  * PDF files are intentionally rejected.
  * =========================================================
  */
+
 const imageOnlyFileFilter = (
   req,
   file,
@@ -94,7 +108,7 @@ const imageOnlyFileFilter = (
   ) {
     return cb(
       new Error(
-        "Proof of delivery must be a JPG or PNG image."
+        "Only JPG or PNG images are allowed."
       ),
       false
     );
@@ -109,6 +123,7 @@ const imageOnlyFileFilter = (
  * uploads/verification/sellers/
  * =========================================================
  */
+
 export const sellerVerificationUpload =
   multer({
     storage: createStorage([
@@ -130,6 +145,7 @@ export const sellerVerificationUpload =
  * uploads/verification/riders/
  * =========================================================
  */
+
 export const riderVerificationUpload =
   multer({
     storage: createStorage([
@@ -151,6 +167,7 @@ export const riderVerificationUpload =
  * uploads/flowers/
  * =========================================================
  */
+
 export const flowerUpload =
   multer({
     storage: createStorage([
@@ -171,6 +188,7 @@ export const flowerUpload =
  * uploads/bloomboard/
  * =========================================================
  */
+
 export const bloomboardUpload =
   multer({
     storage: createStorage([
@@ -202,6 +220,7 @@ export const bloomboardUpload =
  * JPG / JPEG / PNG
  * =========================================================
  */
+
 export const deliveryProofUpload =
   multer({
     storage: createStorage([
@@ -218,7 +237,7 @@ export const deliveryProofUpload =
     },
   });
 
-  /*
+/*
  * =========================================================
  * RIDER REMITTANCE PROOF IMAGES
  * uploads/riders/remittances/
@@ -255,7 +274,50 @@ export const riderRemittanceProofUpload =
     },
   });
 
-  /*
+/*
+ * =========================================================
+ * RIDER PAYOUT PAYMENT PROOF IMAGES
+ * uploads/riders/payouts/
+ * =========================================================
+ *
+ * Used when an Admin records an external
+ * payment of the Rider's accumulated
+ * delivery-fee earnings.
+ *
+ * FLOGRAM does not perform the bank
+ * transfer itself.
+ *
+ * It stores the payment record and proof.
+ *
+ * Field name used by the route:
+ *
+ * proofImage
+ *
+ * Maximum:
+ * 5 MB
+ *
+ * Accepted:
+ * JPG / JPEG / PNG
+ * =========================================================
+ */
+
+export const riderPayoutProofUpload =
+  multer({
+    storage: createStorage([
+      "riders",
+      "payouts",
+    ]),
+
+    fileFilter:
+      imageOnlyFileFilter,
+
+    limits: {
+      fileSize:
+        5 * 1024 * 1024,
+    },
+  });
+
+/*
  * =========================================================
  * CUSTOM BOUQUET REQUEST INSPIRATION IMAGE
  * uploads/bloomboard/custom-requests/

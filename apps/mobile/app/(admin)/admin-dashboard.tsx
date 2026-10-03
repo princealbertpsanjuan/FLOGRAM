@@ -775,40 +775,40 @@ export default function AdminDashboardScreen() {
               </Text>
             </Pressable>
 
-            <Pressable
-              style={styles.summaryCard}
-              onPress={() =>
-                router.push(
-                  "/(admin)/admin-verifications"
-                )
-              }
-            >
-              <Text
-                style={
-                  styles.summaryLabel
-                }
-              >
-                Pending Actions
-              </Text>
+<Pressable
+  style={styles.summaryCard}
+  onPress={() =>
+    router.push(
+      "/(admin)/admin-remittances"
+    )
+  }
+>
+  <Text
+    style={
+      styles.summaryLabel
+    }
+  >
+    COD Remittances
+  </Text>
 
-              <Text
-                style={
-                  styles.summaryValue
-                }
-              >
-                {formatNumber(
-                  pendingActions
-                )}
-              </Text>
+  <Text
+    style={
+      styles.summaryValue
+    }
+  >
+    {formatNumber(
+      remittances.awaitingVerification
+    )}
+  </Text>
 
-              <Text
-                style={
-                  styles.warningText
-                }
-              >
-                Requires review
-              </Text>
-            </Pressable>
+  <Text
+    style={
+      styles.warningText
+    }
+  >
+    Requires review
+  </Text>
+</Pressable>
           </View>
         </View>
 

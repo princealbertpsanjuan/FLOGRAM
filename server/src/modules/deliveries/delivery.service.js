@@ -1,5 +1,4 @@
 import Delivery from "./delivery.model.js";
-
 import Order from "../orders/order.model.js";
 import Rider from "../riders/rider.model.js";
 import User from "../auth/auth.model.js";
@@ -12,6 +11,11 @@ import {
 import {
   createNotification,
 } from "../notifications/notification.service.js";
+
+import {
+  getRiderWorkShiftStatus,
+  requireActiveApprovedShiftForRider,
+} from "../riders/rider-shift.service.js";
 
 /*
  * =========================================================
@@ -124,6 +128,7 @@ const getRiderProfileByUser =
 /*
  * Validate rider account.
  */
+
 const validateEligibleRider =
   (
     rider
@@ -161,11 +166,82 @@ const validateEligibleRider =
 
 /*
  * =========================================================
- * SAFE NOTIFICATION HELPER
+ * RIDER WORK SHIFT HELPERS
  * =========================================================
  *
- * Notification failure must never break
- * an otherwise successful order/delivery action.
+ * A Rider may only receive or accept NEW delivery requests
+ * while an approved work shift is currently active.
+ *
+ * An active delivery is different:
+ *
+ * accepted
+ * picked_up
+ * out_for_delivery
+ *
+ * Once the Rider has already accepted a delivery, the Rider
+ * may finish that delivery even if the approved work shift
+ * reaches its end time.
+ * =========================================================
+ */
+
+const canRiderReceiveNewDeliveries =
+  async (
+    rider
+  ) => {
+    const workShift =
+      await getRiderWorkShiftStatus(
+        rider._id
+      );
+
+    return (
+      workShift?.canGoOnline ===
+      true
+    );
+  };
+
+const restoreRiderAvailabilityAfterDelivery =
+  async (
+    riderId
+  ) => {
+    const rider =
+      await Rider.findById(
+        riderId
+      );
+
+    if (!rider) {
+      return false;
+    }
+
+    if (
+      rider.verificationStatus !==
+        "approved" ||
+      rider.isActive !==
+        true
+    ) {
+      rider.isAvailable =
+        false;
+
+      await rider.save();
+
+      return false;
+    }
+
+    const canReceive =
+      await canRiderReceiveNewDeliveries(
+        rider
+      );
+
+    rider.isAvailable =
+      canReceive;
+
+    await rider.save();
+
+    return canReceive;
+  };
+
+/*
+ * =========================================================
+ * SAFE NOTIFICATION HELPER
  * =========================================================
  */
 
@@ -278,27 +354,6 @@ const normalizeCoordinate = (
  * =========================================================
  * NAVIGATION HELPER
  * =========================================================
- *
- * accepted
- *   rider -> florist
- *
- * picked_up / out_for_delivery
- *   rider -> customer
- *
- * IMPORTANT:
- *
- * New Delivery documents store:
- *
- * delivery.pickupLocation
- * delivery.deliveryLocation
- *
- * Older Delivery documents may not
- * contain these fields yet.
- *
- * Therefore we fall back to the
- * associated Order coordinates when
- * necessary.
- * =========================================================
  */
 
 const calculateRiderNavigation =
@@ -310,12 +365,6 @@ const calculateRiderNavigation =
     let destinationType;
 
     let destination;
-
-    /*
-     * =====================================================
-     * RIDER -> FLORIST
-     * =====================================================
-     */
 
     if (
       delivery.status ===
@@ -348,15 +397,7 @@ const calculateRiderNavigation =
           pickupLongitude,
           "Pickup"
         );
-    }
-
-    /*
-     * =====================================================
-     * RIDER -> CUSTOMER
-     * =====================================================
-     */
-
-    else if (
+    } else if (
       [
         "picked_up",
         "out_for_delivery",
@@ -403,12 +444,6 @@ const calculateRiderNavigation =
       throw error;
     }
 
-    /*
-     * =====================================================
-     * CALCULATE ROUTE
-     * =====================================================
-     */
-
     const route =
       await calculateDeliveryRoute({
         pickupLatitude:
@@ -448,10 +483,6 @@ const calculateRiderNavigation =
       updatedAt:
         now,
 
-      /*
-       * Geometry is returned to the Rider
-       * but not permanently stored.
-       */
       geometry:
         route.geometry,
     };
@@ -466,24 +497,51 @@ const calculateRiderNavigation =
 
 export const getAvailableRiders =
   async () => {
-    return Rider.find({
-      verificationStatus:
-        "approved",
+    const riders =
+      await Rider.find({
+        verificationStatus:
+          "approved",
 
-      isActive:
-        true,
+        isActive:
+          true,
 
-      isAvailable:
-        true,
-    })
-      .populate(
-        "owner",
-        "firstName lastName email phoneNumber"
-      )
-      .sort({
-        updatedAt:
-          -1,
-      });
+        isAvailable:
+          true,
+      })
+        .populate(
+          "owner",
+          "firstName lastName email phoneNumber"
+        )
+        .sort({
+          updatedAt:
+            -1,
+        });
+
+    const availableRiders =
+      [];
+
+    for (
+      const rider
+      of riders
+    ) {
+      const canReceive =
+        await canRiderReceiveNewDeliveries(
+          rider
+        );
+
+      if (canReceive) {
+        availableRiders.push(
+          rider
+        );
+      } else {
+        rider.isAvailable =
+          false;
+
+        await rider.save();
+      }
+    }
+
+    return availableRiders;
   };
 
 /*
@@ -634,10 +692,6 @@ export const createDeliveryRequest =
       throw error;
     }
 
-    /*
-     * PayMongo must already
-     * be confirmed paid.
-     */
     if (
       order.paymentMethod ===
         "paymongo" &&
@@ -655,10 +709,6 @@ export const createDeliveryRequest =
       throw error;
     }
 
-    /*
-     * Prevent duplicate active
-     * delivery requests.
-     */
     const existingDelivery =
       await Delivery.findOne({
         order:
@@ -677,12 +727,6 @@ export const createDeliveryRequest =
         existingDelivery._id
       );
     }
-
-    /*
-     * =====================================================
-     * ADDRESS VALIDATION
-     * =====================================================
-     */
 
     const deliveryAddress =
       order.deliveryAddress ||
@@ -742,12 +786,6 @@ export const createDeliveryRequest =
       throw error;
     }
 
-    /*
-     * =====================================================
-     * LOCATION SNAPSHOTS
-     * =====================================================
-     */
-
     const pickupLocation =
       normalizeCoordinate(
         order
@@ -774,22 +812,10 @@ export const createDeliveryRequest =
         "Delivery"
       );
 
-    /*
-     * =====================================================
-     * PRE-ORDER RIDER VISIBILITY
-     * =====================================================
-     */
-
     const availableAt =
       getDeliveryAvailableAt(
         order
       );
-
-    /*
-     * =====================================================
-     * CREATE DELIVERY
-     * =====================================================
-     */
 
     const delivery =
       await Delivery.create({
@@ -932,10 +958,6 @@ export const createDeliveryRequest =
           null,
       });
 
-    /*
-     * Customer now knows that a
-     * delivery request exists.
-     */
     await createNotificationSafely({
       recipient:
         order.customer,
@@ -992,13 +1014,17 @@ export const getAvailableDeliveryRequests =
       rider
     );
 
+    await requireActiveApprovedShiftForRider(
+      rider._id
+    );
+
     if (
       rider.isAvailable !==
       true
     ) {
       const error =
         new Error(
-          "You must be available to view delivery requests."
+          "You must be Online to view delivery requests."
         );
 
       error.statusCode =
@@ -1211,8 +1237,7 @@ export const getCustomerDeliveries =
           -1,
       });
   };
-
-/*
+  /*
  * =========================================================
  * CUSTOMER / SELLER / RIDER
  * GET ONE DELIVERY
@@ -1258,9 +1283,6 @@ export const getDeliveryById =
       throw error;
     }
 
-    /*
-     * CUSTOMER
-     */
     if (
       user.role ===
       "customer"
@@ -1289,9 +1311,6 @@ export const getDeliveryById =
       return delivery;
     }
 
-    /*
-     * SELLER
-     */
     if (
       user.role ===
       "seller"
@@ -1320,9 +1339,6 @@ export const getDeliveryById =
       return delivery;
     }
 
-    /*
-     * RIDER
-     */
     if (
       user.role ===
       "rider"
@@ -1337,13 +1353,71 @@ export const getDeliveryById =
       );
 
       /*
-       * Marketplace request.
+       * Unassigned marketplace delivery.
+       *
+       * Viewing a NEW available request follows
+       * the same authorization rules as the
+       * available-deliveries marketplace:
+       *
+       * - approved Rider
+       * - active Rider
+       * - active approved work shift
+       * - Rider Online
+       * - request already available
        */
+
       if (
         delivery.status ===
           "available" &&
         !delivery.rider
       ) {
+        await requireActiveApprovedShiftForRider(
+          rider._id
+        );
+
+        if (
+          rider.isAvailable !==
+          true
+        ) {
+          const error =
+            new Error(
+              "You must be Online to view delivery requests."
+            );
+
+          error.statusCode =
+            400;
+
+          throw error;
+        }
+
+        const activeDelivery =
+          await Delivery.findOne({
+            rider:
+              rider._id,
+
+            status: {
+              $in: [
+                "accepted",
+                "picked_up",
+                "out_for_delivery",
+              ],
+            },
+          });
+
+        if (
+          activeDelivery
+        ) {
+          const error =
+            new Error(
+              "You already have an active delivery."
+            );
+
+          error.statusCode =
+            409;
+
+          throw error;
+        }
+
         const availableAt =
           delivery.availableAt
             ? new Date(
@@ -1371,8 +1445,10 @@ export const getDeliveryById =
       }
 
       /*
-       * Assigned delivery.
+       * Assigned deliveries remain accessible
+       * to their assigned Rider after shift end.
        */
+
       if (
         String(
           delivery.riderUser
@@ -1445,9 +1521,10 @@ export const acceptDeliveryAssignment =
       rider
     );
 
-    /*
-     * Atomically reserve Rider.
-     */
+    await requireActiveApprovedShiftForRider(
+      rider._id
+    );
+
     const reservedRider =
       await Rider.findOneAndUpdate(
         {
@@ -1491,10 +1568,6 @@ export const acceptDeliveryAssignment =
       throw error;
     }
 
-    /*
-     * Make sure Rider is not already
-     * assigned to another active delivery.
-     */
     const activeDelivery =
       await Delivery.findOne({
         rider:
@@ -1601,14 +1674,16 @@ export const acceptDeliveryAssignment =
     if (
       !delivery
     ) {
-      /*
-       * Release Rider if delivery
-       * was taken by someone else.
-       */
+      const workShift =
+        await getRiderWorkShiftStatus(
+          rider._id
+        );
+
       await Rider.findByIdAndUpdate(
         rider._id,
         {
           isAvailable:
+            workShift?.canGoOnline ===
             true,
         }
       );
@@ -1624,9 +1699,6 @@ export const acceptDeliveryAssignment =
       throw error;
     }
 
-    /*
-     * Notify both Rider and Customer.
-     */
     await Promise.all([
       createNotificationSafely({
         recipient:
@@ -1741,15 +1813,6 @@ export const updateRiderLocation =
       throw error;
     }
 
-    /*
-     * =====================================================
-     * BACKWARD COMPATIBILITY
-     * =====================================================
-     *
-     * Older records may not contain
-     * pickupLocation / deliveryLocation.
-     */
-
     if (
       (
         delivery
@@ -1839,9 +1902,12 @@ export const updateRiderLocation =
     }
 
     /*
-     * Only active delivery states
-     * can receive Rider GPS.
+     * Active delivery operations intentionally
+     * do not require the work shift to still be
+     * active. An already accepted delivery can
+     * continue after shift end.
      */
+
     if (
       ![
         "accepted",
@@ -2196,13 +2262,6 @@ export const markDeliveryPickedUp =
     delivery.pickedUpAt =
       now;
 
-    /*
-     * Switch navigation from Rider -> Florist
-     * to Rider -> Customer.
-     *
-     * Route metrics will be recalculated
-     * on the next GPS update.
-     */
     delivery.navigation = {
       destinationType:
         "delivery",
@@ -2299,8 +2358,7 @@ export const markDeliveryPickedUp =
       delivery._id
     );
   };
-
-/*
+  /*
  * =========================================================
  * RIDER
  * START DELIVERY
@@ -2346,45 +2404,18 @@ export const startOutForDelivery =
       throw error;
     }
 
+    /*
+     * An already accepted delivery remains
+     * actionable after shift end.
+     */
+
     if (
       delivery.status !==
       "picked_up"
     ) {
       const error =
         new Error(
-          "The bouquet must be picked up before starting delivery."
-        );
-
-      error.statusCode =
-        400;
-
-      throw error;
-    }
-
-    const order =
-      await Order.findById(
-        delivery.order
-      );
-
-    if (!order) {
-      const error =
-        new Error(
-          "Associated order was not found."
-        );
-
-      error.statusCode =
-        404;
-
-      throw error;
-    }
-
-    if (
-      order.orderStatus !==
-      "ready_for_delivery"
-    ) {
-      const error =
-        new Error(
-          "Associated order is not ready for delivery."
+          "The bouquet must be picked up before delivery can start."
         );
 
       error.statusCode =
@@ -2402,9 +2433,30 @@ export const startOutForDelivery =
     delivery.outForDeliveryAt =
       now;
 
-    delivery.navigation
-      .destinationType =
-      "delivery";
+    delivery.navigation = {
+      destinationType:
+        "delivery",
+
+      distanceMeters:
+        delivery.navigation
+          ?.distanceMeters ??
+        null,
+
+      durationSeconds:
+        delivery.navigation
+          ?.durationSeconds ??
+        null,
+
+      estimatedArrivalAt:
+        delivery.navigation
+          ?.estimatedArrivalAt ??
+        null,
+
+      updatedAt:
+        delivery.navigation
+          ?.updatedAt ??
+        null,
+    };
 
     if (
       riderNotes !==
@@ -2418,19 +2470,20 @@ export const startOutForDelivery =
         ).trim();
     }
 
-    /*
-     * Order follows Delivery lifecycle.
-     */
-    order.orderStatus =
-      "out_for_delivery";
-
     await delivery.save();
 
-    await order.save();
+    const order =
+      await Order.findById(
+        delivery.order
+      );
 
-    /*
-     * Notify Rider and Customer.
-     */
+    if (order) {
+      order.orderStatus =
+        "out_for_delivery";
+
+      await order.save();
+    }
+
     await Promise.all([
       createNotificationSafely({
         recipient:
@@ -2440,19 +2493,19 @@ export const startOutForDelivery =
           "rider",
 
         type:
-          "delivery_out_for_delivery",
+          "out_for_delivery",
 
         title:
           "Delivery Started",
 
         message:
-          "The order is now out for delivery. Proceed to the customer's delivery address.",
+          "The order is now out for delivery.",
 
         delivery:
           delivery._id,
 
         order:
-          order._id,
+          delivery.order,
 
         metadata: {
           screen:
@@ -2468,25 +2521,28 @@ export const startOutForDelivery =
           "customer",
 
         type:
-          "delivery_out_for_delivery",
+          "out_for_delivery",
 
         title:
-          "Out for Delivery",
+          "Your Bouquet Is On the Way",
 
         message:
-          "Your bouquet is on the way. Open tracking to follow your rider's latest location and ETA.",
+          "Your rider is now on the way to your delivery address.",
 
         delivery:
           delivery._id,
 
         order:
-          order._id,
+          delivery.order,
 
         metadata: {
           screen:
             "delivery",
 
           deliveryStatus:
+            "out_for_delivery",
+
+          orderStatus:
             "out_for_delivery",
         },
       }),
@@ -2500,22 +2556,11 @@ export const startOutForDelivery =
 /*
  * =========================================================
  * RIDER
- * SAVE PROOF OF DELIVERY
- * =========================================================
- *
- * IMPORTANT:
- *
- * This function is called only AFTER
- * the proof photo has successfully
- * reached the backend.
- *
- * The mobile app must not treat a
- * locally selected image as a confirmed
- * upload.
+ * UPLOAD PROOF OF DELIVERY
  * =========================================================
  */
 
-export const saveProofOfDelivery =
+export const saveProofOfDelivery  =
   async (
     deliveryId,
     riderUserId,
@@ -2555,9 +2600,14 @@ export const saveProofOfDelivery =
     }
 
     /*
-     * Proof is only valid while
-     * actively delivering.
+     * Proof can only be uploaded after the
+     * Rider has started the customer delivery.
+     *
+     * No active-shift requirement is applied
+     * because an accepted delivery may finish
+     * after the scheduled shift ends.
      */
+
     if (
       delivery.status !==
       "out_for_delivery"
@@ -2583,7 +2633,7 @@ export const saveProofOfDelivery =
     if (!imageUrl) {
       const error =
         new Error(
-          "A successfully uploaded proof of delivery image is required."
+          "Proof of delivery image is required."
         );
 
       error.statusCode =
@@ -2592,41 +2642,31 @@ export const saveProofOfDelivery =
       throw error;
     }
 
-    /*
-     * =====================================================
-     * PROOF GPS
-     * =====================================================
-     */
-
-    const submittedLatitude =
-      proofData?.latitude;
-
-    const submittedLongitude =
-      proofData?.longitude;
-
     let proofLatitude =
       null;
 
     let proofLongitude =
       null;
 
-    const hasSubmittedCoordinates =
-      submittedLatitude !==
-        undefined &&
-      submittedLatitude !==
-        null &&
-      submittedLongitude !==
-        undefined &&
-      submittedLongitude !==
-        null;
+    /*
+     * Prefer coordinates explicitly submitted
+     * together with the proof.
+     */
 
     if (
-      hasSubmittedCoordinates
+      proofData?.latitude !==
+        undefined &&
+      proofData?.latitude !==
+        null &&
+      proofData?.longitude !==
+        undefined &&
+      proofData?.longitude !==
+        null
     ) {
       const proofLocation =
         normalizeCoordinate(
-          submittedLatitude,
-          submittedLongitude,
+          proofData.latitude,
+          proofData.longitude,
           "Proof of delivery"
         );
 
@@ -2635,48 +2675,39 @@ export const saveProofOfDelivery =
 
       proofLongitude =
         proofLocation.longitude;
-    } else {
-      const latestLatitude =
-        delivery
-          ?.riderLocation
-          ?.latitude;
+    } else if (
+      delivery
+        ?.riderLocation
+        ?.latitude !==
+        undefined &&
+      delivery
+        ?.riderLocation
+        ?.latitude !==
+        null &&
+      delivery
+        ?.riderLocation
+        ?.longitude !==
+        undefined &&
+      delivery
+        ?.riderLocation
+        ?.longitude !==
+        null
+    ) {
+      proofLatitude =
+        Number(
+          delivery
+            .riderLocation
+            .latitude
+        );
 
-      const latestLongitude =
-        delivery
-          ?.riderLocation
-          ?.longitude;
-
-      const hasLatestLocation =
-        latestLatitude !==
-          undefined &&
-        latestLatitude !==
-          null &&
-        latestLongitude !==
-          undefined &&
-        latestLongitude !==
-          null;
-
-      if (
-        hasLatestLocation
-      ) {
-        const proofLocation =
-          normalizeCoordinate(
-            latestLatitude,
-            latestLongitude,
-            "Rider"
-          );
-
-        proofLatitude =
-          proofLocation.latitude;
-
-        proofLongitude =
-          proofLocation.longitude;
-      }
+      proofLongitude =
+        Number(
+          delivery
+            .riderLocation
+            .longitude
+        );
     }
 
-    /*
-     * GPS accuracy.
-     */
     let accuracy =
       null;
 
@@ -2738,12 +2769,6 @@ export const saveProofOfDelivery =
     const now =
       new Date();
 
-    /*
-     * =====================================================
-     * SAVE SERVER-CONFIRMED PROOF
-     * =====================================================
-     */
-
     delivery.proofOfDelivery = {
       imageUrl,
 
@@ -2770,11 +2795,6 @@ export const saveProofOfDelivery =
  * =========================================================
  * RIDER
  * MARK DELIVERY AS DELIVERED
- * =========================================================
- *
- * The Rider cannot complete Delivery
- * until proofOfDelivery.imageUrl and
- * proofOfDelivery.uploadedAt exist.
  * =========================================================
  */
 
@@ -2831,12 +2851,6 @@ export const markDeliveryDelivered =
 
       throw error;
     }
-
-    /*
-     * =====================================================
-     * PROOF REQUIREMENT
-     * =====================================================
-     */
 
     const proofImageUrl =
       String(
@@ -2900,9 +2914,6 @@ export const markDeliveryDelivered =
     delivery.deliveredAt =
       now;
 
-    /*
-     * Final navigation snapshot.
-     */
     delivery.navigation = {
       destinationType:
         "delivery",
@@ -2933,12 +2944,11 @@ export const markDeliveryDelivered =
     }
 
     /*
-     * Order becomes delivered.
-     *
-     * It does NOT become completed yet.
-     * Customer still needs to confirm
-     * receipt.
+     * Delivery is delivered, but the Order
+     * is not yet "completed". Customer receipt
+     * confirmation remains a separate stage.
      */
+
     order.orderStatus =
       "delivered";
 
@@ -2946,9 +2956,10 @@ export const markDeliveryDelivered =
       now;
 
     /*
-     * COD becomes paid upon successful
-     * confirmed Rider delivery.
+     * COD becomes paid after successful
+     * Rider delivery.
      */
+
     if (
       order.paymentMethod ===
       "cash_on_delivery"
@@ -2960,23 +2971,21 @@ export const markDeliveryDelivered =
         now;
     }
 
-    /*
-     * Rider becomes available again.
-     */
-    rider.isAvailable =
-      true;
-
     await delivery.save();
 
     await order.save();
 
-    await rider.save();
-
     /*
-     * =====================================================
-     * DELIVERY COMPLETED NOTIFICATIONS
-     * =====================================================
+     * Rider only returns Online when the
+     * approved work shift is still active.
+     *
+     * If the shift has ended, Rider remains
+     * Offline and receives no new request.
      */
+
+    await restoreRiderAvailabilityAfterDelivery(
+      rider._id
+    );
 
     await Promise.all([
       createNotificationSafely({
@@ -3046,8 +3055,7 @@ export const markDeliveryDelivered =
       delivery._id
     );
   };
-
-/*
+  /*
  * =========================================================
  * SELLER
  * CANCEL DELIVERY
@@ -3086,9 +3094,10 @@ export const cancelDelivery =
     }
 
     /*
-     * Only available or accepted
-     * deliveries may still be cancelled.
+     * Only available or accepted deliveries
+     * can still be cancelled.
      */
+
     if (
       ![
         "available",
@@ -3149,26 +3158,21 @@ export const cancelDelivery =
     await delivery.save();
 
     /*
-     * If already assigned,
-     * release Rider.
+     * If a Rider had already accepted this
+     * delivery, release the Rider.
+     *
+     * The Rider only returns Online when an
+     * approved work shift remains active.
      */
-    if (
-      rider &&
-      rider.isActive &&
-      rider
-        .verificationStatus ===
-        "approved"
-    ) {
-      rider.isAvailable =
-        true;
 
-      await rider.save();
+    if (
+      rider
+    ) {
+      await restoreRiderAvailabilityAfterDelivery(
+        rider._id
+      );
     }
 
-    /*
-     * Customer always receives the
-     * cancellation notification.
-     */
     const cancellationNotifications =
       [
         createNotificationSafely({
@@ -3203,10 +3207,6 @@ export const cancelDelivery =
         }),
       ];
 
-    /*
-     * Notify Rider only when a Rider
-     * had actually been assigned.
-     */
     if (
       delivery.riderUser
     ) {
