@@ -29,6 +29,10 @@ import {
   type DeliveryStatus,
 } from '../../services/delivery';
 
+import RiderBottomNav, {
+  useRiderBottomNavSpace,
+} from '../../components/rider/rider-bottom-nav';
+
 /*
  * =========================================================
  * TYPES
@@ -62,6 +66,9 @@ export default function RiderDeliveriesScreen() {
     typeof params.deliveryId === 'string'
       ? params.deliveryId
       : '';
+
+  const bottomSpace =
+    useRiderBottomNavSpace();
 
   const [
     activeTab,
@@ -705,6 +712,11 @@ export default function RiderDeliveriesScreen() {
                       delivery={
                         delivery
                       }
+                      onOpen={() =>
+                        handleContinueDelivery(
+                          delivery
+                        )
+                      }
                     />
                   )
                 )
@@ -713,197 +725,17 @@ export default function RiderDeliveriesScreen() {
           )}
 
           <View
-            style={
-              styles.bottomContentSpacer
-            }
+            style={{
+              height: bottomSpace,
+            }}
           />
         </ScrollView>
 
 {/* BOTTOM NAVIGATION */}
-
-<View
-  style={
-    styles.bottomNav
-  }
->
-  {/* DASHBOARD */}
-
-  <Pressable
-    style={
-      styles.navItem
-    }
-    onPress={() =>
-      router.replace(
-        '/(rider)/rider-dashboard'
-      )
-    }
-  >
-    <View
-      style={
-        styles.navIconContainer
-      }
-    >
-      <Text
-        style={
-          styles.navIcon
-        }
-      >
-        ⌂
-      </Text>
-    </View>
-
-    <Text
-      style={
-        styles.navText
-      }
-    >
-      Dashboard
-    </Text>
-  </Pressable>
-
-  {/* DELIVERIES */}
-
-  <Pressable
-    style={
-      styles.navItem
-    }
-    onPress={() => {
-      /*
-       * Already on the Deliveries screen.
-       */
-    }}
-  >
-    <View
-      style={[
-        styles.navIconContainer,
-        styles.activeNavIcon,
-      ]}
-    >
-      <Text
-        style={[
-          styles.navIcon,
-          styles.activeNavIconText,
-        ]}
-      >
-        ▣
-      </Text>
-    </View>
-
-    <Text
-      style={[
-        styles.navText,
-        styles.activeNavText,
-      ]}
-    >
-      Deliveries
-    </Text>
-  </Pressable>
-
-  {/* WALLET */}
-
-  <Pressable
-    style={
-      styles.navItem
-    }
-    onPress={() =>
-      router.push(
-        '/(rider)/rider-wallet'
-      )
-    }
-  >
-    <View
-      style={
-        styles.navIconContainer
-      }
-    >
-      <Text
-        style={
-          styles.navIcon
-        }
-      >
-        ₱
-      </Text>
-    </View>
-
-    <Text
-      style={
-        styles.navText
-      }
-    >
-      Wallet
-    </Text>
-  </Pressable>
-
-  {/* ALERTS */}
-
-  <Pressable
-    style={
-      styles.navItem
-    }
-    onPress={() =>
-      router.push(
-        '/(rider)/rider-alerts'
-      )
-    }
-  >
-    <View
-      style={
-        styles.navIconContainer
-      }
-    >
-      <Text
-        style={
-          styles.navIcon
-        }
-      >
-        ♢
-      </Text>
-    </View>
-
-    <Text
-      style={
-        styles.navText
-      }
-    >
-      Alerts
-    </Text>
-  </Pressable>
-
-  {/* STATS */}
-
-  <Pressable
-    style={
-      styles.navItem
-    }
-    onPress={() =>
-      router.push(
-        '/(rider)/rider-stats'
-      )
-    }
-  >
-    <View
-      style={
-        styles.navIconContainer
-      }
-    >
-      <Text
-        style={
-          styles.navIcon
-        }
-      >
-        ≡
-      </Text>
-    </View>
-
-    <Text
-      style={
-        styles.navText
-      }
-    >
-      Stats
-    </Text>
-  </Pressable>
-</View>
+        <RiderBottomNav
+          active="deliveries"
+          onReselect={handleRefresh}
+        />
       </View>
     </SafeAreaView>
   );
@@ -1130,11 +962,24 @@ function ActiveDeliveryCard({
           }
         />
 
+        {/*
+          * COD: amount the Rider must collect
+          * from the recipient (NOT income).
+          * Online payment: nothing to collect.
+          */}
         <InfoBlock
-          label="Total"
+          label={
+            order?.paymentMethod ===
+            'cash_on_delivery'
+              ? 'Collect (COD)'
+              : 'Delivery Fee'
+          }
           value={
             formatMoney(
-              order?.totalAmount
+              order?.paymentMethod ===
+                'cash_on_delivery'
+                ? order?.totalAmount
+                : order?.deliveryFee
             )
           }
         />
@@ -1280,8 +1125,10 @@ function ActiveDeliveryCard({
 
 function CompletedDeliveryCard({
   delivery,
+  onOpen,
 }: {
   delivery: Delivery;
+  onOpen: () => void;
 }) {
   const order =
     getOrder(
@@ -1294,10 +1141,16 @@ function CompletedDeliveryCard({
     );
 
   return (
-    <View
-      style={
-        styles.completedCard
-      }
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="View completed delivery details"
+      onPress={onOpen}
+      style={({ pressed }) => [
+        styles.completedCard,
+        pressed && {
+          opacity: 0.9,
+        },
+      ]}
     >
       <View
         style={
@@ -1408,7 +1261,7 @@ function CompletedDeliveryCard({
               styles.completedFooterLabel
             }
           >
-            ORDER TOTAL
+            DELIVERY FEE EARNED
           </Text>
 
           <Text
@@ -1417,7 +1270,7 @@ function CompletedDeliveryCard({
             }
           >
             {formatMoney(
-              order?.totalAmount
+              order?.deliveryFee
             )}
           </Text>
         </View>
@@ -1440,7 +1293,7 @@ function CompletedDeliveryCard({
           </View>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -1880,7 +1733,7 @@ const styles =
 
     loadingText: {
       color: '#8C8588',
-      fontSize: 11,
+      fontSize: 13,
       marginTop: 12,
     },
 
@@ -1909,7 +1762,7 @@ const styles =
     headerEyebrow: {
       color:
         'rgba(255,255,255,0.72)',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight:
         '800',
       letterSpacing: 1,
@@ -1927,7 +1780,7 @@ const styles =
     headerSubtitle: {
       color:
         'rgba(255,255,255,0.78)',
-      fontSize: 9,
+      fontSize: 11,
       marginTop: 5,
     },
 
@@ -1980,7 +1833,7 @@ const styles =
     summaryLabel: {
       color:
         'rgba(255,255,255,0.72)',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 2,
       fontWeight:
         '600',
@@ -2035,7 +1888,7 @@ const styles =
     tabText: {
       color:
         '#8D878A',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '800',
     },
@@ -2067,7 +1920,7 @@ const styles =
     tabCountText: {
       color:
         '#7C7578',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight:
         '800',
     },
@@ -2139,7 +1992,7 @@ const styles =
     deliveryCode: {
       color:
         '#A39DA0',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 7,
       fontWeight:
         '700',
@@ -2232,7 +2085,7 @@ const styles =
     statusDescription: {
       color:
         '#8E878B',
-      fontSize: 8,
+      fontSize: 11,
       lineHeight: 13,
       marginTop: 3,
     },
@@ -2266,7 +2119,7 @@ const styles =
     recipientPhone: {
       color:
         '#857E82',
-      fontSize: 9,
+      fontSize: 11,
       marginTop: 2,
     },
 
@@ -2300,7 +2153,7 @@ const styles =
     infoBlockValue: {
       color:
         '#514A4E',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 14,
       marginTop: 3,
       fontWeight:
@@ -2358,7 +2211,7 @@ const styles =
     routeAddress: {
       color:
         '#5E575A',
-      fontSize: 8,
+      fontSize: 11,
       lineHeight: 13,
       marginTop: 2,
     },
@@ -2409,7 +2262,7 @@ const styles =
     },
 
     podMiniTitle: {
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '800',
     },
@@ -2453,7 +2306,7 @@ const styles =
     continueButtonText: {
       color:
         '#FFFFFF',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight:
         '900',
     },
@@ -2515,7 +2368,7 @@ const styles =
     completedTitle: {
       color:
         '#474044',
-      fontSize: 12,
+      fontSize: 13,
       fontWeight:
         '900',
     },
@@ -2565,7 +2418,7 @@ const styles =
     detailLineValue: {
       color:
         '#575054',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 14,
       marginTop: 2,
     },
@@ -2662,7 +2515,7 @@ const styles =
     emptyDescription: {
       color:
         '#999296',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 14,
       textAlign:
         'center',
@@ -2684,7 +2537,7 @@ const styles =
     errorTitle: {
       color:
         '#BE5D5D',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight:
         '800',
     },
@@ -2692,7 +2545,7 @@ const styles =
     errorText: {
       color:
         '#A76B6B',
-      fontSize: 8,
+      fontSize: 11,
       lineHeight: 13,
       marginTop: 4,
     },
@@ -2711,7 +2564,7 @@ const styles =
     retryButtonText: {
       color:
         '#FFFFFF',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight:
         '800',
     },

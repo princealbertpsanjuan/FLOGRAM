@@ -315,9 +315,8 @@ const riderShiftSchema =
 
 riderShiftSchema.pre(
   "validate",
-  function validateShiftSchedule(
-    next
-  ) {
+  // Mongoose 9 no longer passes next() to pre middleware.
+  function validateShiftSchedule() {
     if (
       this.startAt &&
       this.endAt &&
@@ -329,8 +328,6 @@ riderShiftSchema.pre(
         "Shift end date and time must be after the shift start date and time."
       );
     }
-
-    next();
   }
 );
 

@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -39,6 +41,13 @@ import {
   type Delivery,
   type RiderNavigationResponse,
 } from '../../services/delivery';
+
+import { getUploadUrl } from '../../utils/media';
+
+import {
+  formatPhDateTime,
+  formatPeso,
+} from '../../utils/rider-format';
 
 /*
  * =========================================================
@@ -133,10 +142,34 @@ export default function RiderDeliveryScreen() {
    * =========================================================
    */
 
+  /*
+   * GPS state shown to the Rider.
+   *
+   * idle         not started yet
+   * starting     asking permission / first fix
+   * active       subscription running
+   * denied       permission denied, can ask again
+   * blocked      permission denied permanently
+   *              -> must open phone Settings
+   * services_off phone Location/GPS is turned off
+   * error        any other failure
+   */
   const [
-    locationPermissionGranted,
-    setLocationPermissionGranted,
-  ] = useState(false);
+    gpsState,
+    setGpsState,
+  ] = useState<
+    | 'idle'
+    | 'starting'
+    | 'active'
+    | 'denied'
+    | 'blocked'
+    | 'services_off'
+    | 'error'
+  >('idle');
+
+  const locationPermissionGranted =
+    gpsState === 'active' ||
+    gpsState === 'starting';
 
   const [
     locationError,
@@ -184,6 +217,15 @@ const hasBackendRiderLocation =
 
 const startingLocationTracking =
   useRef(false);
+
+/*
+ * Incremented whenever tracking is stopped, so a
+ * start that was still awaiting the GPS when the
+ * screen/status changed can discard its late
+ * subscription instead of leaking it.
+ */
+const trackingGeneration =
+  useRef(0);
 
   const deliveryStatusRef =
   useRef<Delivery['status'] | null>(
@@ -604,9 +646,14 @@ const sendLocationToBackend =
       return;
     }
 
+    const generation =
+      trackingGeneration.current;
+
     try {
       startingLocationTracking.current =
         true;
+
+      setGpsState('starting');
 
       if (
         locationSubscription.current
@@ -617,54 +664,123 @@ const sendLocationToBackend =
           null;
       }
 
-      const permission =
-        await Location.requestForegroundPermissionsAsync();
+      /*
+       * 1. PERMISSION
+       *
+       * If the Rider previously chose
+       * "Don't ask again", requesting again
+       * returns denied immediately, so the
+       * only fix is the phone Settings.
+       */
+      let permission =
+        await Location.getForegroundPermissionsAsync();
+
+      if (
+        permission.status !==
+          'granted' &&
+        permission.canAskAgain
+      ) {
+        permission =
+          await Location.requestForegroundPermissionsAsync();
+      }
 
       if (
         permission.status !==
         'granted'
       ) {
-        setLocationPermissionGranted(
-          false
+        setGpsState(
+          permission.canAskAgain
+            ? 'denied'
+            : 'blocked'
         );
 
         setLocationError(
-          'Location permission is required for rider navigation.'
+          permission.canAskAgain
+            ? 'Location permission is required for live delivery tracking.'
+            : 'Location permission is turned off for FLOGRAM. Open Settings and allow location access.'
         );
 
         return;
       }
 
-      setLocationPermissionGranted(
-        true
-      );
+      /*
+       * 2. DEVICE LOCATION SERVICES
+       *
+       * Permission can be granted while the
+       * phone's GPS/Location is switched off.
+       * On Android, ask the system to turn it on.
+       */
+      let servicesEnabled =
+        await Location.hasServicesEnabledAsync();
+
+      if (
+        !servicesEnabled &&
+        Platform.OS === 'android'
+      ) {
+        try {
+          await Location.enableNetworkProviderAsync();
+        } catch {
+          // Rider dismissed the system dialog.
+        }
+
+        servicesEnabled =
+          await Location.hasServicesEnabledAsync();
+      }
+
+      if (!servicesEnabled) {
+        setGpsState('services_off');
+
+        setLocationError(
+          "Your phone's Location/GPS is turned off. Turn it on to share live delivery tracking."
+        );
+
+        return;
+      }
 
       setLocationError(null);
 
       /*
-       * Get the first GPS coordinate immediately.
+       * 3. FIRST COORDINATE
+       *
+       * A high-accuracy fix can fail indoors.
+       * Fall back to the last known position so
+       * the backend receives a coordinate and
+       * navigation can be calculated.
        */
-      const currentLocation =
-        await Location.getCurrentPositionAsync(
-          {
-            accuracy:
-              Location.Accuracy.High,
-          }
+      let firstLocation:
+        | Location.LocationObject
+        | null = null;
+
+      try {
+        firstLocation =
+          await Location.getCurrentPositionAsync(
+            {
+              accuracy:
+                Location.Accuracy.High,
+            }
+          );
+      } catch {
+        firstLocation =
+          await Location.getLastKnownPositionAsync();
+      }
+
+      if (
+        generation !==
+        trackingGeneration.current
+      ) {
+        return;
+      }
+
+      if (firstLocation) {
+        await sendLocationToBackend(
+          firstLocation
         );
+      }
 
       /*
-       * This sends the first GPS coordinate
-       * to the backend before navigation
-       * is requested.
+       * 4. LIVE UPDATES
        */
-      await sendLocationToBackend(
-        currentLocation
-      );
-
-      /*
-       * Continue sending live GPS updates.
-       */
-      locationSubscription.current =
+      const subscription =
         await Location.watchPositionAsync(
           {
             accuracy:
@@ -677,19 +793,38 @@ const sendLocationToBackend =
               10,
           },
 
-          async (
-            location
+          (
+            location: Location.LocationObject
           ) => {
-            await sendLocationToBackend(
+            void sendLocationToBackend(
               location
             );
           }
         );
+
+      /*
+       * Tracking was stopped while we were
+       * waiting: discard the late subscription.
+       */
+      if (
+        generation !==
+        trackingGeneration.current
+      ) {
+        subscription.remove();
+        return;
+      }
+
+      locationSubscription.current =
+        subscription;
+
+      setGpsState('active');
     } catch (error) {
       console.error(
         'Unable to start location tracking:',
         error
       );
+
+      setGpsState('error');
 
       setLocationError(
         error instanceof Error
@@ -706,39 +841,24 @@ const sendLocationToBackend =
   ]);
 
   /*
-   * =========================================================
-   * GPS LIFECYCLE
-   * =========================================================
+   * Button handler for the GPS card.
    */
-
-  useEffect(() => {
-  const activeStatus =
-    delivery?.status === 'accepted' ||
-    delivery?.status === 'picked_up' ||
-    delivery?.status === 'out_for_delivery';
-
-  /*
-   * Start GPS asynchronously instead of
-   * calling the state-changing function
-   * directly inside the effect.
-   */
-  const beginTracking =
-    async () => {
-      if (!activeStatus) {
+  const handleEnableGps =
+    useCallback(() => {
+      if (gpsState === 'blocked') {
+        void Linking.openSettings();
         return;
       }
 
-      await startLocationTracking();
-    };
+      void startLocationTracking();
+    }, [
+      gpsState,
+      startLocationTracking,
+    ]);
 
-  if (activeStatus) {
-    const timeout =
-      setTimeout(() => {
-        void beginTracking();
-      }, 0);
-
-    return () => {
-      clearTimeout(timeout);
+  const stopLocationTracking =
+    useCallback(() => {
+      trackingGeneration.current += 1;
 
       if (
         locationSubscription.current
@@ -748,36 +868,66 @@ const sendLocationToBackend =
         locationSubscription.current =
           null;
       }
-    };
-  }
+    }, []);
 
   /*
-   * Delivery is no longer active.
-   * Stop the existing GPS subscription.
+   * =========================================================
+   * GPS LIFECYCLE
+   * =========================================================
    */
-  if (
-    locationSubscription.current
-  ) {
-    locationSubscription.current.remove();
 
-    locationSubscription.current =
-      null;
-  }
+  useEffect(() => {
+    const activeStatus =
+      delivery?.status === 'accepted' ||
+      delivery?.status === 'picked_up' ||
+      delivery?.status === 'out_for_delivery';
 
-  return () => {
-    if (
-      locationSubscription.current
-    ) {
-      locationSubscription.current.remove();
+    if (!activeStatus) {
+      /*
+       * Delivery finished or cancelled:
+       * stop sending GPS.
+       */
+      stopLocationTracking();
 
-      locationSubscription.current =
-        null;
+      setGpsState('idle');
+
+      return undefined;
     }
-  };
-}, [
-  delivery?.status,
-  startLocationTracking,
-]);
+
+    /*
+     * Start once when the delivery becomes
+     * active. Status changes between active
+     * steps keep the same subscription.
+     */
+    if (
+      !locationSubscription.current &&
+      !startingLocationTracking.current
+    ) {
+      const timeout =
+        setTimeout(() => {
+          void startLocationTracking();
+        }, 0);
+
+      return () => {
+        clearTimeout(timeout);
+      };
+    }
+
+    return undefined;
+  }, [
+    delivery?.status,
+    startLocationTracking,
+    stopLocationTracking,
+  ]);
+
+  /*
+   * Always stop GPS when leaving the screen.
+   */
+  useEffect(() => {
+    return () => {
+      stopLocationTracking();
+    };
+  }, [stopLocationTracking]);
 
   /*
    * =========================================================
@@ -1895,14 +2045,23 @@ setLocationError(null);
                 style={[
                   styles.gpsStatus,
 
-                  locationPermissionGranted
+                  gpsState === 'active'
                     ? styles.gpsOnline
                     : styles.gpsOffline,
                 ]}
               >
-                {locationPermissionGranted
+                {gpsState === 'active'
                   ? '● Live location active'
-                  : '● Location permission required'}
+                  : gpsState === 'starting'
+                    ? '● Starting GPS...'
+                    : gpsState === 'services_off'
+                      ? '● Phone location is off'
+                      : gpsState === 'blocked' ||
+                          gpsState === 'denied'
+                        ? '● Location permission required'
+                        : gpsState === 'error'
+                          ? '● GPS unavailable'
+                          : '● GPS not started'}
               </Text>
 
               {lastGpsUpdate && (
@@ -1912,18 +2071,31 @@ setLocationError(null);
                   }
                 >
                   Last update:{' '}
-                  {lastGpsUpdate.toLocaleTimeString()}
+                  {lastGpsUpdate.toLocaleTimeString(
+                    'en-PH',
+                    {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    }
+                  )}
                 </Text>
               )}
             </View>
 
-            {!locationPermissionGranted && (
+            {gpsState !== 'active' &&
+              gpsState !== 'starting' &&
+              (delivery?.status === 'accepted' ||
+                delivery?.status === 'picked_up' ||
+                delivery?.status ===
+                  'out_for_delivery') && (
               <Pressable
+                accessibilityRole="button"
                 style={
                   styles.enableGpsButton
                 }
                 onPress={
-                  startLocationTracking
+                  handleEnableGps
                 }
               >
                 <Text
@@ -1931,7 +2103,11 @@ setLocationError(null);
                     styles.enableGpsText
                   }
                 >
-                  Enable
+                  {gpsState === 'blocked'
+                    ? 'Open Settings'
+                    : gpsState === 'services_off'
+                      ? 'Turn On'
+                      : 'Enable'}
                 </Text>
               </Pressable>
             )}
@@ -2409,6 +2585,13 @@ setLocationError(null);
             />
           </View>
 
+          {/* DELIVERY PROGRESS */}
+
+          <DeliveryStepper
+            status={delivery.status}
+            hasProof={hasUploadedProof}
+          />
+
           {/* ACCEPTED ACTION */}
 
           {delivery.status ===
@@ -2830,6 +3013,153 @@ setLocationError(null);
             </>
           )}
 
+          {/* ===================================================
+              COMPLETED (READ-ONLY)
+              =================================================== */}
+
+          {delivery.status ===
+            'delivered' && (
+            <View
+              style={
+                styles.proofCard
+              }
+            >
+              <Text
+                style={
+                  styles.proofTitle
+                }
+              >
+                Delivery Completed
+              </Text>
+
+              <Text
+                style={
+                  styles.proofDescription
+                }
+              >
+                {delivery.deliveredAt
+                  ? `Completed ${formatPhDateTime(
+                      delivery.deliveredAt
+                    )}.`
+                  : 'This delivery is complete.'}
+                {typeof delivery.order ===
+                  'object' &&
+                typeof delivery.order
+                  ?.deliveryFee ===
+                  'number'
+                  ? ` Delivery fee earned: ${formatPeso(
+                      delivery.order
+                        .deliveryFee
+                    )}.`
+                  : ''}{' '}
+                This record is read-only.
+              </Text>
+
+              {getUploadUrl(
+                delivery
+                  .proofOfDelivery
+                  ?.imageUrl
+              ) ? (
+                <View
+                  style={
+                    styles.proofPreviewContainer
+                  }
+                >
+                  <Image
+                    source={{
+                      uri:
+                        getUploadUrl(
+                          delivery
+                            .proofOfDelivery
+                            ?.imageUrl
+                        ) as string,
+                    }}
+                    style={
+                      styles.proofPreview
+                    }
+                    resizeMode="cover"
+                    accessibilityLabel="Proof of delivery photo"
+                  />
+                </View>
+              ) : (
+                <Text
+                  style={
+                    styles.proofDescription
+                  }
+                >
+                  No proof photo is available for this delivery.
+                </Text>
+              )}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed &&
+                    styles.pressed,
+                ]}
+                onPress={() =>
+                  router.replace(
+                    '/(rider)/rider-dashboard'
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Return to Dashboard
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          {delivery.status ===
+            'cancelled' && (
+            <View
+              style={
+                styles.proofCard
+              }
+            >
+              <Text
+                style={
+                  styles.proofTitle
+                }
+              >
+                Delivery Cancelled
+              </Text>
+
+              <Text
+                style={
+                  styles.proofDescription
+                }
+              >
+                This delivery was cancelled and no further action is needed.
+              </Text>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed &&
+                    styles.pressed,
+                ]}
+                onPress={() =>
+                  router.replace(
+                    '/(rider)/rider-dashboard'
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Return to Dashboard
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
           <View
             style={
               styles.bottomSpacer
@@ -2939,7 +3269,7 @@ const styles =
 
     loadingText: {
       color: '#8C8588',
-      fontSize: 12,
+      fontSize: 13,
       marginTop: 12,
     },
 
@@ -2985,7 +3315,7 @@ const styles =
     headerLabel: {
       color:
         'rgba(255,255,255,0.76)',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '700',
       letterSpacing: 0.8,
     },
@@ -3017,7 +3347,7 @@ const styles =
 
     liveText: {
       color: '#FFFFFF',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '800',
     },
 
@@ -3033,7 +3363,7 @@ const styles =
 
     statusText: {
       color: '#FFFFFF',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '800',
     },
 
@@ -3075,12 +3405,12 @@ const styles =
 
     gpsTitle: {
       color: '#403A3D',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '800',
     },
 
     gpsStatus: {
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '600',
       marginTop: 3,
     },
@@ -3108,7 +3438,7 @@ const styles =
 
     enableGpsText: {
       color: '#FFFFFF',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '700',
     },
 
@@ -3121,7 +3451,7 @@ const styles =
 
     errorText: {
       color: '#CA6262',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 14,
     },
 
@@ -3272,7 +3602,7 @@ const styles =
 
     recenterText: {
       color: '#575053',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '700',
     },
 
@@ -3333,7 +3663,7 @@ const styles =
 
     destinationLabel: {
       color: '#A69D93',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '700',
       letterSpacing: 0.7,
     },
@@ -3352,14 +3682,14 @@ const styles =
 
     destinationAddress: {
       color: '#777074',
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 10,
     },
 
     landmark: {
       color: '#A29A9E',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 5,
     },
 
@@ -3405,7 +3735,7 @@ const styles =
 
     sectionTitle: {
       color: '#403A3D',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '800',
       marginBottom: 7,
     },
@@ -3418,13 +3748,13 @@ const styles =
 
     detailLabel: {
       color: '#A29CA0',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '600',
     },
 
     detailValue: {
       color: '#514A4E',
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       marginTop: 3,
     },
@@ -3461,14 +3791,14 @@ const styles =
 
     primaryButtonText: {
       color: '#FFFFFF',
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '800',
     },
 
     deliveredDisabledHint: {
       color:
         'rgba(255,255,255,0.8)',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 2,
       fontWeight: '600',
     },
@@ -3547,7 +3877,7 @@ const styles =
 
     proofDescription: {
       color: '#817A7E',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 15,
       marginTop: 12,
     },
@@ -3572,7 +3902,7 @@ const styles =
 
     takePhotoText: {
       color: '#B78427',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '800',
     },
 
@@ -3624,7 +3954,7 @@ const styles =
       color: '#FFFFFF',
       textAlign: 'center',
       lineHeight: 20,
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '900',
       marginRight: 8,
     },
@@ -3632,7 +3962,7 @@ const styles =
     proofWarningText: {
       flex: 1,
       color: '#8F733A',
-      fontSize: 8,
+      fontSize: 11,
       lineHeight: 13,
     },
 
@@ -3655,7 +3985,7 @@ const styles =
 
     retakeButtonText: {
       color: '#675F63',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
     },
 
@@ -3670,7 +4000,7 @@ const styles =
 
     uploadProofButtonText: {
       color: '#FFFFFF',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '800',
     },
 
@@ -3705,13 +4035,13 @@ const styles =
 
     proofSuccessTitle: {
       color: '#4B8E5F',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '800',
     },
 
     proofSuccessText: {
       color: '#75937D',
-      fontSize: 8,
+      fontSize: 11,
       lineHeight: 13,
       marginTop: 3,
     },
@@ -3734,7 +4064,7 @@ const styles =
 
     returnButtonText: {
       color: '#FFFFFF',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '700',
     },
 
@@ -3742,3 +4072,147 @@ const styles =
       height: 30,
     },
   });
+
+/*
+ * =========================================================
+ * DELIVERY STEPPER
+ * =========================================================
+ *
+ * Accept → Bouquet Pickup → Start Delivery →
+ * Proof of Delivery → Delivery Completed
+ *
+ * Each action only appears at its own status, so the
+ * stepper shows the Rider where they are.
+ * =========================================================
+ */
+
+const DELIVERY_STEPS = [
+  'Accepted',
+  'Bouquet Pickup',
+  'Start Delivery',
+  'Proof of Delivery',
+  'Completed',
+] as const;
+
+function getCurrentStepIndex(
+  status: Delivery['status'],
+  hasProof: boolean
+) {
+  switch (status) {
+    case 'accepted':
+      return 1;
+    case 'picked_up':
+      return 2;
+    case 'out_for_delivery':
+      return hasProof ? 4 : 3;
+    case 'delivered':
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+function DeliveryStepper({
+  status,
+  hasProof,
+}: {
+  status: Delivery['status'];
+  hasProof: boolean;
+}) {
+  if (status === 'cancelled' || status === 'available') {
+    return null;
+  }
+
+  const current = getCurrentStepIndex(status, hasProof);
+
+  return (
+    <View style={stepStyles.card}>
+      {DELIVERY_STEPS.map((label, index) => {
+        const done = index < current;
+        const active = index === current;
+
+        return (
+          <View
+            key={label}
+            style={stepStyles.step}
+          >
+            <View
+              style={[
+                stepStyles.dot,
+                done && stepStyles.dotDone,
+                active && stepStyles.dotActive,
+              ]}
+            >
+              <Text
+                style={[
+                  stepStyles.dotText,
+                  (done || active) && stepStyles.dotTextOn,
+                ]}
+              >
+                {done ? '✓' : index + 1}
+              </Text>
+            </View>
+
+            <Text
+              numberOfLines={2}
+              style={[
+                stepStyles.label,
+                (done || active) && stepStyles.labelOn,
+              ]}
+            >
+              {label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const stepStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  step: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  dot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEEEEE',
+  },
+  dotDone: {
+    backgroundColor: '#39B56A',
+  },
+  dotActive: {
+    backgroundColor: '#C99730',
+  },
+  dotText: {
+    color: '#8A8A8A',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  dotTextOn: {
+    color: '#FFFFFF',
+  },
+  label: {
+    marginTop: 5,
+    color: '#8A8A8A',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  labelOn: {
+    color: '#171717',
+    fontWeight: '700',
+  },
+});

@@ -21,6 +21,7 @@ import {
   updateRiderAvailability,
   updateRiderProfile,
   verifyRiderRemittance,
+  getAdminRiderPayoutBalances,
 } from "./rider.service.js";
 
 import {
@@ -1156,6 +1157,37 @@ export const cancelPayout = async (
 
       data: {
         payout,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+/*
+ * =========================================================
+ * ADMIN
+ * GET RIDER PAYOUT BALANCES
+ *
+ * GET
+ * /api/v1/riders/payouts/balances
+ * =========================================================
+ */
+
+export const getPayoutBalances = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const balances =
+      await getAdminRiderPayoutBalances();
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Rider payout balances retrieved successfully.",
+      data: {
+        balances,
       },
     });
   } catch (error) {

@@ -2305,10 +2305,10 @@ export const markDeliveryPickedUp =
           "delivery_picked_up",
 
         title:
-          "Order Picked Up",
+          "Bouquet Picked Up",
 
         message:
-          "You have picked up the order from the florist. Proceed to the customer's delivery address.",
+          "You picked up the bouquet from the florist. Tap Start Delivery when you leave for the customer's address.",
 
         delivery:
           delivery._id,
@@ -2493,13 +2493,13 @@ export const startOutForDelivery =
           "rider",
 
         type:
-          "out_for_delivery",
+          "delivery_out_for_delivery",
 
         title:
           "Delivery Started",
 
         message:
-          "The order is now out for delivery.",
+          "You are now out for delivery. Upload Proof of Delivery when you hand over the bouquet.",
 
         delivery:
           delivery._id,
@@ -2521,7 +2521,7 @@ export const startOutForDelivery =
           "customer",
 
         type:
-          "out_for_delivery",
+          "delivery_out_for_delivery",
 
         title:
           "Your Bouquet Is On the Way",

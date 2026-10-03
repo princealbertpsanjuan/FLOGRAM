@@ -32,13 +32,27 @@ import {
   updateRiderAvailability,
 } from '../../services/delivery';
 
+import {
+  getTodayDeliveryCount,
+} from '../../services/delivery';
+
 import type {
   Delivery,
   DeliveryCustomer,
   DeliveryFlorist,
   DeliveryOrder,
   RiderDashboardData,
+  RiderShift,
 } from '../../services/delivery';
+
+import {
+  formatPhTime,
+  formatShiftWindow,
+} from '../../utils/rider-format';
+
+import RiderBottomNav, {
+  useRiderBottomNavSpace,
+} from '../../components/rider/rider-bottom-nav';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -253,20 +267,50 @@ export default function RiderDashboardScreen() {
     dashboardData?.rider.firstName?.trim() ||
     'Rider';
 
-  const deliveryCount =
-    dashboardData?.deliveries.completed ??
-    riderDeliveries.filter(
-      delivery => delivery.status === 'delivered'
-    ).length;
+  /*
+   * Header cards: Today's Deliveries,
+   * Today's Delivery Fees, Rating.
+   *
+   * Rider income = Order.deliveryFee only.
+   */
 
-  const totalDeliveryValue =
-    dashboardData?.deliveryValue.total ?? 0;
+  const todayDeliveryCount =
+    dashboardData
+      ? getTodayDeliveryCount(
+          dashboardData
+        )
+      : 0;
 
-  const todayDeliveryValue =
-    dashboardData?.deliveryValue.today ?? 0;
+  const todayDeliveryFees =
+    dashboardData?.deliveryFees?.today ?? 0;
 
-  const monthDeliveryValue =
-    dashboardData?.deliveryValue.thisMonth ?? 0;
+  const monthDeliveryFees =
+    dashboardData?.deliveryFees?.thisMonth ?? 0;
+
+  const completedDeliveryCount =
+    dashboardData?.deliveries.completed ?? 0;
+
+  /*
+   * Work shift: Online/Offline follows the
+   * Rider's approved Admin shift.
+   */
+
+  const workShift =
+    dashboardData?.workShift ?? null;
+
+  const canGoOnline =
+    workShift?.canGoOnline === true;
+
+  /*
+   * The saved status is only effective while
+   * an approved shift is active.
+   */
+
+  const isEffectivelyOnline =
+    isAvailable && canGoOnline;
+
+  const bottomSpace =
+    useRiderBottomNavSpace();
 
   const rating =
     typeof dashboardData?.rating.average ===
@@ -322,6 +366,8 @@ export default function RiderDashboardScreen() {
 
       await loadAvailableRequests(
         dashboard.rider.isAvailable === true &&
+          dashboard.workShift?.canGoOnline ===
+            true &&
           !active
       );
     } catch (error) {
@@ -433,7 +479,7 @@ export default function RiderDashboardScreen() {
         return;
       }
 
-      if (!isAvailable) {
+      if (!isEffectivelyOnline) {
         Alert.alert(
           'Rider Offline',
           'Turn your availability on before accepting a delivery request.'
@@ -499,7 +545,7 @@ export default function RiderDashboardScreen() {
     },
     [
       acceptingDeliveryId,
-      isAvailable,
+      isEffectivelyOnline,
       loadDashboard,
     ]
   );
@@ -524,27 +570,9 @@ export default function RiderDashboardScreen() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const goDeliveries = useCallback(() => {
+  const goShifts = useCallback(() => {
     router.push(
-      '/(rider)/rider-deliveries'
-    );
-  }, []);
-
-  const goWallet = useCallback(() => {
-    router.push(
-      '/(rider)/rider-wallet'
-    );
-  }, []);
-
-  const goAlerts = useCallback(() => {
-    router.push(
-      '/(rider)/rider-alerts'
-    );
-  }, []);
-
-  const goStats = useCallback(() => {
-    router.push(
-      '/(rider)/rider-stats'
+      '/(rider)/rider-shifts'
     );
   }, []);
 
@@ -630,11 +658,11 @@ export default function RiderDashboardScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>
-              {deliveryCount}
+              {todayDeliveryCount}
             </Text>
 
             <Text style={styles.statLabel}>
-              Deliveries
+              Today&apos;s Deliveries
             </Text>
           </View>
 
@@ -645,12 +673,12 @@ export default function RiderDashboardScreen() {
               style={styles.statNumber}
             >
               {formatCurrency(
-                totalDeliveryValue
+                todayDeliveryFees
               )}
             </Text>
 
             <Text style={styles.statLabel}>
-              Delivery Value
+              Today&apos;s Delivery Fees
             </Text>
           </View>
 
@@ -669,9 +697,13 @@ export default function RiderDashboardScreen() {
       {/* CONTENT */}
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={
-          styles.scrollContent
-        }
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom:
+              bottomSpace,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -720,7 +752,7 @@ export default function RiderDashboardScreen() {
                     {
                       backgroundColor:
                         activeDelivery ||
-                        !isAvailable
+                        !isEffectivelyOnline
                           ? '#A5A5A5'
                           : GREEN,
                     },
@@ -734,7 +766,7 @@ export default function RiderDashboardScreen() {
                     {
                       color:
                         activeDelivery ||
-                        !isAvailable
+                        !isEffectivelyOnline
                           ? MUTED
                           : GREEN,
                     },
@@ -742,9 +774,11 @@ export default function RiderDashboardScreen() {
                 >
                   {activeDelivery
                     ? 'Busy — Active delivery'
-                    : isAvailable
+                    : isEffectivelyOnline
                       ? 'Online — Accepting deliveries'
-                      : 'Offline — Not accepting deliveries'}
+                      : canGoOnline
+                        ? 'Offline — Not accepting deliveries'
+                        : 'Offline — No active shift'}
                 </Text>
               </View>
             </View>
@@ -763,13 +797,20 @@ export default function RiderDashboardScreen() {
             </View>
           ) : (
             <Switch
-              value={isAvailable}
+              value={isEffectivelyOnline}
               onValueChange={
                 handleAvailabilityChange
               }
-              disabled={Boolean(
-                activeDelivery
-              )}
+              /*
+               * Going Online requires an active
+               * approved shift. Going Offline is
+               * always allowed.
+               */
+              disabled={
+                Boolean(activeDelivery) ||
+                (!isEffectivelyOnline &&
+                  !canGoOnline)
+              }
               trackColor={{
                 false: '#D9D9D9',
                 true: GOLD,
@@ -779,6 +820,17 @@ export default function RiderDashboardScreen() {
             />
           )}
         </View>
+
+        {/* WORK SHIFT */}
+        <WorkShiftCard
+          activeShift={
+            workShift?.activeShift ?? null
+          }
+          nextShift={
+            workShift?.nextShift ?? null
+          }
+          onPress={goShifts}
+        />
 
         {/* ACTIVE DELIVERY */}
         {activeDelivery ? (
@@ -1018,7 +1070,7 @@ export default function RiderDashboardScreen() {
                     styles.countBadgeText
                   }
                 >
-                  {isAvailable
+                  {isEffectivelyOnline
                     ? availableDeliveries.length
                     : 0}
                 </Text>
@@ -1026,7 +1078,7 @@ export default function RiderDashboardScreen() {
             </View>
 
             {/* OFFLINE */}
-            {!isAvailable ? (
+            {!isEffectivelyOnline ? (
               <View
                 style={
                   styles.emptyDeliveryCard
@@ -1045,7 +1097,9 @@ export default function RiderDashboardScreen() {
                 <Text
                   style={styles.emptyTitle}
                 >
-                  You are offline
+                  {canGoOnline
+                    ? 'You are offline'
+                    : 'No active shift'}
                 </Text>
 
                 <Text
@@ -1053,9 +1107,9 @@ export default function RiderDashboardScreen() {
                     styles.emptyDescription
                   }
                 >
-                  Turn your status on when you
-                  are ready to receive new
-                  delivery requests.
+                  {canGoOnline
+                    ? 'Turn your status on when you are ready to receive new delivery requests.'
+                    : 'You can go Online and accept new deliveries only during an approved work shift. Request a shift to get started.'}
                 </Text>
 
                 <Pressable
@@ -1069,11 +1123,16 @@ export default function RiderDashboardScreen() {
                     availabilitySaving &&
                       styles.buttonDisabled,
                   ]}
-                  onPress={() =>
-                    handleAvailabilityChange(
+                  onPress={() => {
+                    if (!canGoOnline) {
+                      goShifts();
+                      return;
+                    }
+
+                    void handleAvailabilityChange(
                       true
-                    )
-                  }
+                    );
+                  }}
                   disabled={
                     availabilitySaving
                   }
@@ -1089,7 +1148,9 @@ export default function RiderDashboardScreen() {
                         styles.refreshGoldText
                       }
                     >
-                      Go Online
+                      {canGoOnline
+                        ? 'Go Online'
+                        : 'View Work Shifts'}
                     </Text>
                   )}
                 </Pressable>
@@ -1097,7 +1158,7 @@ export default function RiderDashboardScreen() {
             ) : null}
 
             {/* ONLINE WITHOUT REQUESTS */}
-            {isAvailable &&
+            {isEffectivelyOnline &&
             availableDeliveries.length ===
               0 ? (
               <View
@@ -1158,7 +1219,7 @@ export default function RiderDashboardScreen() {
             ) : null}
 
             {/* DELIVERY REQUESTS */}
-            {isAvailable &&
+            {isEffectivelyOnline &&
               availableDeliveries.map(
                 delivery => {
                   const order =
@@ -1224,9 +1285,10 @@ export default function RiderDashboardScreen() {
                           style={
                             styles.requestAmount
                           }
+                          accessibilityLabel="Delivery fee"
                         >
                           {formatCurrency(
-                            order?.totalAmount
+                            order?.deliveryFee
                           )}
                         </Text>
                       </View>
@@ -1404,7 +1466,7 @@ export default function RiderDashboardScreen() {
           <Text
             style={styles.sectionTitle}
           >
-            Delivery Summary
+            Earnings Summary
           </Text>
 
           <View style={styles.summaryRow}>
@@ -1417,7 +1479,7 @@ export default function RiderDashboardScreen() {
                 }
               >
                 <Ionicons
-                  name="today-outline"
+                  name="cash-outline"
                   size={21}
                   color={GOLD_DARK}
                 />
@@ -1431,7 +1493,7 @@ export default function RiderDashboardScreen() {
                 }
               >
                 {formatCurrency(
-                  todayDeliveryValue
+                  monthDeliveryFees
                 )}
               </Text>
 
@@ -1440,7 +1502,7 @@ export default function RiderDashboardScreen() {
                   styles.summaryLabel
                 }
               >
-                Today&apos;s Value
+                Fees This Month
               </Text>
             </View>
 
@@ -1453,7 +1515,7 @@ export default function RiderDashboardScreen() {
                 }
               >
                 <Ionicons
-                  name="calendar-outline"
+                  name="checkmark-done-outline"
                   size={21}
                   color={GOLD_DARK}
                 />
@@ -1466,9 +1528,7 @@ export default function RiderDashboardScreen() {
                   styles.summaryAmount
                 }
               >
-                {formatCurrency(
-                  monthDeliveryValue
-                )}
+                {completedDeliveryCount}
               </Text>
 
               <Text
@@ -1476,7 +1536,7 @@ export default function RiderDashboardScreen() {
                   styles.summaryLabel
                 }
               >
-                This Month
+                Completed Deliveries
               </Text>
             </View>
           </View>
@@ -1490,88 +1550,10 @@ export default function RiderDashboardScreen() {
       </ScrollView>
 
       {/* BOTTOM NAVIGATION */}
-      <View style={styles.bottomNav}>
-        <Pressable
-          style={styles.navItem}
-          onPress={goDashboard}
-        >
-          <View
-            style={styles.activeNavCircle}
-          >
-            <Ionicons
-              name="home-outline"
-              size={21}
-              color={GOLD_DARK}
-            />
-          </View>
-
-          <Text
-            style={styles.activeNavText}
-          >
-            Dashboard
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={goDeliveries}
-        >
-          <MaterialCommunityIcons
-            name="truck-delivery-outline"
-            size={23}
-            color="#AFAFAF"
-          />
-
-          <Text style={styles.navText}>
-            Deliveries
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={goWallet}
-        >
-          <Ionicons
-            name="wallet-outline"
-            size={23}
-            color="#AFAFAF"
-          />
-
-          <Text style={styles.navText}>
-            Wallet
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={goAlerts}
-        >
-          <Ionicons
-            name="notifications-outline"
-            size={23}
-            color="#AFAFAF"
-          />
-
-          <Text style={styles.navText}>
-            Alerts
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.navItem}
-          onPress={goStats}
-        >
-          <Ionicons
-            name="stats-chart-outline"
-            size={23}
-            color="#AFAFAF"
-          />
-
-          <Text style={styles.navText}>
-            Stats
-          </Text>
-        </Pressable>
-      </View>
+      <RiderBottomNav
+        active="dashboard"
+        onReselect={goDashboard}
+      />
     </View>
   );
 }
@@ -1627,7 +1609,7 @@ const styles = StyleSheet.create({
   todayText: {
     color:
       'rgba(255,255,255,0.88)',
-    fontSize: 12,
+    fontSize: 13,
     marginBottom: 5,
   },
 
@@ -1696,7 +1678,7 @@ const styles = StyleSheet.create({
     color:
       'rgba(255,255,255,0.9)',
     fontSize:
-      SCREEN_WIDTH <= 360 ? 10 : 11,
+      SCREEN_WIDTH <= 360 ? 11 : 12,
     marginTop: 5,
     textAlign: 'center',
   },
@@ -1767,7 +1749,7 @@ const styles = StyleSheet.create({
 
   statusSubtitle: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     lineHeight: 15,
   },
 
@@ -1803,7 +1785,7 @@ const styles = StyleSheet.create({
 
   countBadgeText: {
     color: WHITE,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
   },
 
@@ -1836,7 +1818,7 @@ const styles = StyleSheet.create({
   emptyDescription: {
     marginTop: 6,
     color: '#8F8F8F',
-    fontSize: 11,
+    fontSize: 13,
     lineHeight: 16,
     textAlign: 'center',
     maxWidth: 290,
@@ -1855,7 +1837,7 @@ const styles = StyleSheet.create({
 
   refreshGoldText: {
     color: WHITE,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
   },
 
@@ -1896,7 +1878,7 @@ const styles = StyleSheet.create({
 
   activeFlorist: {
     color: MUTED,
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 2,
   },
 
@@ -1909,7 +1891,7 @@ const styles = StyleSheet.create({
 
   activeBadgeText: {
     color: GOLD_DARK,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
 
@@ -1930,13 +1912,13 @@ const styles = StyleSheet.create({
 
   routeSmallLabel: {
     color: MUTED,
-    fontSize: 10,
+    fontSize: 12,
   },
 
   routeAddress: {
     marginTop: 2,
     color: '#555555',
-    fontSize: 11,
+    fontSize: 13,
     lineHeight: 16,
   },
 
@@ -1957,13 +1939,13 @@ const styles = StyleSheet.create({
 
   recipientLabel: {
     color: MUTED,
-    fontSize: 10,
+    fontSize: 12,
   },
 
   recipientName: {
     marginTop: 2,
     color: TEXT,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
 
@@ -1980,7 +1962,7 @@ const styles = StyleSheet.create({
 
   continueButtonText: {
     color: WHITE,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
   },
 
@@ -2023,7 +2005,7 @@ const styles = StyleSheet.create({
   requestFlorist: {
     marginTop: 2,
     color: MUTED,
-    fontSize: 11,
+    fontSize: 13,
   },
 
   requestAmount: {
@@ -2065,7 +2047,7 @@ const styles = StyleSheet.create({
 
   acceptButtonText: {
     color: WHITE,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
   },
 
@@ -2109,7 +2091,7 @@ const styles = StyleSheet.create({
 
   summaryLabel: {
     color: MUTED,
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 3,
   },
 
@@ -2150,15 +2132,152 @@ const styles = StyleSheet.create({
 
   activeNavText: {
     color: GOLD_DARK,
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
     fontWeight: '700',
   },
 
   navText: {
     color: '#999999',
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 4,
     fontWeight: '500',
+  },
+});
+/*
+ * =========================================================
+ * WORK SHIFT CARD
+ * =========================================================
+ *
+ * Shows whether the Rider is inside an approved shift,
+ * has an upcoming approved shift, or has none. Tapping
+ * opens the Work Shifts screen where Riders request
+ * Admin-posted shifts.
+ * =========================================================
+ */
+
+function WorkShiftCard({
+  activeShift,
+  nextShift,
+  onPress,
+}: {
+  activeShift: RiderShift | null;
+  nextShift: RiderShift | null;
+  onPress: () => void;
+}) {
+  const state = activeShift
+    ? 'active'
+    : nextShift
+      ? 'upcoming'
+      : 'none';
+
+  const title =
+    state === 'active'
+      ? 'On shift now'
+      : state === 'upcoming'
+        ? 'Next approved shift'
+        : 'No approved shift';
+
+  const detail =
+    state === 'active' && activeShift
+      ? `Ends ${formatPhTime(activeShift.endAt)} · ${formatShiftWindow(
+          activeShift.startAt,
+          activeShift.endAt
+        )}`
+      : state === 'upcoming' && nextShift
+        ? formatShiftWindow(nextShift.startAt, nextShift.endAt)
+        : 'Request an Admin-posted shift to go Online.';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open work shifts"
+      onPress={onPress}
+      style={({ pressed }) => [
+        shiftStyles.card,
+        state === 'active' && shiftStyles.cardActive,
+        pressed && { opacity: 0.9 },
+      ]}
+    >
+      <View
+        style={[
+          shiftStyles.iconCircle,
+          state === 'active' && shiftStyles.iconCircleActive,
+        ]}
+      >
+        <Ionicons
+          name={state === 'active' ? 'time' : 'time-outline'}
+          size={22}
+          color={state === 'active' ? WHITE : GOLD_DARK}
+        />
+      </View>
+
+      <View style={shiftStyles.textArea}>
+        <Text style={shiftStyles.title}>{title}</Text>
+        <Text style={shiftStyles.detail}>{detail}</Text>
+      </View>
+
+      <View style={shiftStyles.linkRow}>
+        <Text style={shiftStyles.linkText}>Shifts</Text>
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color={GOLD_DARK}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+const shiftStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: WHITE,
+    borderWidth: 1,
+    borderColor: '#F0E6C8',
+  },
+  cardActive: {
+    backgroundColor: GOLD_LIGHT,
+    borderColor: GOLD,
+  },
+  iconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: GOLD_LIGHT,
+  },
+  iconCircleActive: {
+    backgroundColor: GOLD,
+  },
+  textArea: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  title: {
+    color: TEXT,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  detail: {
+    marginTop: 3,
+    color: '#6B6B6B',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  linkText: {
+    color: GOLD_DARK,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

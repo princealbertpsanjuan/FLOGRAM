@@ -16,6 +16,7 @@ import {
   getMyShiftHistory,
   getPending,
   getPayout,
+  getPayoutBalances,
   getPayouts,
   getRemittance,
   getRemittances,
@@ -620,6 +621,25 @@ riderRouter.patch(
  * COD remittance is NOT included here.
  * =========================================================
  */
+
+/*
+ * =========================================================
+ * ADMIN
+ * RIDER PAYOUT BALANCES (AMOUNT OWED)
+ *
+ * GET
+ * /api/v1/riders/payouts/balances
+ *
+ * Must be declared before /payouts/:payoutId.
+ * =========================================================
+ */
+
+riderRouter.get(
+  "/payouts/balances",
+  authenticate,
+  authorize("admin"),
+  getPayoutBalances
+);
 
 riderRouter.get(
   "/payouts",
