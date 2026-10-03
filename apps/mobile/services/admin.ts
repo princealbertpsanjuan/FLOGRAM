@@ -1,5 +1,5 @@
 import { apiRequest } from "./api";
-import { File as ExpoFile } from "expo-file-system";
+import { appendImageFile } from "../utils/form-file";
 
 import type {
   RiderPayout,
@@ -2150,14 +2150,16 @@ export async function markAdminRiderPayoutPaid(
   }
 
   /*
-   * Expo SDK 57: append a real Expo File, not the old
+   * Native: an Expo File (SDK 57); web: a Blob. Not the old
    * { uri, name, type } object (which fails with
    * "Unsupported FormDataPart implementation").
    * Must match riderPayoutProofUpload.single("proofImage").
    */
-  formData.append(
+  await appendImageFile(
+    formData,
     "proofImage",
-    new ExpoFile(payload.proofImageUri.trim())
+    payload.proofImageUri.trim(),
+    "rider-payout-proof.jpg"
   );
 
   const response = await apiRequest<AdminPayoutResponse>(

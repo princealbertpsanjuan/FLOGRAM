@@ -13,7 +13,18 @@ const app = express();
 
 app.disable("x-powered-by");
 
-app.use(helmet());
+/*
+ * crossOriginResourcePolicy: the Admin web portal runs on a
+ * different origin and must be able to show uploaded
+ * images (proofs, product photos) from /uploads.
+ */
+app.use(
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
+  })
+);
 
 app.use(
   cors({

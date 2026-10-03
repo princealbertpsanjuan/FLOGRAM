@@ -1,5 +1,6 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import {
+  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -8,6 +9,13 @@ import {
 } from 'react-native';
 
 export default function WelcomeScreen() {
+  /*
+   * The web build is the Admin portal: go straight to login.
+   */
+  if (Platform.OS === 'web') {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Decorative background */}

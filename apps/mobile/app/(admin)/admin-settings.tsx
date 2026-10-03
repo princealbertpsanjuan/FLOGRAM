@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from '../../services/storage';
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -894,19 +894,19 @@ export default function AdminSettingsScreen() {
         }
 
         await Promise.all([
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "token"
           ),
 
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "authToken"
           ),
 
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "accessToken"
           ),
 
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "user"
           ),
         ]);

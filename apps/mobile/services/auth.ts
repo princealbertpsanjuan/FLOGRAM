@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './storage';
 
 import {
   apiRequest,
@@ -146,12 +146,12 @@ const saveSession = async (
   user: AuthUser,
   accessToken: string
 ) => {
-  await SecureStore.setItemAsync(
+  await SecureStore.setItem(
     TOKEN_KEY,
     accessToken
   );
 
-  await SecureStore.setItemAsync(
+  await SecureStore.setItem(
     USER_KEY,
     JSON.stringify(user)
   );
@@ -278,7 +278,7 @@ export const getCurrentUser =
         }
       );
 
-    await SecureStore.setItemAsync(
+    await SecureStore.setItem(
       USER_KEY,
       JSON.stringify(
         response.data.user
@@ -291,7 +291,7 @@ export const getCurrentUser =
 export const getStoredUser =
   async () => {
     const value =
-      await SecureStore.getItemAsync(
+      await SecureStore.getItem(
         USER_KEY
       );
 
@@ -310,7 +310,7 @@ export const getStoredUser =
 
 export const getAccessToken =
   () => {
-    return SecureStore.getItemAsync(
+    return SecureStore.getItem(
       TOKEN_KEY
     );
   };
@@ -326,11 +326,11 @@ export const logout =
         }
       );
     } finally {
-      await SecureStore.deleteItemAsync(
+      await SecureStore.deleteItem(
         TOKEN_KEY
       );
 
-      await SecureStore.deleteItemAsync(
+      await SecureStore.deleteItem(
         USER_KEY
       );
     }

@@ -17,8 +17,15 @@ import {
 
 import {
   login,
+  logout,
   type AuthUser,
 } from '../../services/auth';
+
+/*
+ * The web build is the FLOGRAM Admin portal only.
+ */
+const IS_WEB_PORTAL =
+  Platform.OS === 'web';
 
 export default function LoginScreen() {
   const [email, setEmail] =
@@ -137,6 +144,29 @@ export default function LoginScreen() {
 
         const user =
           response.data.user;
+
+        /*
+         * =====================================================
+         * WEB = ADMIN PORTAL ONLY
+         * =====================================================
+         */
+        if (
+          IS_WEB_PORTAL &&
+          user.role !== 'admin'
+        ) {
+          try {
+            await logout();
+          } catch {
+            // Local session is cleared by logout().
+          }
+
+          Alert.alert(
+            'Admin portal only',
+            'The FLOGRAM website is for Admin accounts. Customers, Sellers and Riders please use the FLOGRAM mobile app.'
+          );
+
+          return;
+        }
 
         /*
          * =====================================================
@@ -285,7 +315,9 @@ export default function LoginScreen() {
             <Text
               style={styles.subtitle}
             >
-              Sign in to continue to FLOGRAM
+              {IS_WEB_PORTAL
+                ? 'FLOGRAM Admin Portal — sign in with an Admin account'
+                : 'Sign in to continue to FLOGRAM'}
             </Text>
 
             {/* EMAIL */}
@@ -427,6 +459,7 @@ export default function LoginScreen() {
                 REGISTER
             =================================================== */}
 
+            {!IS_WEB_PORTAL ? (
             <View
               style={
                 styles.registerRow
@@ -457,6 +490,7 @@ export default function LoginScreen() {
                 </Text>
               </Pressable>
             </View>
+            ) : null}
 
             {/* ===================================================
                 BACK
