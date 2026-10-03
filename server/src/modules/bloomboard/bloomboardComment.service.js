@@ -118,3 +118,37 @@ export const deleteBloomboardComment =
 
     return comment;
   };
+
+/*
+ * =========================================================
+ * CUSTOMER / SELLER
+ * GET MY COMMENT ACTIVITY
+ * =========================================================
+ *
+ * The user's own active comments, newest first, with the
+ * post they were written on (title/caption + first image)
+ * so the app can link back to the post.
+ * =========================================================
+ */
+
+export const getMyBloomboardComments =
+  async (userId) => {
+    const comments =
+      await BloomboardComment.find({
+        author: userId,
+        isActive: true,
+      })
+        .populate({
+          path: "post",
+          match: { isActive: true },
+        })
+        .sort({
+          createdAt: -1,
+        })
+        .limit(100)
+        .lean();
+
+    return comments.filter(
+      (comment) => comment.post
+    );
+  };

@@ -314,47 +314,65 @@ export const deleteBloomboardPost =
     return post;
   };
 
+/*
+ * =========================================================
+ * LIKE / UNLIKE / SAVE / UNSAVE
+ * =========================================================
+ *
+ * Atomic $addToSet / $pull updates. The previous
+ * read-modify-save version replaced the whole array, so a
+ * like from one user could erase a like another user made
+ * at the same moment, and likes could appear to "not stay
+ * saved" after a refresh.
+ * =========================================================
+ */
+
+const updatePostReaction = async (
+  postId,
+  update
+) => {
+  const post =
+    await BloomboardPost.findOneAndUpdate(
+      {
+        _id: postId,
+        isActive: true,
+      },
+      update,
+      {
+        returnDocument: "after",
+      }
+    )
+      .select("likes saves")
+      .lean();
+
+  if (!post) {
+    const error = new Error(
+      "BloomBoard post was not found."
+    );
+
+    error.statusCode = 404;
+
+    throw error;
+  }
+
+  return post;
+};
+
 export const likeBloomboardPost =
   async (
     postId,
     userId
   ) => {
     const post =
-      await BloomboardPost.findOne({
-        _id: postId,
-        isActive: true,
-      });
-
-    if (!post) {
-      const error = new Error(
-        "BloomBoard post was not found."
+      await updatePostReaction(
+        postId,
+        { $addToSet: { likes: userId } }
       );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    const alreadyLiked =
-      post.likes.some(
-        (id) =>
-          id.toString() ===
-          userId.toString()
-      );
-
-    if (!alreadyLiked) {
-      post.likes.push(
-        userId
-      );
-
-      await post.save();
-    }
 
     return {
       liked: true,
-
       likeCount:
-        post.likes.length,
+        post.likes?.length || 0,
     };
   };
 
@@ -364,35 +382,15 @@ export const unlikeBloomboardPost =
     userId
   ) => {
     const post =
-      await BloomboardPost.findOne({
-        _id: postId,
-        isActive: true,
-      });
-
-    if (!post) {
-      const error = new Error(
-        "BloomBoard post was not found."
+      await updatePostReaction(
+        postId,
+        { $pull: { likes: userId } }
       );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    post.likes =
-      post.likes.filter(
-        (id) =>
-          id.toString() !==
-          userId.toString()
-      );
-
-    await post.save();
 
     return {
       liked: false,
-
       likeCount:
-        post.likes.length,
+        post.likes?.length || 0,
     };
   };
 
@@ -402,38 +400,15 @@ export const saveBloomboardPost =
     userId
   ) => {
     const post =
-      await BloomboardPost.findOne({
-        _id: postId,
-        isActive: true,
-      });
-
-    if (!post) {
-      const error = new Error(
-        "BloomBoard post was not found."
+      await updatePostReaction(
+        postId,
+        { $addToSet: { saves: userId } }
       );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    const alreadySaved =
-      post.saves.some(
-        (id) =>
-          id.toString() ===
-          userId.toString()
-      );
-
-    if (!alreadySaved) {
-      post.saves.push(
-        userId
-      );
-
-      await post.save();
-    }
 
     return {
       saved: true,
+      saveCount:
+        post.saves?.length || 0,
     };
   };
 
@@ -443,32 +418,15 @@ export const unsaveBloomboardPost =
     userId
   ) => {
     const post =
-      await BloomboardPost.findOne({
-        _id: postId,
-        isActive: true,
-      });
-
-    if (!post) {
-      const error = new Error(
-        "BloomBoard post was not found."
+      await updatePostReaction(
+        postId,
+        { $pull: { saves: userId } }
       );
-
-      error.statusCode = 404;
-
-      throw error;
-    }
-
-    post.saves =
-      post.saves.filter(
-        (id) =>
-          id.toString() !==
-          userId.toString()
-      );
-
-    await post.save();
 
     return {
       saved: false,
+      saveCount:
+        post.saves?.length || 0,
     };
   };
 
@@ -478,6 +436,36 @@ export const getMySavedBloomboardPosts =
       await BloomboardPost.find({
         isActive: true,
         saves: userId,
+      })
+        .populate(
+          "author",
+          "firstName lastName role profileImage"
+        )
+        .populate(
+          "florist",
+          "shopName shopLogo address"
+        )
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
+
+    return addPostCounts(posts);
+  };
+
+/*
+ * =========================================================
+ * CUSTOMER / SELLER
+ * GET MY LIKED POSTS
+ * =========================================================
+ */
+
+export const getMyLikedBloomboardPosts =
+  async (userId) => {
+    const posts =
+      await BloomboardPost.find({
+        isActive: true,
+        likes: userId,
       })
         .populate(
           "author",

@@ -26,7 +26,6 @@ import {
 } from '@expo/vector-icons';
 
 import {
-  router,
   useFocusEffect,
 } from 'expo-router';
 
@@ -40,6 +39,13 @@ import {
   type RiderWalletData,
   type RiderWalletTransaction,
 } from '../../services/delivery';
+
+import RiderBottomNav, {
+  RIDER_GOLD_DARK,
+  useRiderBottomNavSpace,
+} from '../../components/rider/rider-bottom-nav';
+
+import RiderEarningsPanel from '../../components/rider/rider-earnings-panel';
 
 /*
  * =========================================================
@@ -362,6 +368,35 @@ export default function RiderWalletScreen() {
 
   /*
    * -----------------------------------------------------
+   * WALLET TABS
+   * -----------------------------------------------------
+   *
+   * Earnings        delivery-fee income + payouts
+   * COD Remittance  cash collected for FLOGRAM
+   *
+   * Kept separate: COD collected is NOT
+   * Rider income.
+   */
+
+  const [
+    walletTab,
+    setWalletTab,
+  ] =
+    useState<'earnings' | 'cod'>(
+      'earnings'
+    );
+
+  const [
+    earningsRefreshKey,
+    setEarningsRefreshKey,
+  ] =
+    useState(0);
+
+  const bottomSpace =
+    useRiderBottomNavSpace();
+
+  /*
+   * -----------------------------------------------------
    * LOAD WALLET
    * -----------------------------------------------------
    */
@@ -442,6 +477,10 @@ export default function RiderWalletScreen() {
       try {
         setRefreshing(
           true
+        );
+
+        setEarningsRefreshKey(
+          key => key + 1
         );
 
         await loadWallet({
@@ -877,41 +916,6 @@ export default function RiderWalletScreen() {
    * =====================================================
    */
 
-  const goDashboard =
-  useCallback(() => {
-    router.replace(
-      '/(rider)/rider-dashboard'
-    );
-  }, []);
-
-const goDeliveries =
-  useCallback(() => {
-    router.push(
-      '/(rider)/rider-deliveries'
-    );
-  }, []);
-
-const goWallet =
-  useCallback(() => {
-    router.replace(
-      '/(rider)/rider-wallet'
-    );
-  }, []);
-
-const goAlerts =
-  useCallback(() => {
-    router.push(
-      '/(rider)/rider-alerts'
-    );
-  }, []);
-
-const goStats =
-  useCallback(() => {
-    router.push(
-      '/(rider)/rider-stats'
-    );
-  }, []);
-
   /*
    * =====================================================
    * LOADING
@@ -957,23 +961,10 @@ const goStats =
           </Text>
         </View>
 
-<BottomNavigation
-  onDashboard={
-    goDashboard
-  }
-  onDeliveries={
-    goDeliveries
-  }
-  onWallet={
-    goWallet
-  }
-  onAlerts={
-    goAlerts
-  }
-  onStats={
-    goStats
-  }
-/>
+<RiderBottomNav
+        active="wallet"
+        onReselect={handleRefresh}
+      />
       </SafeAreaView>
     );
   }
@@ -1051,23 +1042,10 @@ const goStats =
           </Pressable>
         </View>
 
-        <BottomNavigation
-  onDashboard={
-    goDashboard
-  }
-  onDeliveries={
-    goDeliveries
-  }
-  onWallet={
-    goWallet
-  }
-  onAlerts={
-    goAlerts
-  }
-  onStats={
-    goStats
-  }
-/>
+        <RiderBottomNav
+        active="wallet"
+        onReselect={handleRefresh}
+      />
       </SafeAreaView>
     );
   }
@@ -1141,7 +1119,9 @@ const goStats =
                   styles.headerTitle
                 }
               >
-                Cash & Remittance
+                {walletTab === 'earnings'
+                  ? 'Earnings & Payouts'
+                  : 'COD Cash & Remittance'}
               </Text>
 
               <Text
@@ -1149,9 +1129,9 @@ const goStats =
                   styles.headerSubtitle
                 }
               >
-                Track COD collections
-                and remit your complete
-                shift cash to FLOGRAM.
+                {walletTab === 'earnings'
+                  ? 'Your delivery-fee income and payouts from FLOGRAM.'
+                  : 'Track COD collections and remit your complete shift cash to FLOGRAM.'}
               </Text>
             </View>
 
@@ -1168,6 +1148,7 @@ const goStats =
             </View>
           </View>
 
+{walletTab === 'cod' ? (
           <View
             style={
               styles.todayCashCard
@@ -1213,12 +1194,79 @@ const goStats =
               />
             </View>
           </View>
+          ) : null}
         </View>
 
+        {/* WALLET TABS */}
         <View
           style={
-            styles.content
+            walletTabStyles.tabs
           }
+        >
+          {(
+            [
+              ['earnings', 'Earnings'],
+              ['cod', 'COD Remittance'],
+            ] as const
+          ).map(([key, label]) => {
+            const active =
+              walletTab === key;
+
+            return (
+              <Pressable
+                key={key}
+                accessibilityRole="tab"
+                accessibilityState={{
+                  selected: active,
+                }}
+                onPress={() =>
+                  setWalletTab(key)
+                }
+                style={[
+                  walletTabStyles.tab,
+                  active &&
+                    walletTabStyles.tabActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    walletTabStyles.tabText,
+                    active &&
+                      walletTabStyles.tabTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {walletTab === 'earnings' ? (
+          <View
+            style={[
+              styles.content,
+              {
+                paddingBottom:
+                  bottomSpace,
+              },
+            ]}
+          >
+            <RiderEarningsPanel
+              refreshKey={
+                earningsRefreshKey
+              }
+            />
+          </View>
+        ) : (
+        <View
+          style={[
+            styles.content,
+            {
+              paddingBottom:
+                bottomSpace,
+            },
+          ]}
         >
           {/*
            * =================================================
@@ -1653,12 +1701,8 @@ const goStats =
             </View>
           </View>
 
-          <View
-            style={
-              styles.bottomSpacer
-            }
-          />
         </View>
+        )}
       </ScrollView>
 
       {/*
@@ -2141,23 +2185,10 @@ const goStats =
         </View>
       </Modal>
 
-      <BottomNavigation
-  onDashboard={
-    goDashboard
-  }
-  onDeliveries={
-    goDeliveries
-  }
-  onWallet={
-    goWallet
-  }
-  onAlerts={
-    goAlerts
-  }
-  onStats={
-    goStats
-  }
-/>
+      <RiderBottomNav
+        active="wallet"
+        onReselect={handleRefresh}
+      />
     </SafeAreaView>
   );
 }
@@ -3236,137 +3267,6 @@ function RemittanceBadge({
   );
 }
 
-/*
- * =========================================================
- * BOTTOM NAVIGATION
- * =========================================================
- */
-
-function BottomNavigation({
-  onDashboard,
-  onDeliveries,
-  onWallet,
-  onAlerts,
-  onStats,
-}: {
-  onDashboard: () => void;
-
-  onDeliveries: () => void;
-
-  onWallet: () => void;
-
-  onAlerts: () => void;
-
-  onStats: () => void;
-}) {
-  return (
-    <View
-      style={
-        styles.bottomNav
-      }
-    >
-      <NavItem
-        icon="home-outline"
-        label="Dashboard"
-        onPress={
-          onDashboard
-        }
-      />
-
-      <NavItem
-        icon="cube-outline"
-        label="Deliveries"
-        onPress={
-          onDeliveries
-        }
-      />
-
-      <NavItem
-        icon="wallet"
-        label="Wallet"
-        active
-        onPress={
-          onWallet
-        }
-      />
-
-      <NavItem
-        icon="notifications-outline"
-        label="Alerts"
-        onPress={
-          onAlerts
-        }
-      />
-
-      <NavItem
-        icon="stats-chart-outline"
-        label="Stats"
-        onPress={
-          onStats
-        }
-      />
-    </View>
-  );
-}
-
-function NavItem({
-  icon,
-  label,
-  active = false,
-  onPress,
-}: {
-  icon:
-    ComponentProps<
-      typeof Ionicons
-    >['name'];
-
-  label: string;
-
-  active?: boolean;
-
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={
-        styles.navItem
-      }
-      onPress={
-        onPress
-      }
-    >
-      <View
-        style={[
-          styles.navIconWrap,
-
-          active &&
-            styles.activeNavIconWrap,
-        ]}
-      >
-        <Ionicons
-          name={icon}
-          size={20}
-          color={
-            active
-              ? GOLD_DARK
-              : '#9A9598'
-          }
-        />
-      </View>
-
-      <Text
-        style={[
-          styles.navLabel,
-
-          active &&
-            styles.activeNavLabel,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /*
  * =========================================================
@@ -3434,7 +3334,7 @@ const styles =
       marginTop: 4,
       color:
         'rgba(255,255,255,0.85)',
-      fontSize: 8,
+      fontSize: 11,
       lineHeight: 12,
     },
 
@@ -3464,7 +3364,7 @@ const styles =
 
     todayCashLabel: {
       color: GRAY,
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '600',
     },
 
@@ -3504,13 +3404,13 @@ const styles =
     sectionTitle: {
       marginBottom: 9,
       color: TEXT,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '900',
     },
 
     sectionTitleNoMargin: {
       color: TEXT,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '900',
     },
 
@@ -3542,7 +3442,7 @@ const styles =
 
     countBadgeText: {
       color: GOLD_DARK,
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '900',
     },
 
@@ -3624,7 +3524,7 @@ const styles =
 
     cardTitle: {
       color: TEXT,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '900',
     },
 
@@ -3651,7 +3551,7 @@ const styles =
 
     remittanceSummaryAmount: {
       maxWidth: '100%',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '900',
     },
 
@@ -3721,7 +3621,7 @@ const styles =
 
     currentShiftDate: {
       color: TEXT,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '900',
     },
 
@@ -3766,7 +3666,7 @@ const styles =
 
     shiftSubmitButtonText: {
       color: WHITE,
-      fontSize: 8.5,
+      fontSize: 11.5,
       fontWeight: '900',
     },
 
@@ -3852,7 +3752,7 @@ const styles =
 
     noCurrentShiftTitle: {
       color: TEXT,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '900',
     },
 
@@ -3901,7 +3801,7 @@ const styles =
 
     dailyRemittanceDate: {
       color: TEXT,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '900',
     },
 
@@ -4045,7 +3945,7 @@ const styles =
 
     walletSectionTitle: {
       color: TEXT,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '900',
     },
 
@@ -4068,7 +3968,7 @@ const styles =
     sectionTotal: {
       marginTop: 2,
       color: GOLD_DARK,
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '900',
     },
 
@@ -4124,7 +4024,7 @@ const styles =
 
     productName: {
       color: TEXT,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '800',
     },
 
@@ -4149,7 +4049,7 @@ const styles =
     transactionAmount: {
       maxWidth: '100%',
       color: GOLD_DARK,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '900',
     },
 
@@ -4257,7 +4157,7 @@ const styles =
     emptyTransactionsTitle: {
       marginTop: 7,
       color: TEXT,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '800',
     },
 
@@ -4299,7 +4199,7 @@ const styles =
 
     infoTitle: {
       color: '#536D90',
-      fontSize: 8.5,
+      fontSize: 11.5,
       fontWeight: '900',
     },
 
@@ -4336,7 +4236,7 @@ const styles =
       maxWidth: 240,
       marginTop: 5,
       color: GRAY,
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 13,
       textAlign: 'center',
     },
@@ -4362,7 +4262,7 @@ const styles =
       maxWidth: 260,
       marginTop: 5,
       color: GRAY,
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 13,
       textAlign: 'center',
     },
@@ -4383,7 +4283,7 @@ const styles =
 
     retryButtonText: {
       color: WHITE,
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '900',
     },
 
@@ -4469,7 +4369,7 @@ const styles =
     selectedShiftDate: {
       marginTop: 2,
       color: TEXT,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '900',
     },
 
@@ -4527,7 +4427,7 @@ const styles =
       marginTop: 10,
       marginBottom: 6,
       color: TEXT,
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '800',
     },
 
@@ -4539,7 +4439,7 @@ const styles =
         '#DDD8DB',
       borderRadius: 10,
       color: TEXT,
-      fontSize: 9,
+      fontSize: 11,
       backgroundColor:
         '#FBFAFA',
     },
@@ -4593,7 +4493,7 @@ const styles =
     emptyProofTitle: {
       marginTop: 7,
       color: TEXT,
-      fontSize: 8.5,
+      fontSize: 11.5,
       fontWeight: '800',
     },
 
@@ -4670,7 +4570,7 @@ const styles =
 
     confirmRemittanceButtonText: {
       color: WHITE,
-      fontSize: 8.5,
+      fontSize: 11.5,
       fontWeight: '900',
     },
 
@@ -4728,3 +4628,31 @@ const styles =
       fontWeight: '900',
     },
   });
+const walletTabStyles = StyleSheet.create({
+  tabs: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 14,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: '#ECE9EB',
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 11,
+  },
+  tabActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  tabText: {
+    color: '#8C878A',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: RIDER_GOLD_DARK,
+    fontWeight: '800',
+  },
+});

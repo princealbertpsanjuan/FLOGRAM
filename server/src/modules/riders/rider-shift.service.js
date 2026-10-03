@@ -66,6 +66,37 @@ const getApprovedReservationCount = (
       "approved"
   ).length;
 
+/*
+ * MongoDB expression: number of approved reservations
+ * is still below the shift's slot limit. Used inside
+ * atomic updates so concurrent requests cannot overfill
+ * a shift.
+ */
+const approvedCountBelowLimitExpr = {
+  $lt: [
+    {
+      $size: {
+        $filter: {
+          input: {
+            $ifNull: [
+              "$reservations",
+              [],
+            ],
+          },
+          as: "reservation",
+          cond: {
+            $eq: [
+              "$$reservation.status",
+              "approved",
+            ],
+          },
+        },
+      },
+    },
+    "$slotLimit",
+  ],
+};
+
 const getRemainingSlots = (
   shift
 ) =>
@@ -740,33 +771,64 @@ export const requestRiderShift =
       );
     }
 
-    shift.reservations.push({
-      rider:
-        rider._id,
+    /*
+     * Atomic reservation.
+     *
+     * The checks above give friendly errors, but two
+     * requests can still arrive at the same time. The
+     * filter below re-checks every rule inside MongoDB
+     * so the same Rider can never be added twice and a
+     * full shift can never take a new request.
+     */
+    const updatedShift =
+      await RiderShift.findOneAndUpdate(
+        {
+          _id: shift._id,
+          status: "open",
+          startAt: {
+            $gt: now,
+          },
+          "reservations.rider": {
+            $ne: rider._id,
+          },
+          $expr:
+            approvedCountBelowLimitExpr,
+        },
+        {
+          $push: {
+            reservations: {
+              rider:
+                rider._id,
+              riderUser:
+                userId,
+              status:
+                "pending",
+              requestedAt:
+                now,
+              reviewedAt:
+                null,
+              reviewedBy:
+                null,
+            },
+          },
+        },
+        {
+          returnDocument: "after",
+        }
+      );
 
-      riderUser:
-        userId,
-
-      status:
-        "pending",
-
-      requestedAt:
-        now,
-
-      reviewedAt:
-        null,
-
-      reviewedBy:
-        null,
-    });
-
-    await shift.save();
+    if (!updatedShift) {
+      throw createError(
+        "This Rider shift could not be reserved. You may have already requested it, or it is now full or closed."
+      );
+    }
 
     return formatShift(
-      shift,
+      updatedShift,
       rider._id
     );
   };
+
 
 
 /*
@@ -880,22 +942,69 @@ export const reviewRiderShiftRequest =
       }
     }
 
-    reservation.status =
-      decision;
+    /*
+     * Atomic review.
+     *
+     * Approval re-checks the slot limit inside MongoDB,
+     * so two Admins approving different Riders at the
+     * same moment can never push the shift over its
+     * slot limit. The reservation must also still be
+     * pending, so it cannot be reviewed twice.
+     */
+    const reviewFilter = {
+      _id: shift._id,
+      status: {
+        $ne: "cancelled",
+      },
+      startAt: {
+        $gt: now,
+      },
+      reservations: {
+        $elemMatch: {
+          _id: reservation._id,
+          status: "pending",
+        },
+      },
+    };
 
-    reservation.reviewedAt =
-      now;
+    if (
+      decision ===
+      "approved"
+    ) {
+      reviewFilter.$expr =
+        approvedCountBelowLimitExpr;
+    }
 
-    reservation.reviewedBy =
-      adminUserId;
+    const updatedShift =
+      await RiderShift.findOneAndUpdate(
+        reviewFilter,
+        {
+          $set: {
+            "reservations.$.status":
+              decision,
+            "reservations.$.reviewedAt":
+              now,
+            "reservations.$.reviewedBy":
+              adminUserId,
+            updatedBy:
+              adminUserId,
+          },
+        },
+        {
+          returnDocument: "after",
+        }
+      );
 
-    shift.updatedBy =
-      adminUserId;
-
-    await shift.save();
+    if (!updatedShift) {
+      throw createError(
+        decision === "approved"
+          ? "This Rider shift request could not be approved. The shift may already be full, or the request was already reviewed."
+          : "This Rider shift request could not be rejected because it was already reviewed."
+      );
+    }
 
     return formatShift(
-      shift
+      updatedShift
     );
   };
 

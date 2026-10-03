@@ -379,20 +379,31 @@ export type RiderDashboardData = {
 
   /*
    * =========================================================
-   * DELIVERY VALUE
+   * WORK SHIFT
    * =========================================================
    *
-   * Monetary value of orders
-   * successfully delivered by the Rider.
-   *
-   * This is NOT Rider salary or income.
-   *
-   * Rider salary/payroll will be handled
-   * separately by FLOGRAM.
+   * Online/Offline follows the Rider's
+   * approved Admin work shift.
    * =========================================================
    */
 
-  deliveryValue: {
+  workShift: RiderWorkShiftStatus;
+
+  /*
+   * =========================================================
+   * DELIVERY FEES
+   * =========================================================
+   *
+   * Rider income comes ONLY from
+   * Order.deliveryFee of successfully
+   * delivered orders.
+   *
+   * COD cash collected from customers is
+   * NOT Rider income.
+   * =========================================================
+   */
+
+  deliveryFees: {
     total: number;
 
     today: number;
@@ -1107,87 +1118,6 @@ export const submitRiderRemittance =
 
     /*
      * -----------------------------------------------------
-     * IMAGE INFORMATION
-     * -----------------------------------------------------
-     */
-
-    const uri =
-      submission
-        .proofImageUri
-        .trim();
-
-    /*
-     * Use ImagePicker metadata when
-     * available.
-     *
-     * Otherwise determine a safe filename
-     * and MIME type from the URI.
-     */
-
-    const uriWithoutQuery =
-      uri.split('?')[0];
-
-    const rawExtension =
-      uriWithoutQuery
-        .split('.')
-        .pop()
-        ?.toLowerCase();
-
-    let extension =
-      rawExtension === 'png'
-        ? 'png'
-        : rawExtension === 'jpeg'
-          ? 'jpeg'
-          : 'jpg';
-
-    let mimeType =
-      extension === 'png'
-        ? 'image/png'
-        : 'image/jpeg';
-
-    /*
-     * If ImagePicker supplied an actual
-     * MIME type, trust it only when it is
-     * one of the image formats accepted by
-     * the backend Multer filter.
-     */
-
-    const pickerMimeType =
-      submission
-        .proofImageType
-        ?.toLowerCase();
-
-    if (
-      pickerMimeType ===
-        'image/png' ||
-      pickerMimeType ===
-        'image/jpeg' ||
-      pickerMimeType ===
-        'image/jpg'
-    ) {
-      mimeType =
-        pickerMimeType;
-
-      if (
-        pickerMimeType ===
-        'image/png'
-      ) {
-        extension =
-          'png';
-      } else {
-        extension =
-          'jpg';
-      }
-    }
-
-    const fileName =
-      submission
-        .proofImageName
-        ?.trim() ||
-      `remittance-proof-${Date.now()}.${extension}`;
-
-    /*
-     * -----------------------------------------------------
      * PROOF IMAGE
      * -----------------------------------------------------
      *
@@ -1196,19 +1126,25 @@ export const submitRiderRemittance =
      * riderRemittanceProofUpload.single(
      *   "proofImage"
      * )
+     *
+     * Expo SDK 57 fetch does not accept the old
+     * React Native { uri, name, type } object and
+     * fails with "Unsupported FormDataPart
+     * implementation". Use a real Expo File, the
+     * same approach as Proof of Delivery.
+     * -----------------------------------------------------
      */
+
+    const proofFile =
+      new File(
+        submission
+          .proofImageUri
+          .trim()
+      );
 
     formData.append(
       'proofImage',
-      {
-        uri,
-
-        name:
-          fileName,
-
-        type:
-          mimeType,
-      } as any
+      proofFile
     );
 
     /*
@@ -1927,4 +1863,531 @@ export const getDeliveryTracking =
       );
 
     return response.data.delivery;
+  };
+/*
+ * =========================================================
+ * RIDER WORK SHIFTS
+ * =========================================================
+ *
+ * Admin posts work shifts with a slot limit.
+ * Riders request a slot; Admin approves or
+ * rejects. A Rider may only go Online and
+ * accept NEW deliveries during an approved
+ * shift. An active delivery can still be
+ * finished after the shift ends.
+ * =========================================================
+ */
+
+export type RiderShiftReservationStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected';
+
+export type RiderShiftStatus =
+  | 'open'
+  | 'closed'
+  | 'cancelled';
+
+export type RiderShiftTimeStatus =
+  | 'upcoming'
+  | 'active'
+  | 'ended';
+
+export type RiderShiftPerson = {
+  _id: string;
+
+  firstName?: string;
+
+  lastName?: string;
+
+  email?: string;
+
+  phoneNumber?: string;
+};
+
+export type RiderShiftReservation = {
+  _id: string;
+
+  rider: string;
+
+  /*
+   * Populated with name/contact on Admin
+   * endpoints; an id string on Rider
+   * endpoints.
+   */
+
+  riderUser:
+    | string
+    | RiderShiftPerson;
+
+  status:
+    RiderShiftReservationStatus;
+
+  requestedAt: string;
+
+  reviewedAt:
+    | string
+    | null;
+
+  reviewedBy:
+    | string
+    | RiderShiftPerson
+    | null;
+};
+
+export type RiderShift = {
+  _id: string;
+
+  startAt: string;
+
+  endAt: string;
+
+  slotLimit: number;
+
+  status: RiderShiftStatus;
+
+  reservations:
+    RiderShiftReservation[];
+
+  approvedCount: number;
+
+  remainingSlots: number;
+
+  timeStatus:
+    RiderShiftTimeStatus;
+
+  /*
+   * The current Rider's own reservation
+   * (Rider endpoints only).
+   */
+
+  myReservation:
+    | RiderShiftReservation
+    | null;
+
+  createdAt?: string;
+
+  updatedAt?: string;
+};
+
+export type RiderWorkShiftStatus = {
+  authorization:
+    | 'active'
+    | 'upcoming'
+    | 'none';
+
+  canGoOnline: boolean;
+
+  canAcceptNewDeliveries: boolean;
+
+  activeShift:
+    | RiderShift
+    | null;
+
+  nextShift:
+    | RiderShift
+    | null;
+};
+
+type RiderShiftsResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    shifts: RiderShift[];
+  };
+};
+
+type RiderShiftResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    shift: RiderShift;
+  };
+};
+
+/*
+ * GET /api/v1/riders/me/shifts/available
+ */
+
+export const getRiderAvailableShifts =
+  async () => {
+    const response =
+      await apiRequest<RiderShiftsResponse>(
+        '/riders/me/shifts/available',
+        {
+          method: 'GET',
+
+          authenticated: true,
+        }
+      );
+
+    return response
+      .data
+      .shifts;
+  };
+
+/*
+ * GET /api/v1/riders/me/shifts
+ */
+
+export const getRiderShiftHistory =
+  async () => {
+    const response =
+      await apiRequest<RiderShiftsResponse>(
+        '/riders/me/shifts',
+        {
+          method: 'GET',
+
+          authenticated: true,
+        }
+      );
+
+    return response
+      .data
+      .shifts;
+  };
+
+/*
+ * POST /api/v1/riders/me/shifts/:shiftId/request
+ */
+
+export const requestRiderShift =
+  async (
+    shiftId: string
+  ) => {
+    const response =
+      await apiRequest<RiderShiftResponse>(
+        `/riders/me/shifts/${encodeURIComponent(
+          shiftId
+        )}/request`,
+        {
+          method: 'POST',
+
+          authenticated: true,
+        }
+      );
+
+    return response
+      .data
+      .shift;
+  };
+
+/*
+ * =========================================================
+ * RIDER DELIVERY-FEE EARNINGS AND PAYOUTS
+ * =========================================================
+ *
+ * GET /api/v1/riders/me/earnings
+ * GET /api/v1/riders/me/payouts/:payoutId
+ *
+ * Earnings come only from Order.deliveryFee
+ * of delivered orders. Admin pays Riders by
+ * external bank transfer; FLOGRAM records the
+ * reference number and proof. COD remittance
+ * is a separate flow and is NOT income.
+ * =========================================================
+ */
+
+export type RiderPayoutStatus =
+  | 'pending'
+  | 'paid'
+  | 'cancelled';
+
+export type RiderPayoutPerson = {
+  _id: string;
+
+  firstName?: string;
+
+  lastName?: string;
+
+  email?: string;
+
+  phoneNumber?: string;
+};
+
+export type RiderPayoutItem = {
+  deliveryId: string | null;
+
+  orderId: string | null;
+
+  /*
+   * Populated on detail endpoints.
+   */
+
+  order:
+    | string
+    | {
+        _id: string;
+
+        productName?: string;
+
+        deliveryFee?: number;
+
+        orderStatus?: string;
+      }
+    | null;
+
+  deliveryFee: number;
+
+  deliveredAt:
+    | string
+    | null;
+};
+
+export type RiderPayout = {
+  id: string;
+
+  riderUser:
+    | string
+    | RiderPayoutPerson
+    | null;
+
+  periodStart: string;
+
+  periodEnd: string;
+
+  deliveryCount: number;
+
+  items: RiderPayoutItem[];
+
+  totalAmount: number;
+
+  status: RiderPayoutStatus;
+
+  paymentMethod: string;
+
+  referenceNumber: string;
+
+  proofImageUrl:
+    | string
+    | null;
+
+  paidAt:
+    | string
+    | null;
+
+  paidBy:
+    | string
+    | RiderPayoutPerson
+    | null;
+
+  adminRemarks: string;
+
+  cancelledAt:
+    | string
+    | null;
+
+  cancellationReason: string;
+
+  createdAt: string;
+
+  updatedAt: string;
+};
+
+export type RiderEarningsData = {
+  summary: {
+    /*
+     * Delivery fees earned today
+     * (Philippine time).
+     */
+
+    today: number;
+
+    totalEarned: number;
+
+    /*
+     * Current payout period: earned but not
+     * yet included in any payout.
+     */
+
+    unpaid: number;
+
+    /*
+     * Included in a payout that Admin has
+     * not marked as paid yet.
+     */
+
+    pendingPayout: number;
+
+    paid: number;
+  };
+
+  payouts: RiderPayout[];
+};
+
+type RiderEarningsResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: RiderEarningsData;
+};
+
+type RiderPayoutResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    payout: RiderPayout;
+  };
+};
+
+export const getRiderEarnings =
+  async () => {
+    const response =
+      await apiRequest<RiderEarningsResponse>(
+        '/riders/me/earnings',
+        {
+          method: 'GET',
+
+          authenticated: true,
+        }
+      );
+
+    return response.data;
+  };
+
+export const getRiderPayout =
+  async (
+    payoutId: string
+  ) => {
+    const response =
+      await apiRequest<RiderPayoutResponse>(
+        `/riders/me/payouts/${encodeURIComponent(
+          payoutId
+        )}`,
+        {
+          method: 'GET',
+
+          authenticated: true,
+        }
+      );
+
+    return response
+      .data
+      .payout;
+  };
+
+/*
+ * =========================================================
+ * HELPERS
+ * =========================================================
+ */
+
+/*
+ * Today's completed delivery count from the
+ * dashboard's Monday-Sunday weekly series,
+ * using Philippine time (UTC+8).
+ */
+
+export const getTodayDeliveryCount = (
+  dashboard: Pick<
+    RiderDashboardData,
+    'weeklyDeliveries'
+  >
+) => {
+  const phNow =
+    new Date(
+      Date.now() +
+        8 * 60 * 60 * 1000
+    );
+
+  const mondayFirstIndex =
+    (phNow.getUTCDay() + 6) % 7;
+
+  return (
+    dashboard
+      .weeklyDeliveries?.[
+        mondayFirstIndex
+      ]?.value ?? 0
+  );
+};
+
+/*
+ * =========================================================
+ * RIDER PROFILE
+ * =========================================================
+ *
+ * GET /api/v1/riders/profile
+ * =========================================================
+ */
+
+export type RiderProfile = {
+  _id: string;
+
+  owner: {
+    _id: string;
+
+    firstName: string;
+
+    lastName: string;
+
+    email: string;
+
+    phoneNumber?: string;
+  };
+
+  address?: {
+    street?: string;
+
+    barangay?: string;
+
+    city?: string;
+
+    province?: string;
+
+    postalCode?: string;
+  };
+
+  vehicleType?: string;
+
+  vehiclePlateNumber?: string;
+
+  driverLicenseNumber?: string;
+
+  emergencyContactName?: string;
+
+  emergencyContactNumber?: string;
+
+  verificationStatus?: string;
+
+  verifiedAt?: string | null;
+
+  isAvailable?: boolean;
+
+  isActive?: boolean;
+
+  createdAt?: string;
+};
+
+type RiderProfileResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    rider: RiderProfile;
+  };
+};
+
+export const getMyRiderProfile =
+  async () => {
+    const response =
+      await apiRequest<RiderProfileResponse>(
+        '/riders/profile',
+        {
+          method: 'GET',
+
+          authenticated: true,
+        }
+      );
+
+    return response
+      .data
+      .rider;
   };

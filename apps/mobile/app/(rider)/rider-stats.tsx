@@ -1,5 +1,4 @@
 import {
-  router,
   useFocusEffect,
 } from 'expo-router';
 
@@ -25,6 +24,10 @@ import {
   type RiderDashboardData,
 } from '../../services/delivery';
 
+import RiderBottomNav, {
+  useRiderBottomNavSpace,
+} from '../../components/rider/rider-bottom-nav';
+
 /*
  * =========================================================
  * RIDER STATS
@@ -38,16 +41,21 @@ import {
  *
  * IMPORTANT:
  *
- * - Delivery Value is NOT Rider earnings.
- * - Rider salary/payroll is separate.
- * - Rating remains "--" until the real
- *   Review/Rating module exists.
+ * - Rider income comes ONLY from
+ *   Order.deliveryFee of delivered orders.
+ * - Order value / COD collected is NOT
+ *   Rider income and is not shown here.
+ * - Rating shows "--" until customers
+ *   rate a delivered order.
  * - Weekly deliveries come from real
  *   delivered Delivery records.
  * =========================================================
  */
 
 export default function RiderStatsScreen() {
+  const bottomSpace =
+    useRiderBottomNavSpace();
+
   const [
     dashboard,
     setDashboard,
@@ -253,17 +261,17 @@ export default function RiderStatsScreen() {
     dashboard?.performance
       .completionRate ?? 0;
 
-  const totalDeliveryValue =
-    dashboard?.deliveryValue
-      .total ?? 0;
+  const totalDeliveryFees =
+    dashboard?.deliveryFees
+      ?.total ?? 0;
 
-  const todayDeliveryValue =
-    dashboard?.deliveryValue
-      .today ?? 0;
+  const todayDeliveryFees =
+    dashboard?.deliveryFees
+      ?.today ?? 0;
 
-  const monthDeliveryValue =
-    dashboard?.deliveryValue
-      .thisMonth ?? 0;
+  const monthDeliveryFees =
+    dashboard?.deliveryFees
+      ?.thisMonth ?? 0;
 
   const weeklyDeliveries =
     dashboard
@@ -602,18 +610,18 @@ export default function RiderStatsScreen() {
             <StatCard
               icon="₱"
               value={formatMoney(
-                totalDeliveryValue
+                monthDeliveryFees
               )}
-              label="Delivery Value"
+              label="Fees This Month"
               iconBackground="#FFF3DC"
             />
 
             <StatCard
-              icon="◷"
-              value={formatNumber(
-                activeDeliveries
-              )}
-              label="Active"
+              icon="%"
+              value={`${completionRate.toFixed(
+                0
+              )}%`}
+              label="Completion Rate"
               iconBackground="#EFEAFF"
             />
           </View>
@@ -710,7 +718,7 @@ export default function RiderStatsScreen() {
           </View>
 
           {/* ===================================================
-              DELIVERY VALUE
+              DELIVERY FEES EARNED
           =================================================== */}
 
           <View
@@ -723,7 +731,7 @@ export default function RiderStatsScreen() {
                 styles.sectionTitle
               }
             >
-              Delivery Value
+              Delivery Fees Earned
             </Text>
 
             <Text
@@ -731,9 +739,10 @@ export default function RiderStatsScreen() {
                 styles.valueDisclaimer
               }
             >
-              Value of successfully delivered
-              customer orders. This is not
-              Rider salary or earnings.
+              Your income is the delivery fee of
+              each completed delivery. COD cash
+              collected is remitted to FLOGRAM and
+              is not income.
             </Text>
 
             <View
@@ -744,21 +753,21 @@ export default function RiderStatsScreen() {
               <PerformanceRow
                 label="Today"
                 value={formatMoney(
-                  todayDeliveryValue
+                  todayDeliveryFees
                 )}
               />
 
               <PerformanceRow
                 label="This Month"
                 value={formatMoney(
-                  monthDeliveryValue
+                  monthDeliveryFees
                 )}
               />
 
               <PerformanceRow
                 label="All Time"
                 value={formatMoney(
-                  totalDeliveryValue
+                  totalDeliveryFees
                 )}
                 isLast
               />
@@ -874,9 +883,7 @@ export default function RiderStatsScreen() {
                       styles.noRatingMessage
                     }
                   >
-                    Customer ratings will appear
-                    here once the Review and
-                    Rating feature is available.
+                    No customer ratings yet. Ratings appear after customers review their delivered orders.
                   </Text>
                 </View>
               </View>
@@ -884,194 +891,17 @@ export default function RiderStatsScreen() {
           </View>
 
           <View
-            style={
-              styles.bottomSpacer
-            }
+            style={{
+              height: bottomSpace,
+            }}
           />
         </ScrollView>
 
-        {/* =====================================================
-            BOTTOM NAV
-        ===================================================== */}
-
-        <View
-          style={
-            styles.bottomNav
-          }
-        >
-          {/* DASHBOARD */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(rider)/rider-dashboard'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ⌂
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Dashboard
-            </Text>
-          </Pressable>
-
-          {/* DELIVERIES */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                '/(rider)/rider-deliveries'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ▣
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Deliveries
-            </Text>
-          </Pressable>
-
-          {/* WALLET */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                '/(rider)/rider-wallet'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ₱
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Wallet
-            </Text>
-          </Pressable>
-
-          {/* ALERTS */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                '/(rider)/rider-alerts'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ♢
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Alerts
-            </Text>
-          </Pressable>
-
-          {/* STATS */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-          >
-            <View
-              style={[
-                styles.navIconContainer,
-                styles.activeNavIconContainer,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.navIcon,
-                  styles.activeNavIcon,
-                ]}
-              >
-                ♙
-              </Text>
-            </View>
-
-            <Text
-              style={[
-                styles.navText,
-                styles.activeNavText,
-              ]}
-            >
-              Stats
-            </Text>
-          </Pressable>
-        </View>
+        {/* BOTTOM NAVIGATION */}
+        <RiderBottomNav
+          active="stats"
+          onReselect={handleRefresh}
+        />
       </View>
     </SafeAreaView>
   );
@@ -1433,7 +1263,7 @@ const styles =
         '#8C8589',
 
       fontSize:
-        10,
+        12,
 
       marginTop:
         12,
@@ -1515,7 +1345,7 @@ const styles =
         '#8E888C',
 
       fontSize:
-        9,
+        11,
 
       lineHeight:
         14,
@@ -1549,7 +1379,7 @@ const styles =
         '#FFFFFF',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',
@@ -1639,7 +1469,7 @@ const styles =
         '#FFFFFF',
 
       fontSize:
-        9,
+        11,
 
       letterSpacing:
         1,
@@ -1650,7 +1480,7 @@ const styles =
         '#FFFFFF',
 
       fontSize:
-        8,
+        11,
 
       fontWeight:
         '800',
@@ -1852,7 +1682,7 @@ const styles =
         '#4B4549',
 
       fontSize:
-        11,
+        13,
 
       fontWeight:
         '900',
@@ -1924,7 +1754,7 @@ const styles =
         '#777074',
 
       fontSize:
-        8.5,
+        11.5,
     },
 
     performanceValue: {
@@ -1932,7 +1762,7 @@ const styles =
         '#4B4549',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',
@@ -2088,7 +1918,7 @@ const styles =
         '#C99730',
 
       fontSize:
-        11,
+        13,
 
       letterSpacing:
         1,
@@ -2099,7 +1929,7 @@ const styles =
         '#8D868A',
 
       fontSize:
-        8,
+        11,
 
       marginTop:
         5,
@@ -2166,7 +1996,7 @@ const styles =
         '#4B4549',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',

@@ -39,6 +39,12 @@ import {
   type FlowerListing,
 } from '../../services/flower';
 
+import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
+
+import NotificationBell from '../../components/customer/notification-bell';
+
+import InspirationFeed from '../../components/customer/inspiration-feed';
+
 /*
  * =========================================================
  * CONSTANTS
@@ -108,6 +114,33 @@ export default function CustomerDiscoverScreen() {
     useLocalSearchParams<{
       action?: string;
     }>();
+
+  /*
+   * Discover opens on the image inspiration feed.
+   * "Shop Bouquets" keeps the catalog, filters and
+   * image search. Links with ?action=... open Shop.
+   */
+  const [
+    mode,
+    setMode,
+  ] =
+    useState<'inspiration' | 'shop'>(
+      params.action
+        ? 'shop'
+        : 'inspiration'
+    );
+
+  const [
+    feedRefreshKey,
+    setFeedRefreshKey,
+  ] =
+    useState(0);
+
+  useEffect(() => {
+    if (params.action) {
+      setMode('shop');
+    }
+  }, [params.action]);
 
   const [
     flowers,
@@ -1110,11 +1143,14 @@ export default function CustomerDiscoverScreen() {
               refreshing={
                 refreshing
               }
-              onRefresh={() =>
-                loadDiscover(
+              onRefresh={() => {
+                setFeedRefreshKey(
+                  key => key + 1
+                );
+                void loadDiscover(
                   true
-                )
-              }
+                );
+              }}
               tintColor="#E55D8D"
               colors={[
                 '#E55D8D',
@@ -1127,29 +1163,108 @@ export default function CustomerDiscoverScreen() {
           ================================================ */}
 
           <View
-            style={
-              styles.header
-            }
+            style={[
+              styles.header,
+              {
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+              },
+            ]}
           >
-            <Text
-              style={
-                styles.pageTitle
-              }
-            >
-              Discover
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={
+                  styles.pageTitle
+                }
+              >
+                Discover
+              </Text>
 
-            <Text
-              style={
-                styles.pageSubtitle
-              }
-            >
-              Find the perfect
-              bouquet for every
-              moment
-            </Text>
+              <Text
+                style={
+                  styles.pageSubtitle
+                }
+              >
+                Bouquet inspiration from the
+                FLOGRAM community
+              </Text>
+            </View>
+
+            <NotificationBell />
           </View>
 
+          {/* ================================================
+              MODE: INSPIRATION FEED | SHOP BOUQUETS
+          ================================================ */}
+
+          <View
+            style={{
+              flexDirection: 'row',
+              marginHorizontal: 20,
+              marginBottom: 14,
+              padding: 4,
+              borderRadius: 14,
+              backgroundColor: '#F4EEF1',
+            }}
+          >
+            {(
+              [
+                ['inspiration', 'Inspiration'],
+                ['shop', 'Shop Bouquets'],
+              ] as const
+            ).map(([key, label]) => (
+              <Pressable
+                key={key}
+                accessibilityRole="tab"
+                accessibilityState={{
+                  selected: mode === key,
+                }}
+                onPress={() => setMode(key)}
+                style={{
+                  flex: 1,
+                  alignItems: 'center',
+                  paddingVertical: 9,
+                  borderRadius: 11,
+                  backgroundColor:
+                    mode === key
+                      ? '#FFFFFF'
+                      : 'transparent',
+                }}
+              >
+                <Text
+                  style={{
+                    color:
+                      mode === key
+                        ? '#DF628F'
+                        : '#8A8287',
+                    fontSize: 14,
+                    fontWeight:
+                      mode === key
+                        ? '800'
+                        : '600',
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {mode === 'inspiration' ? (
+            <View
+              style={{
+                paddingHorizontal: 16,
+              }}
+            >
+              <InspirationFeed
+                refreshKey={
+                  feedRefreshKey
+                }
+              />
+            </View>
+          ) : (
+            <>
           {/* ================================================
               SEARCH BAR
           ================================================ */}
@@ -2008,6 +2123,9 @@ export default function CustomerDiscoverScreen() {
               </View>
             )}
 
+            </>
+          )}
+
           <View
             style={
               styles.bottomSpacer
@@ -2019,174 +2137,7 @@ export default function CustomerDiscoverScreen() {
             BOTTOM NAVIGATION
         ================================================ */}
 
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          {/* HOME */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(customer)/customer-dashboard'
-              )
-            }
-          >
-            <Ionicons
-              name="home-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Home
-            </Text>
-          </Pressable>
-
-          {/* DISCOVER */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-          >
-            <View
-              style={
-                styles.activeNavIcon
-              }
-            >
-              <Ionicons
-                name="search"
-                size={19}
-                color="#DF5D8D"
-              />
-            </View>
-
-            <Text
-              style={
-                styles.activeNavText
-              }
-            >
-              Discover
-            </Text>
-          </Pressable>
-
-          {/* BLOOM */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(customer)/customer-bloomboard'
-              )
-            }
-          >
-            <Ionicons
-              name="flower-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Bloom
-            </Text>
-          </Pressable>
-
-          {/* CART */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(customer)/customer-cart'
-              )
-            }
-          >
-            <Ionicons
-              name="bag-handle-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Cart
-            </Text>
-          </Pressable>
-
-          {/* AI */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(customer)/customer-ai'
-              )
-            }
-          >
-            <Ionicons
-              name="sparkles-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              AI
-            </Text>
-          </Pressable>
-
-          {/* PROFILE */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(customer)/customer-profile'
-              )
-            }
-          >
-            <Ionicons
-              name="person-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Me
-            </Text>
-          </Pressable>
-        </View>
+        <CustomerBottomNav active="discover" />
 
         {/* ================================================
             FILTER MODAL
@@ -2558,7 +2509,7 @@ const styles =
 
     loadingText: {
       color: '#8E868B',
-      fontSize: 12,
+      fontSize: 13,
     },
 
     inlineLoading: {
@@ -2572,7 +2523,7 @@ const styles =
 
     inlineLoadingText: {
       color: '#9B9398',
-      fontSize: 10,
+      fontSize: 12,
     },
 
     imageSearchingCard: {
@@ -2596,13 +2547,13 @@ const styles =
 
     imageSearchingTitle: {
       color: '#4B4146',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '800',
     },
 
     imageSearchingText: {
       color: '#9A8F95',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 13,
       marginTop: 2,
     },
@@ -2625,7 +2576,7 @@ const styles =
 
     pageSubtitle: {
       color: '#A49CA1',
-      fontSize: 11,
+      fontSize: 13,
       lineHeight: 15,
       marginTop: 4,
       maxWidth: 210,
@@ -2659,7 +2610,7 @@ const styles =
 
     searchInput: {
       flex: 1,
-      fontSize: 12,
+      fontSize: 13,
       color: '#4E464B',
       marginLeft: 9,
       paddingVertical: 0,
@@ -2714,7 +2665,7 @@ const styles =
 
     filterBadgeText: {
       color: '#FFFFFF',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '800',
     },
 
@@ -2758,7 +2709,7 @@ const styles =
 
     typeChipText: {
       color: '#7E777B',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
     },
 
@@ -2833,7 +2784,7 @@ const styles =
 
     occasionChipText: {
       color: '#B35779',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '600',
     },
 
@@ -2876,7 +2827,7 @@ const styles =
     },
 
     imageSearchEyebrow: {
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '800',
       letterSpacing: 0.9,
       color: '#D95E8A',
@@ -2891,7 +2842,7 @@ const styles =
 
     imageSearchDescription: {
       marginTop: 3,
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 13,
       color: '#8A8185',
     },
@@ -2930,13 +2881,13 @@ const styles =
 
     resultsCount: {
       color: '#A49CA1',
-      fontSize: 9,
+      fontSize: 11,
       marginTop: 3,
     },
 
     clearText: {
       color: '#DC5D8A',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
     },
 
@@ -2999,7 +2950,7 @@ const styles =
 
     noImageText: {
       color: '#B99DA7',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '600',
     },
 
@@ -3059,13 +3010,13 @@ const styles =
 
     shopName: {
       color: '#A49BA1',
-      fontSize: 8,
+      fontSize: 11,
       marginBottom: 3,
     },
 
     productName: {
       color: '#494147',
-      fontSize: 11,
+      fontSize: 13,
       lineHeight: 14,
       fontWeight: '700',
       minHeight: 28,
@@ -3087,7 +3038,7 @@ const styles =
 
     productPrice: {
       color: '#DE5D8B',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '800',
     },
 
@@ -3144,7 +3095,7 @@ const styles =
 
     messageDescription: {
       color: '#958D92',
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 15,
       textAlign: 'center',
       marginTop: 6,
@@ -3162,7 +3113,7 @@ const styles =
 
     retryButtonText: {
       color: '#FFFFFF',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '700',
     },
 
@@ -3220,14 +3171,14 @@ const styles =
 
     activeNavText: {
       color: '#DF5D8D',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '700',
       marginTop: 3,
     },
 
     navText: {
       color: '#A7A1A5',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 4,
     },
 
@@ -3286,7 +3237,7 @@ const styles =
 
     filterSubtitle: {
       color: '#A49CA1',
-      fontSize: 9,
+      fontSize: 11,
       marginTop: 2,
     },
 
@@ -3311,7 +3262,7 @@ const styles =
 
     filterSectionTitle: {
       color: '#4C4449',
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '800',
       marginBottom: 10,
     },
@@ -3345,7 +3296,7 @@ const styles =
 
     filterChoiceText: {
       color: '#81797E',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '600',
     },
 
@@ -3382,7 +3333,7 @@ const styles =
 
     priceOptionText: {
       color: '#736C70',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '600',
     },
 
@@ -3441,7 +3392,7 @@ const styles =
 
     resetButtonText: {
       color: '#696166',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
     },
 
@@ -3458,7 +3409,7 @@ const styles =
 
     applyButtonText: {
       color: '#FFFFFF',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '800',
     },
   });

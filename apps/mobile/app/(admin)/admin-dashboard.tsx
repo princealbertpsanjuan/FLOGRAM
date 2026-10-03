@@ -1534,6 +1534,131 @@ export default function AdminDashboardScreen() {
 
           {/*
            * ===============================================
+           * RIDER OPERATIONS
+           * ===============================================
+           *
+           * Work shifts (slot limits, approvals) and
+           * Rider delivery-fee payouts.
+           */}
+
+          <View
+            style={
+              styles.sectionHeadingRow
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.contentHeading
+                }
+              >
+                Rider Operations
+              </Text>
+
+              <Text
+                style={
+                  styles.contentSubheading
+                }
+              >
+                Work shifts and Rider payouts
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={
+              riderOpsStyles.row
+            }
+          >
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                riderOpsStyles.card,
+                pressed && {
+                  opacity: 0.9,
+                },
+              ]}
+              onPress={() =>
+                router.push(
+                  "/(admin)/admin-rider-shifts" as never
+                )
+              }
+            >
+              <View
+                style={
+                  riderOpsStyles.icon
+                }
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={20}
+                  color={COLORS.purpleAccent}
+                />
+              </View>
+
+              <Text
+                style={
+                  riderOpsStyles.title
+                }
+              >
+                Work Shifts
+              </Text>
+
+              <Text
+                style={
+                  riderOpsStyles.text
+                }
+              >
+                Post shifts, set slots, approve Riders
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                riderOpsStyles.card,
+                pressed && {
+                  opacity: 0.9,
+                },
+              ]}
+              onPress={() =>
+                router.push(
+                  "/(admin)/admin-rider-payouts" as never
+                )
+              }
+            >
+              <View
+                style={
+                  riderOpsStyles.icon
+                }
+              >
+                <Ionicons
+                  name="cash-outline"
+                  size={20}
+                  color={COLORS.purpleAccent}
+                />
+              </View>
+
+              <Text
+                style={
+                  riderOpsStyles.title
+                }
+              >
+                Rider Payouts
+              </Text>
+
+              <Text
+                style={
+                  riderOpsStyles.text
+                }
+              >
+                Pay delivery fees and record transfers
+              </Text>
+            </Pressable>
+          </View>
+
+          {/*
+           * ===============================================
            * FINANCIAL OVERVIEW
            * ===============================================
            */}
@@ -2805,4 +2930,39 @@ bottomNavLabelActive: {
   fontWeight: "700",
   color: COLORS.purpleAccent,
 },
+});
+const riderOpsStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 22,
+  },
+  card: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  icon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.purpleLight,
+  },
+  title: {
+    marginTop: 10,
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  text: {
+    marginTop: 4,
+    color: COLORS.secondaryText,
+    fontSize: 13,
+    lineHeight: 18,
+  },
 });

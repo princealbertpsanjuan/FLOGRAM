@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 
-import { router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 
 import {
   getSellerOrders,
@@ -31,17 +31,74 @@ import {
   createSellerDeliveryRequest,
 } from '../../services/delivery';
 
+import {
+  getOrderStatusLabel,
+  getPaymentMethodLabel,
+  getPaymentStatusLabel,
+  isAwaitingOnlinePayment,
+} from '../../utils/order-status';
+
+import SellerBottomNav from '../../components/seller/seller-bottom-nav';
+
 /*
  * =========================================================
  * TYPES
  * =========================================================
  */
 
+/*
+ * Seller order groups, in priority order:
+ *
+ * action           needs the Seller now
+ *                  (new paid/COD order, accepted,
+ *                  preparing)
+ * progress         ready / with Rider
+ * awaiting_payment online order not yet paid —
+ *                  cannot be accepted
+ * completed        delivered, completed, cancelled
+ * all
+ */
 type OrderFilter =
-  | 'all'
-  | 'pending'
-  | 'active'
-  | 'completed';
+  | 'action'
+  | 'progress'
+  | 'awaiting_payment'
+  | 'completed'
+  | 'all';
+
+const ACTION_STATUSES: CustomerOrderStatus[] = [
+  'pending',
+  'confirmed',
+  'preparing',
+];
+
+const PROGRESS_STATUSES: CustomerOrderStatus[] = [
+  'ready_for_pickup',
+  'ready_for_delivery',
+  'out_for_delivery',
+];
+
+const needsSellerAction = (
+  order: CustomerOrder
+) =>
+  ACTION_STATUSES.includes(
+    order.orderStatus
+  ) &&
+  !(
+    order.orderStatus ===
+      'pending' &&
+    isAwaitingOnlinePayment(
+      order
+    )
+  );
+
+const isAwaitingPaymentOrder = (
+  order: CustomerOrder
+) =>
+  order.orderStatus ===
+    'pending' &&
+  isAwaitingOnlinePayment(
+    order
+  );
 
 /*
  * =========================================================
@@ -49,13 +106,6 @@ type OrderFilter =
  * =========================================================
  */
 
-const ACTIVE_STATUSES: CustomerOrderStatus[] = [
-  'confirmed',
-  'preparing',
-  'ready_for_pickup',
-  'ready_for_delivery',
-  'out_for_delivery',
-];
 
 const COMPLETED_STATUSES: CustomerOrderStatus[] = [
   'delivered',
@@ -86,19 +136,6 @@ const formatCurrency = (
   )}`;
 };
 
-const formatStatus = (
-  status?: string | null
-) => {
-  if (!status) {
-    return 'Unknown';
-  }
-
-  return status
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
-    );
-};
 
 const formatDate = (
   value?: string | null
@@ -319,6 +356,39 @@ const getPaymentColors = (
  */
 
 export default function SellerOrdersScreen() {
+  /*
+   * Opened from Dashboard "View Order":
+   * show that order's details first.
+   */
+  const params =
+    useLocalSearchParams<{
+      orderId?: string;
+    }>();
+
+  const [
+    focusedOrderId,
+    setFocusedOrderId,
+  ] =
+    useState<string | null>(
+      typeof params.orderId ===
+        'string' &&
+        params.orderId
+        ? params.orderId
+        : null
+    );
+
+  useEffect(() => {
+    if (
+      typeof params.orderId ===
+        'string' &&
+      params.orderId
+    ) {
+      setFocusedOrderId(
+        params.orderId
+      );
+    }
+  }, [params.orderId]);
+
   const [
     orders,
     setOrders,
@@ -332,7 +402,7 @@ export default function SellerOrdersScreen() {
     setFilter,
   ] =
     useState<OrderFilter>(
-      'all'
+      'action'
     );
 
   const [
@@ -455,41 +525,32 @@ useEffect(() => {
 
   const counts =
     useMemo(
-      () => {
-        const pending =
+      () => ({
+        all:
+          orders.length,
+        action:
+          orders.filter(
+            needsSellerAction
+          ).length,
+        progress:
           orders.filter(
             (order) =>
-              order.orderStatus ===
-              'pending'
-          ).length;
-
-        const active =
-          orders.filter(
-            (order) =>
-              ACTIVE_STATUSES.includes(
+              PROGRESS_STATUSES.includes(
                 order.orderStatus
               )
-          ).length;
-
-        const completed =
+          ).length,
+        awaitingPayment:
+          orders.filter(
+            isAwaitingPaymentOrder
+          ).length,
+        completed:
           orders.filter(
             (order) =>
               COMPLETED_STATUSES.includes(
                 order.orderStatus
               )
-          ).length;
-
-        return {
-          all:
-            orders.length,
-
-          pending,
-
-          active,
-
-          completed,
-        };
-      },
+          ).length,
+      }),
       [orders]
     );
 
@@ -502,24 +563,46 @@ useEffect(() => {
   const filteredOrders =
     useMemo(
       () => {
+        if (focusedOrderId) {
+          return orders.filter(
+            (order) =>
+              order._id ===
+              focusedOrderId
+          );
+        }
+
         switch (
           filter
         ) {
-          case 'pending':
+          case 'action':
+            /*
+             * Oldest first: the order waiting
+             * longest is handled first.
+             */
+            return orders
+              .filter(
+                needsSellerAction
+              )
+              .sort(
+                (a, b) =>
+                  new Date(
+                    a.createdAt
+                  ).getTime() -
+                  new Date(
+                    b.createdAt
+                  ).getTime()
+              );
+          case 'progress':
             return orders.filter(
               (order) =>
-                order.orderStatus ===
-                'pending'
-            );
-
-          case 'active':
-            return orders.filter(
-              (order) =>
-                ACTIVE_STATUSES.includes(
+                PROGRESS_STATUSES.includes(
                   order.orderStatus
                 )
             );
-
+          case 'awaiting_payment':
+            return orders.filter(
+              isAwaitingPaymentOrder
+            );
           case 'completed':
             return orders.filter(
               (order) =>
@@ -527,13 +610,13 @@ useEffect(() => {
                   order.orderStatus
                 )
             );
-
           default:
             return orders;
         }
       },
       [
         filter,
+        focusedOrderId,
         orders,
       ]
     );
@@ -918,16 +1001,16 @@ useEffect(() => {
             }
           >
             <SummaryCard
-              label="Pending"
+              label="Needs Action"
               value={
-                counts.pending
+                counts.action
               }
             />
 
             <SummaryCard
-              label="Active"
+              label="In Progress"
               value={
-                counts.active
+                counts.progress
               }
             />
 
@@ -941,75 +1024,66 @@ useEffect(() => {
 
           {/* FILTERS */}
 
-          <View
-            style={
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={
+              false
+            }
+            contentContainerStyle={
               styles.filterContainer
             }
           >
-            <FilterButton
-              label="All"
-              count={
-                counts.all
-              }
-              active={
-                filter ===
-                'all'
-              }
-              onPress={() =>
-                setFilter(
-                  'all'
-                )
-              }
-            />
+            {(
+              [
+                ['action', 'Needs Action', counts.action],
+                ['progress', 'In Progress', counts.progress],
+                ['awaiting_payment', 'Awaiting Payment', counts.awaitingPayment],
+                ['completed', 'Done', counts.completed],
+                ['all', 'All', counts.all],
+              ] as const
+            ).map(
+              ([key, label, count]) => (
+                <FilterButton
+                  key={key}
+                  label={label}
+                  count={count}
+                  active={
+                    !focusedOrderId &&
+                    filter === key
+                  }
+                  onPress={() => {
+                    setFocusedOrderId(
+                      null
+                    );
+                    setFilter(key);
+                  }}
+                />
+              )
+            )}
+          </ScrollView>
 
-            <FilterButton
-              label="Pending"
-              count={
-                counts.pending
-              }
-              active={
-                filter ===
-                'pending'
-              }
+          {focusedOrderId ? (
+            <Pressable
+              accessibilityRole="button"
               onPress={() =>
-                setFilter(
-                  'pending'
+                setFocusedOrderId(
+                  null
                 )
               }
-            />
-
-            <FilterButton
-              label="Active"
-              count={
-                counts.active
+              style={
+                styles.errorBanner
               }
-              active={
-                filter ===
-                'active'
-              }
-              onPress={() =>
-                setFilter(
-                  'active'
-                )
-              }
-            />
-
-            <FilterButton
-              label="Done"
-              count={
-                counts.completed
-              }
-              active={
-                filter ===
-                'completed'
-              }
-              onPress={() =>
-                setFilter(
-                  'completed'
-                )
-              }
-            />
-          </View>
+            >
+              <Text
+                style={
+                  styles.errorBannerText
+                }
+              >
+                Showing the selected order.
+                Tap to show all orders.
+              </Text>
+            </Pressable>
+          ) : null}
 
           {/* ERROR BANNER */}
 
@@ -1046,16 +1120,18 @@ useEffect(() => {
                   styles.sectionTitle
                 }
               >
-                {filter ===
-                'all'
-                  ? 'All Orders'
-                  : filter ===
-                      'pending'
-                    ? 'Pending Orders'
-                    : filter ===
-                        'active'
-                      ? 'Active Orders'
-                      : 'Completed Orders'}
+                {focusedOrderId
+                  ? 'Order Details'
+                  : filter === 'action'
+                    ? 'Needs Your Action'
+                    : filter === 'progress'
+                      ? 'In Progress'
+                      : filter ===
+                          'awaiting_payment'
+                        ? 'Awaiting Customer Payment'
+                        : filter === 'completed'
+                          ? 'Completed Orders'
+                          : 'All Orders'}
               </Text>
 
               <Text
@@ -1156,59 +1232,7 @@ useEffect(() => {
         </ScrollView>
 
         {/* BOTTOM NAVIGATION */}
-
-        <View
-          style={
-            styles.bottomNav
-          }
-        >
-          <BottomNavItem
-            icon="⌂"
-            label="Dashboard"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-dashboard'
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="✿"
-            label="Products"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-products'
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="▣"
-            label="Orders"
-            active
-            onPress={() => {}}
-          />
-
-<BottomNavItem
-  icon="▥"
-  label="Reports"
-  onPress={() =>
-    router.replace(
-      '/(seller)/seller-reports'
-    )
-  }
-/>
-
-          <BottomNavItem
-            icon="○"
-            label="Profile"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-profile'
-              )
-            }
-          />
-        </View>
+        <SellerBottomNav active="orders" />
       </View>
     </SafeAreaView>
   );
@@ -1364,7 +1388,7 @@ function OrderCard({
               },
             ]}
           >
-            {formatStatus(
+            {getOrderStatusLabel(
               order.orderStatus
             )}
           </Text>
@@ -1532,7 +1556,7 @@ function OrderCard({
         <DetailRow
           label="Payment"
           value={
-            formatStatus(
+            getPaymentMethodLabel(
               order.paymentMethod
             )
           }
@@ -1570,7 +1594,7 @@ function OrderCard({
                 },
               ]}
             >
-              {formatStatus(
+              {getPaymentStatusLabel(
                 order.paymentStatus
               )}
             </Text>
@@ -1637,7 +1661,33 @@ function OrderCard({
           =================================================== */}
 
       {order.orderStatus ===
-      'pending' ? (
+        'pending' &&
+      isAwaitingOnlinePayment(
+        order
+      ) ? (
+        <View
+          style={
+            styles.actionSection
+          }
+        >
+          <Text
+            style={
+              styles.emptyText
+            }
+          >
+            Waiting for the customer to
+            complete online payment. You can
+            accept this order once PayMongo
+            confirms the payment.
+          </Text>
+        </View>
+      ) : null}
+
+      {order.orderStatus ===
+        'pending' &&
+      !isAwaitingOnlinePayment(
+        order
+      ) ? (
         <View
           style={
             styles.actionSection
@@ -2180,63 +2230,6 @@ function DetailRow({
   );
 }
 
-/*
- * =========================================================
- * BOTTOM NAV ITEM
- * =========================================================
- */
-
-function BottomNavItem({
-  icon,
-  label,
-  active = false,
-  onPress,
-}: {
-  icon:
-    string;
-
-  label:
-    string;
-
-  active?:
-    boolean;
-
-  onPress:
-    () => void;
-}) {
-  return (
-    <Pressable
-      style={
-        styles.navItem
-      }
-      onPress={
-        onPress
-      }
-    >
-      <Text
-        style={[
-          styles.navIcon,
-
-          active &&
-            styles.navIconActive,
-        ]}
-      >
-        {icon}
-      </Text>
-
-      <Text
-        style={[
-          styles.navLabel,
-
-          active &&
-            styles.navLabelActive,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /*
  * =========================================================
@@ -2386,7 +2379,7 @@ const styles =
       color:
         '#7C8780',
       fontSize:
-        11,
+        13,
       fontWeight:
         '600',
     },
@@ -2409,7 +2402,7 @@ const styles =
     },
 
     filterButton: {
-      flex: 1,
+      paddingHorizontal: 12,
       minHeight:
         39,
       borderRadius:
@@ -2431,7 +2424,7 @@ const styles =
 
     filterButtonText: {
       fontSize:
-        11,
+        13,
       fontWeight:
         '600',
       color:
@@ -2471,7 +2464,7 @@ const styles =
       color:
         '#7B827E',
       fontSize:
-        9,
+        11,
       fontWeight:
         '700',
     },
@@ -2514,7 +2507,7 @@ const styles =
       color:
         '#909891',
       fontSize:
-        11,
+        13,
     },
 
     /*
@@ -2577,7 +2570,7 @@ const styles =
       color:
         '#969D98',
       fontSize:
-        10,
+        12,
     },
 
     statusBadge: {
@@ -2591,7 +2584,7 @@ const styles =
 
     statusBadgeText: {
       fontSize:
-        9,
+        11,
       fontWeight:
         '800',
     },
@@ -2649,7 +2642,7 @@ const styles =
       color:
         '#A0A6A2',
       fontSize:
-        9,
+        11,
       textTransform:
         'uppercase',
       fontWeight:
@@ -2715,7 +2708,7 @@ const styles =
       color:
         '#8A948E',
       fontSize:
-        10,
+        12,
     },
 
     productSubtotal: {
@@ -2746,7 +2739,7 @@ const styles =
       color:
         '#8B6D29',
       fontSize:
-        11,
+        13,
       fontWeight:
         '800',
     },
@@ -2757,7 +2750,7 @@ const styles =
       color:
         '#8C7C55',
       fontSize:
-        10,
+        12,
       lineHeight:
         15,
     },
@@ -2788,7 +2781,7 @@ const styles =
       color:
         '#929A95',
       fontSize:
-        10,
+        12,
     },
 
     detailValue: {
@@ -2799,7 +2792,7 @@ const styles =
       color:
         '#4A574F',
       fontSize:
-        10,
+        12,
       fontWeight:
         '700',
     },
@@ -2815,7 +2808,7 @@ const styles =
 
     paymentBadgeText: {
       fontSize:
-        9,
+        11,
       fontWeight:
         '800',
     },
@@ -2839,7 +2832,7 @@ const styles =
       color:
         '#7E8882',
       fontSize:
-        9,
+        11,
       fontWeight:
         '800',
       textTransform:
@@ -2852,7 +2845,7 @@ const styles =
       color:
         '#5B665F',
       fontSize:
-        10,
+        12,
       lineHeight:
         15,
     },
@@ -2880,7 +2873,7 @@ const styles =
       color:
         '#5F6B64',
       fontSize:
-        12,
+        13,
       fontWeight:
         '700',
     },
@@ -2922,7 +2915,7 @@ const styles =
       color:
         '#FFFFFF',
       fontSize:
-        12,
+        13,
       fontWeight:
         '800',
     },
@@ -2947,7 +2940,7 @@ const styles =
       color:
         '#4F8063',
       fontSize:
-        11,
+        13,
       fontWeight:
         '800',
     },
@@ -2958,7 +2951,7 @@ const styles =
       color:
         '#718078',
       fontSize:
-        10,
+        12,
       lineHeight:
         15,
     },
@@ -2976,7 +2969,7 @@ const styles =
       color:
         '#49758E',
       fontSize:
-        11,
+        13,
       fontWeight:
         '800',
     },
@@ -2987,7 +2980,7 @@ const styles =
       color:
         '#68808E',
       fontSize:
-        10,
+        12,
       lineHeight:
         15,
     },
@@ -3005,7 +2998,7 @@ const styles =
       color:
         '#A55454',
       fontSize:
-        11,
+        13,
       fontWeight:
         '800',
     },
@@ -3016,7 +3009,7 @@ const styles =
       color:
         '#986D6D',
       fontSize:
-        10,
+        12,
       lineHeight:
         15,
     },
@@ -3060,7 +3053,7 @@ const styles =
       color:
         '#929B95',
       fontSize:
-        11,
+        13,
       textAlign:
         'center',
     },
@@ -3082,7 +3075,7 @@ const styles =
       color:
         '#7F8983',
       fontSize:
-        12,
+        13,
       textAlign:
         'center',
     },
@@ -3115,7 +3108,7 @@ const styles =
       fontWeight:
         '800',
       fontSize:
-        12,
+        13,
     },
 
     errorBanner: {
@@ -3133,7 +3126,7 @@ const styles =
       color:
         '#A55454',
       fontSize:
-        10,
+        12,
     },
 
     /*
@@ -3208,7 +3201,7 @@ const styles =
       color:
         '#A1AAA4',
       fontSize:
-        9,
+        11,
       fontWeight:
         '600',
     },

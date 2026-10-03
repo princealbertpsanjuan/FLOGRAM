@@ -63,6 +63,31 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    /*
+     * Customer address book used at checkout.
+     * Maximum 5 addresses; one may be the default.
+     */
+    savedAddresses: {
+      type: [
+        new mongoose.Schema(
+          {
+            label: { type: String, trim: true, maxlength: 40, default: "Home" },
+            recipientName: { type: String, trim: true, maxlength: 120, default: "" },
+            recipientPhoneNumber: { type: String, trim: true, maxlength: 30, default: "" },
+            street: { type: String, trim: true, maxlength: 200, required: true },
+            barangay: { type: String, trim: true, maxlength: 120, required: true },
+            city: { type: String, trim: true, maxlength: 120, required: true },
+            province: { type: String, trim: true, maxlength: 120, required: true },
+            postalCode: { type: String, trim: true, maxlength: 12, default: "" },
+            landmark: { type: String, trim: true, maxlength: 200, default: "" },
+            isDefault: { type: Boolean, default: false },
+          },
+          { _id: true }
+        ),
+      ],
+      default: [],
+    },
+
     lastLoginAt: {
       type: Date,
       default: null,

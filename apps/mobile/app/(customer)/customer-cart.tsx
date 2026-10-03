@@ -28,6 +28,10 @@ import {
   apiRequest,
 } from "../../services/api";
 
+import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
+
+import NotificationBell from '../../components/customer/notification-bell';
+
 /*
  * =========================================================
  * CONFIGURATION
@@ -151,70 +155,8 @@ type CartApiResponse = {
   };
 };
 
-type BottomTab = {
-  label: string;
 
-  icon:
-    | "home-outline"
-    | "search-outline"
-    | "flower-outline"
-    | "cart"
-    | "sparkles-outline"
-    | "person-outline";
 
-  route: string;
-};
-
-/*
- * =========================================================
- * BOTTOM NAVIGATION
- * =========================================================
- */
-
-const BOTTOM_TABS: BottomTab[] =
-  [
-    {
-      label: "Home",
-      icon: "home-outline",
-      route:
-        "/(customer)/customer-dashboard",
-    },
-
-    {
-      label: "Discover",
-      icon: "search-outline",
-      route:
-        "/(customer)/customer-discover",
-    },
-
-    {
-      label: "Bloom",
-      icon: "flower-outline",
-      route:
-        "/(customer)/customer-bloomboard",
-    },
-
-    {
-      label: "Cart",
-      icon: "cart",
-      route:
-        "/(customer)/customer-cart",
-    },
-
-    {
-      label: "AI",
-      icon: "sparkles-outline",
-      route:
-        "/(customer)/customer-ai",
-    },
-
-    {
-      label: "Me",
-      icon: "person-outline",
-      route:
-        "/(customer)/customer-profile",
-    },
-  ];
 
 /*
  * =========================================================
@@ -871,25 +813,6 @@ const handleCheckout =
    * =======================================================
    */
 
-  const navigateToTab =
-    useCallback(
-      (
-        route: string
-      ) => {
-        if (
-          route ===
-          "/(customer)/customer-cart"
-        ) {
-          return;
-        }
-
-        router.replace(
-          route as never
-        );
-      },
-      []
-    );
-
   const goShopping =
     useCallback(() => {
       router.push(
@@ -959,11 +882,7 @@ const handleCheckout =
           </Text>
         </View>
 
-        <BottomNavigation
-          onNavigate={
-            navigateToTab
-          }
-        />
+        <CustomerBottomNav active="cart" />
       </SafeAreaView>
     );
   }
@@ -1049,11 +968,7 @@ const handleCheckout =
           </Pressable>
         </View>
 
-        <BottomNavigation
-          onNavigate={
-            navigateToTab
-          }
-        />
+        <CustomerBottomNav active="cart" />
       </SafeAreaView>
     );
   }
@@ -1116,6 +1031,13 @@ const handleCheckout =
             </Text>
           </View>
 
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
           {hasItems ? (
             <Pressable
               style={
@@ -1152,6 +1074,9 @@ const handleCheckout =
               )}
             </Pressable>
           ) : null}
+
+            <NotificationBell />
+          </View>
         </View>
 
         {/*
@@ -1329,6 +1254,17 @@ const handleCheckout =
                * ===========================================
                */}
 
+              <Text
+                style={{
+                  marginBottom: 10,
+                  color: "#393939",
+                  fontSize: 17,
+                  fontWeight: "800",
+                }}
+              >
+                Cart Items
+              </Text>
+
               <View
                 style={
                   styles.itemsContainer
@@ -1456,7 +1392,7 @@ const handleCheckout =
                       styles.summaryLabel
                     }
                   >
-                    Products
+                    Items
                   </Text>
 
                   <Text
@@ -1481,7 +1417,7 @@ const handleCheckout =
                       styles.summaryLabel
                     }
                   >
-                    Total quantity
+                    Item Subtotal
                   </Text>
 
                   <Text
@@ -1489,10 +1425,37 @@ const handleCheckout =
                       styles.summaryValue
                     }
                   >
-                    {
+                    {formatCurrency(
                       cart
-                        ?.totalQuantity
+                        ?.estimatedSubtotal
+                    )}
+                  </Text>
+                </View>
+
+                {/*
+                 * Delivery fee depends on the delivery
+                 * address and route, so the server
+                 * calculates it on the Checkout screen.
+                 */}
+                <View
+                  style={
+                    styles.summaryRow
+                  }
+                >
+                  <Text
+                    style={
+                      styles.summaryLabel
                     }
+                  >
+                    Delivery Fee
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.summaryLabel
+                    }
+                  >
+                    Calculated at checkout
                   </Text>
                 </View>
 
@@ -1542,8 +1505,7 @@ const handleCheckout =
                         styles.totalLabel
                       }
                     >
-                      Estimated
-                      subtotal
+                      Estimated Total
                     </Text>
 
                     <Text
@@ -1551,8 +1513,7 @@ const handleCheckout =
                         styles.totalNote
                       }
                     >
-                      Current product
-                      prices
+                      Before delivery fee
                     </Text>
                   </View>
 
@@ -1600,7 +1561,7 @@ const handleCheckout =
                   styles.checkoutPriceLabel
                 }
               >
-                Subtotal
+                Item Subtotal
               </Text>
 
               <Text
@@ -1656,11 +1617,7 @@ const handleCheckout =
          * =================================================
          */}
 
-        <BottomNavigation
-          onNavigate={
-            navigateToTab
-          }
-        />
+        <CustomerBottomNav active="cart" />
       </View>
     </SafeAreaView>
   );
@@ -2033,87 +1990,7 @@ function CartItemCard({
   );
 }
 
-/*
- * =========================================================
- * BOTTOM NAVIGATION
- * =========================================================
- */
 
-type BottomNavigationProps = {
-  onNavigate: (
-    route: string
-  ) => void;
-};
-
-function BottomNavigation({
-  onNavigate,
-}: BottomNavigationProps) {
-  return (
-    <View
-      style={
-        styles.bottomNavigation
-      }
-    >
-      {BOTTOM_TABS.map(
-        (tab) => {
-          const active =
-            tab.label ===
-            "Cart";
-
-          return (
-            <Pressable
-              key={
-                tab.label
-              }
-              style={
-                styles.bottomTab
-              }
-              onPress={() =>
-                onNavigate(
-                  tab.route
-                )
-              }
-            >
-              <View
-                style={[
-                  styles.bottomIconContainer,
-
-                  active &&
-                    styles.bottomIconContainerActive,
-                ]}
-              >
-                <Ionicons
-                  name={
-                    tab.icon
-                  }
-                  size={21}
-                  color={
-                    active
-                      ? "#D85D7A"
-                      : "#8F8F8F"
-                  }
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.bottomTabLabel,
-
-                  active &&
-                    styles.bottomTabLabelActive,
-                ]}
-              >
-                {
-                  tab.label
-                }
-              </Text>
-            </Pressable>
-          );
-        }
-      )}
-    </View>
-  );
-}
 
 /*
  * =========================================================
@@ -2575,7 +2452,7 @@ const styles =
     warningText: {
       marginTop: 2,
 
-      fontSize: 12,
+      fontSize: 13,
 
       lineHeight: 17,
 
@@ -2705,7 +2582,7 @@ const styles =
     },
 
     floristName: {
-      fontSize: 11,
+      fontSize: 13,
 
       fontWeight: "700",
 
@@ -2741,7 +2618,7 @@ const styles =
     unitPrice: {
       marginTop: 5,
 
-      fontSize: 12,
+      fontSize: 13,
 
       fontWeight: "600",
 
@@ -2773,7 +2650,7 @@ const styles =
     },
 
     unavailableBadgeText: {
-      fontSize: 10,
+      fontSize: 12,
 
       fontWeight: "700",
 
@@ -2869,7 +2746,7 @@ const styles =
     },
 
     lineSubtotalLabel: {
-      fontSize: 9,
+      fontSize: 11,
 
       color: "#A29A98",
     },
@@ -2885,7 +2762,7 @@ const styles =
     },
 
     lineSubtotalUnavailable: {
-      fontSize: 11,
+      fontSize: 13,
 
       color: "#B06070",
     },
@@ -2934,7 +2811,7 @@ const styles =
      */
 
     summaryCard: {
-      marginTop: 16,
+      marginTop: 24,
 
       padding: 17,
 
@@ -3041,7 +2918,7 @@ const styles =
     totalNote: {
       marginTop: 2,
 
-      fontSize: 10,
+      fontSize: 12,
 
       color: "#9A9391",
     },
@@ -3088,7 +2965,7 @@ const styles =
     },
 
     checkoutPriceLabel: {
-      fontSize: 10,
+      fontSize: 12,
 
       color: "#978F8D",
     },
@@ -3202,7 +3079,7 @@ const styles =
     bottomTabLabel: {
       marginTop: 1,
 
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight: "600",
 

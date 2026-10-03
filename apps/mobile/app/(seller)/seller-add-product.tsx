@@ -14,6 +14,7 @@ import {
   Text,
   TextInput,
   View,
+  Linking,
 } from 'react-native';
 
 import { router } from 'expo-router';
@@ -62,7 +63,84 @@ export default function SellerAddProductScreen() {
       .map((item) => item.trim())
       .filter(Boolean);
 
-  const pickImages = async () => {
+  /*
+   * =======================================================
+   * ADD PHOTO
+   * =======================================================
+   *
+   * Seller chooses between Take Photo (camera) and
+   * Choose from Gallery. Each path asks only for the
+   * permission it needs.
+   * =======================================================
+   */
+
+  const addImageUris = (
+    uris: string[]
+  ) => {
+    setImages((current) =>
+      [...current, ...uris].slice(0, 5)
+    );
+  };
+
+  const takePhoto = async () => {
+    const permission =
+      await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        'Camera Permission Required',
+        permission.canAskAgain
+          ? 'Please allow camera access to take bouquet photos.'
+          : 'Camera access is turned off for FLOGRAM. Enable it in your phone Settings.',
+        permission.canAskAgain
+          ? undefined
+          : [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Open Settings',
+                onPress: () => {
+                  void Linking.openSettings();
+                },
+              },
+            ]
+      );
+
+      return;
+    }
+
+    try {
+      const result =
+        await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          allowsEditing: true,
+          aspect: [1, 1],
+        });
+
+      if (
+        result.canceled ||
+        !result.assets?.length
+      ) {
+        return;
+      }
+
+      addImageUris(
+        result.assets.map(
+          (asset) => asset.uri
+        )
+      );
+    } catch {
+      /*
+       * Emulators without a camera throw here.
+       */
+      Alert.alert(
+        'Camera Unavailable',
+        'The camera could not be opened on this device. Choose a photo from the gallery instead.'
+      );
+    }
+  };
+
+  const chooseFromGallery = async () => {
     const permission =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -78,15 +156,6 @@ export default function SellerAddProductScreen() {
     const remaining =
       5 - images.length;
 
-    if (remaining <= 0) {
-      Alert.alert(
-        'Maximum Images',
-        'You can upload up to 5 images.'
-      );
-
-      return;
-    }
-
     const result =
       await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -99,15 +168,45 @@ export default function SellerAddProductScreen() {
       return;
     }
 
-    const selected =
+    addImageUris(
       result.assets
         .slice(0, remaining)
-        .map((asset) => asset.uri);
+        .map((asset) => asset.uri)
+    );
+  };
 
-    setImages((current) => [
-      ...current,
-      ...selected,
-    ]);
+  const pickImages = () => {
+    if (images.length >= 5) {
+      Alert.alert(
+        'Maximum Images',
+        'You can upload up to 5 images.'
+      );
+
+      return;
+    }
+
+    Alert.alert(
+      'Add Bouquet Photo',
+      'Choose how to add a photo.',
+      [
+        {
+          text: 'Take Photo',
+          onPress: () => {
+            void takePhoto();
+          },
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: () => {
+            void chooseFromGallery();
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const removeImage = (

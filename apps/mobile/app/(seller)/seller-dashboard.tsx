@@ -27,9 +27,16 @@ import {
 } from '../../services/orders';
 
 import {
+  getShopRevenue,
+  isAwaitingOnlinePayment,
+} from '../../utils/order-status';
+
+import {
   getMyFloristProfile,
   type FloristProfile,
 } from '../../services/florist';
+
+import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
 /*
  * =========================================================
@@ -436,6 +443,18 @@ export default function SellerDashboardScreen() {
       (
         order: CustomerOrder
       ) => {
+        if (
+          isAwaitingOnlinePayment(
+            order
+          )
+        ) {
+          Alert.alert(
+            'Awaiting Payment',
+            'This online order can be accepted after PayMongo confirms the customer’s payment.'
+          );
+          return;
+        }
+
         Alert.alert(
           'Accept Order',
           `Accept ${getOrderNumber(
@@ -589,9 +608,8 @@ export default function SellerDashboardScreen() {
             order
           ) =>
             total +
-            Number(
-              order.totalAmount ||
-                0
+            getShopRevenue(
+              order
             ),
           0
         );
@@ -696,10 +714,9 @@ export default function SellerDashboardScreen() {
                     order
                   ) =>
                     total +
-                    Number(
-                      order.totalAmount ||
-                        0
-                    ),
+                    getShopRevenue(
+              order
+            ),
                   0
                 );
 
@@ -1438,9 +1455,14 @@ export default function SellerDashboardScreen() {
                               styles.pressed,
                           ]}
                           onPress={() =>
-                            router.replace(
-                              '/(seller)/seller-orders'
-                            )
+                            router.push({
+                              pathname:
+                                '/(seller)/seller-orders',
+                              params: {
+                                orderId:
+                                  order._id,
+                              },
+                            } as never)
                           }
                         >
                           <Text
@@ -1452,6 +1474,24 @@ export default function SellerDashboardScreen() {
                           </Text>
                         </Pressable>
 
+                        {isAwaitingOnlinePayment(
+                          order
+                        ) ? (
+                          <View
+                            style={[
+                              styles.acceptOrderButton,
+                              styles.disabledButton,
+                            ]}
+                          >
+                            <Text
+                              style={
+                                styles.acceptOrderButtonText
+                              }
+                            >
+                              Awaiting Payment
+                            </Text>
+                          </View>
+                        ) : (
                         <Pressable
                           disabled={
                             accepting
@@ -1489,6 +1529,7 @@ export default function SellerDashboardScreen() {
                             </Text>
                           )}
                         </Pressable>
+                        )}
                       </View>
                     </View>
                   );
@@ -1674,148 +1715,7 @@ export default function SellerDashboardScreen() {
         </ScrollView>
 
         {/* BOTTOM NAVIGATION */}
-
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          <Pressable
-            style={
-              styles.navItem
-            }
-          >
-            <View
-              style={
-                styles.activeNavIcon
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ⌂
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.activeNavText
-              }
-            >
-              Dashboard
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-products'
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              ◈
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Products
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-orders'
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              🛒
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Orders
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-reports'
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              ▥
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Reports
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-profile'
-              )
-            }
-          >
-            <Text
-              style={
-                styles.navIcon
-              }
-            >
-              ♙
-            </Text>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Profile
-            </Text>
-          </Pressable>
-        </View>
+        <SellerBottomNav active="dashboard" />
       </View>
     </SafeAreaView>
   );
@@ -2095,7 +1995,7 @@ const styles =
     },
 
     errorText: {
-      fontSize: 12,
+      fontSize: 13,
       color: '#888',
       textAlign:
         'center',
@@ -2118,7 +2018,7 @@ const styles =
       color: '#FFFFFF',
       fontWeight:
         '700',
-      fontSize: 12,
+      fontSize: 13,
     },
 
     header: {
@@ -2168,7 +2068,7 @@ const styles =
     greetingLabel: {
       color:
         'rgba(255,255,255,0.82)',
-      fontSize: 10,
+      fontSize: 12,
     },
 
     shopName: {
@@ -2217,7 +2117,7 @@ const styles =
     summaryLabel: {
       color:
         'rgba(255,255,255,0.88)',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '600',
     },
@@ -2233,7 +2133,7 @@ const styles =
     summaryMeta: {
       color:
         'rgba(255,255,255,0.75)',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 4,
     },
 
@@ -2257,7 +2157,7 @@ const styles =
 
     inlineErrorText: {
       color: '#B65A5A',
-      fontSize: 10,
+      fontSize: 12,
       textAlign:
         'center',
     },
@@ -2285,7 +2185,7 @@ const styles =
     },
 
     statusLabel: {
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 4,
     },
 
@@ -2318,7 +2218,7 @@ const styles =
 
     newOrdersSubtitle: {
       color: '#99999C',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 2,
     },
 
@@ -2338,7 +2238,7 @@ const styles =
 
     newOrdersCountText: {
       color: '#D96D94',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '800',
     },
@@ -2400,14 +2300,14 @@ const styles =
 
     newOrderNumber: {
       color: '#414144',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight:
         '800',
     },
 
     newOrderCustomer: {
       color: '#969699',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 3,
     },
 
@@ -2447,20 +2347,20 @@ const styles =
 
     newOrderProductName: {
       color: '#414144',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight:
         '700',
     },
 
     newOrderProductMeta: {
       color: '#969699',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 4,
     },
 
     newOrderAmount: {
       color: '#5F9472',
-      fontSize: 12,
+      fontSize: 13,
       fontWeight:
         '800',
     },
@@ -2481,12 +2381,12 @@ const styles =
 
     newOrderDetailLabel: {
       color: '#A0A0A2',
-      fontSize: 8,
+      fontSize: 11,
     },
 
     newOrderDetailValue: {
       color: '#555558',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight:
         '700',
     },
@@ -2508,7 +2408,7 @@ const styles =
 
     customerNoteText: {
       color: '#777064',
-      fontSize: 8,
+      fontSize: 11,
       lineHeight: 13,
       marginTop: 3,
     },
@@ -2535,7 +2435,7 @@ const styles =
 
     viewOrderButtonText: {
       color: '#6A9D7A',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '800',
     },
@@ -2554,7 +2454,7 @@ const styles =
 
     acceptOrderButtonText: {
       color: '#FFFFFF',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '800',
     },
@@ -2587,14 +2487,14 @@ const styles =
 
     sectionTitle: {
       color: '#37373A',
-      fontSize: 12,
+      fontSize: 13,
       fontWeight:
         '800',
     },
 
     revenueTotal: {
       color: '#6EA382',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '700',
     },
@@ -2662,7 +2562,7 @@ const styles =
 
     viewAllText: {
       color: '#6EA382',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '700',
     },
@@ -2676,14 +2576,14 @@ const styles =
 
     emptyOrdersTitle: {
       color: '#555',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight:
         '700',
     },
 
     emptyOrdersText: {
       color: '#999',
-      fontSize: 9,
+      fontSize: 11,
       marginTop: 4,
     },
 
@@ -2725,14 +2625,14 @@ const styles =
 
     orderId: {
       color: '#444246',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight:
         '800',
     },
 
     orderDescription: {
       color: '#9A979A',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 3,
     },
 
@@ -2805,7 +2705,7 @@ const styles =
 
     activeNavText: {
       color: '#6EA382',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight:
         '700',
       marginTop: 3,
@@ -2813,7 +2713,7 @@ const styles =
 
     navText: {
       color: '#A4A5A6',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 4,
     },
   });

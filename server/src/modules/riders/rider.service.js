@@ -5,6 +5,7 @@ import Delivery from "../deliveries/delivery.model.js";
 import Order from "../orders/order.model.js";
 import RiderRemittance from "./rider-remittance.model.js";
 import RiderPayout from "./rider-payout.model.js";
+import Review from "../reviews/review.model.js";
 import {
   getRiderWorkShiftStatus,
   requireActiveApprovedShiftForRider,
@@ -1046,18 +1047,48 @@ export const getRiderDashboard =
      * RATING
      * =====================================================
      *
-     * No Rider review/rating source has
-     * been verified yet.
+     * Average of customer riderRating values from
+     * submitted order reviews for this Rider.
      *
+     * Stays null when no rating exists yet.
      * Never fabricate a rating.
      */
 
+    const [ratingStats] =
+      await Review.aggregate([
+        {
+          $match: {
+            rider:
+              rider._id,
+            riderRating: {
+              $ne: null,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            average: {
+              $avg:
+                "$riderRating",
+            },
+            count: {
+              $sum: 1,
+            },
+          },
+        },
+      ]);
+
     const rating = {
       average:
-        null,
+        ratingStats?.count > 0
+          ? Number(
+              ratingStats.average.toFixed(1)
+            )
+          : null,
 
       count:
-        0,
+        ratingStats?.count || 0,
     };
 
     const owner =
@@ -4182,5 +4213,80 @@ export const cancelRiderPayout = async (
 
   return getAdminRiderPayoutById(
     payout._id
+  );
+};
+/*
+ * =========================================================
+ * ADMIN
+ * RIDER PAYOUT BALANCES (AMOUNT OWED)
+ * =========================================================
+ *
+ * For each approved Rider, returns the completed
+ * delivery fees that are not yet included in a
+ * pending or paid payout.
+ *
+ * Admin uses this list to decide which Rider to pay
+ * and which payout period to create.
+ *
+ * COD remittance is NOT included here. Only
+ * Order.deliveryFee from delivered orders counts.
+ * =========================================================
+ */
+
+export const getAdminRiderPayoutBalances = async () => {
+  const riders = await Rider.find({
+    verificationStatus: "approved",
+  })
+    .populate(
+      "owner",
+      "firstName lastName email phoneNumber"
+    )
+    .lean();
+
+  const balances = await Promise.all(
+    riders.map(async (rider) => {
+      const ownerId = rider.owner?._id || rider.owner;
+
+      const items = await buildRiderEarningItems(
+        rider,
+        ownerId,
+        { excludeReserved: true }
+      );
+
+      const amountOwed = items.reduce(
+        (sum, item) => sum + Number(item.deliveryFee || 0),
+        0
+      );
+
+      const deliveredTimes = items
+        .map((item) => new Date(item.deliveredAt).getTime())
+        .filter((time) => Number.isFinite(time));
+
+      return {
+        riderId: String(rider._id),
+        riderUser: rider.owner
+          ? {
+              id: String(ownerId),
+              firstName: rider.owner.firstName || "",
+              lastName: rider.owner.lastName || "",
+              email: rider.owner.email || "",
+              phoneNumber: rider.owner.phoneNumber || "",
+            }
+          : null,
+        isActive: rider.isActive === true,
+        unpaidDeliveryCount: items.length,
+        amountOwed,
+        oldestUnpaidAt: deliveredTimes.length
+          ? new Date(Math.min(...deliveredTimes))
+          : null,
+        latestUnpaidAt: deliveredTimes.length
+          ? new Date(Math.max(...deliveredTimes))
+          : null,
+      };
+    })
+  );
+
+  return balances.sort(
+    (a, b) => b.amountOwed - a.amountOwed
   );
 };

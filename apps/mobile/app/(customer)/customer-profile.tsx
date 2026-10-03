@@ -44,6 +44,8 @@ import {
   getMyReviews,
 } from '../../services/review';
 
+import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
+
 /*
  * =========================================================
  * TYPES
@@ -976,15 +978,11 @@ export default function CustomerProfileScreen() {
            * =============================================
            * QUICK ACTIONS
            * =============================================
+           *
+           * Notifications are reached from the bell in
+           * the header (same place on every Customer
+           * page), not from this list.
            */}
-
-          <Text
-            style={
-              styles.sectionLabel
-            }
-          >
-            MY FLOGRAM
-          </Text>
 
           <View
             style={
@@ -1008,12 +1006,36 @@ export default function CustomerProfileScreen() {
             />
 
             <QuickAction
-              icon="notifications-outline"
-              title="Updates"
+              icon="heart-outline"
+              title="Liked"
               onPress={() =>
-                router.push(
-                  '/(customer)/customer-notifications' as never
-                )
+                router.push({
+                  pathname:
+                    '/(customer)/customer-activity',
+                  params: {
+                    tab: 'liked',
+                  },
+                } as never)
+              }
+            />
+
+            <View
+              style={
+                styles.quickDivider
+              }
+            />
+
+            <QuickAction
+              icon="bookmark-outline"
+              title="Saved"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    '/(customer)/customer-activity',
+                  params: {
+                    tab: 'saved',
+                  },
+                } as never)
               }
             />
 
@@ -1038,27 +1060,11 @@ export default function CustomerProfileScreen() {
                 )
               }
             />
-
-            <View
-              style={
-                styles.quickDivider
-              }
-            />
-
-            <QuickAction
-              icon="settings-outline"
-              title="Settings"
-              onPress={() =>
-                router.push(
-                  '/(customer)/customer-settings' as never
-                )
-              }
-            />
           </View>
 
           {/*
            * =============================================
-           * ACCOUNT & PROFILE
+           * ORDERS
            * =============================================
            */}
 
@@ -1067,67 +1073,7 @@ export default function CustomerProfileScreen() {
               styles.sectionLabel
             }
           >
-            ACCOUNT & PROFILE
-          </Text>
-
-          <View
-            style={
-              styles.menuCard
-            }
-          >
-            <ProfileMenuItem
-              icon="person-outline"
-              title="Personal Information"
-              subtitle="Update your name and phone number"
-              onPress={
-                openEditProfile
-              }
-            />
-
-            <MenuDivider />
-
-            <ProfileMenuItem
-              icon="settings-outline"
-              title="Account Settings"
-              subtitle="Password, account information and security"
-              onPress={() =>
-                router.push(
-                  '/(customer)/customer-settings' as never
-                )
-              }
-            />
-
-            <MenuDivider />
-
-            <ProfileMenuItem
-              icon="shield-checkmark-outline"
-              title="Account Status"
-              subtitle={`Your account is currently ${capitalize(
-                user?.accountStatus
-              ).toLowerCase()}`}
-              onPress={() =>
-                Alert.alert(
-                  'Account Status',
-                  `Your FLOGRAM customer account is currently ${capitalize(
-                    user?.accountStatus
-                  ).toLowerCase()}.`
-                )
-              }
-            />
-          </View>
-
-          {/*
-           * =============================================
-           * ACTIVITY
-           * =============================================
-           */}
-
-          <Text
-            style={
-              styles.sectionLabel
-            }
-          >
-            CUSTOMER ACTIVITY
+            ORDERS
           </Text>
 
           <View
@@ -1137,8 +1083,8 @@ export default function CustomerProfileScreen() {
           >
             <ProfileMenuItem
               icon="receipt-outline"
-              title="My Orders"
-              subtitle="View active, completed and cancelled orders"
+              title="Order History"
+              subtitle="Active, completed and cancelled orders"
               onPress={() =>
                 router.push(
                   '/(customer)/customer-orders' as never
@@ -1160,7 +1106,7 @@ export default function CustomerProfileScreen() {
                         ? ''
                         : 's'
                     } submitted`
-                  : 'Review your completed FLOGRAM transactions'
+                  : 'Rate your delivered orders'
               }
               badge={
                 reviewCount >
@@ -1174,24 +1120,11 @@ export default function CustomerProfileScreen() {
                 )
               }
             />
-
-            <MenuDivider />
-
-            <ProfileMenuItem
-              icon="notifications-outline"
-              title="Notifications"
-              subtitle="Order, payment and delivery updates"
-              onPress={() =>
-                router.push(
-                  '/(customer)/customer-notifications' as never
-                )
-              }
-            />
           </View>
 
           {/*
            * =============================================
-           * FLOGRAM SHORTCUTS
+           * MY ACTIVITY
            * =============================================
            */}
 
@@ -1200,7 +1133,7 @@ export default function CustomerProfileScreen() {
               styles.sectionLabel
             }
           >
-            EXPLORE FLOGRAM
+            MY ACTIVITY
           </Text>
 
           <View
@@ -1209,12 +1142,92 @@ export default function CustomerProfileScreen() {
             }
           >
             <ProfileMenuItem
-              icon="flower-outline"
-              title="Discover Flowers"
-              subtitle="Browse and search available bouquets"
+              icon="heart-outline"
+              title="Liked Posts"
+              subtitle="Bouquet posts you liked"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    '/(customer)/customer-activity',
+                  params: {
+                    tab: 'liked',
+                  },
+                } as never)
+              }
+            />
+
+            <MenuDivider />
+
+            <ProfileMenuItem
+              icon="bookmark-outline"
+              title="Saved Items"
+              subtitle="Inspirations you saved for later"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    '/(customer)/customer-activity',
+                  params: {
+                    tab: 'saved',
+                  },
+                } as never)
+              }
+            />
+
+            <MenuDivider />
+
+            <ProfileMenuItem
+              icon="chatbubble-ellipses-outline"
+              title="My Comments"
+              subtitle="Your comments on BloomBoard posts"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    '/(customer)/customer-activity',
+                  params: {
+                    tab: 'comments',
+                  },
+                } as never)
+              }
+            />
+          </View>
+
+          {/*
+           * =============================================
+           * ACCOUNT
+           * =============================================
+           */}
+
+          <Text
+            style={
+              styles.sectionLabel
+            }
+          >
+            ACCOUNT
+          </Text>
+
+          <View
+            style={
+              styles.menuCard
+            }
+          >
+            <ProfileMenuItem
+              icon="person-outline"
+              title="Personal Information"
+              subtitle="Update your name and phone number"
+              onPress={
+                openEditProfile
+              }
+            />
+
+            <MenuDivider />
+
+            <ProfileMenuItem
+              icon="location-outline"
+              title="Addresses"
+              subtitle="Saved delivery addresses for checkout"
               onPress={() =>
                 router.push(
-                  '/(customer)/customer-discover' as never
+                  '/(customer)/customer-addresses' as never
                 )
               }
             />
@@ -1222,25 +1235,60 @@ export default function CustomerProfileScreen() {
             <MenuDivider />
 
             <ProfileMenuItem
-              icon="people-outline"
-              title="BloomBoard"
-              subtitle="Bouquet inspirations and custom requests"
+              icon="settings-outline"
+              title="Account Settings"
+              subtitle="Password and account security"
               onPress={() =>
                 router.push(
-                  '/(customer)/customer-bloomboard' as never
+                  '/(customer)/customer-settings' as never
                 )
+              }
+            />
+          </View>
+
+          {/*
+           * =============================================
+           * SUPPORT
+           * =============================================
+           */}
+
+          <Text
+            style={
+              styles.sectionLabel
+            }
+          >
+            SUPPORT
+          </Text>
+
+          <View
+            style={
+              styles.menuCard
+            }
+          >
+            <ProfileMenuItem
+              icon="help-circle-outline"
+              title="Help Center"
+              subtitle="FAQs and the FLOGRAM AI Assistant"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    '/(shared)/help-center',
+                  params: {
+                    role: 'customer',
+                  },
+                } as never)
               }
             />
 
             <MenuDivider />
 
             <ProfileMenuItem
-              icon="sparkles-outline"
-              title="FLOGRAM AI"
-              subtitle="AI-assisted bouquet recommendations"
+              icon="document-text-outline"
+              title="Terms and Policies"
+              subtitle="Orders, payments, refunds and privacy"
               onPress={() =>
                 router.push(
-                  '/(customer)/customer-ai' as never
+                  '/(shared)/terms-policies' as never
                 )
               }
             />
@@ -1335,68 +1383,7 @@ export default function CustomerProfileScreen() {
          * ===============================================
          */}
 
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          <BottomNavItem
-            icon="home-outline"
-            label="Home"
-            onPress={() =>
-              router.push(
-                '/(customer)/customer-dashboard' as never
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="search-outline"
-            label="Discover"
-            onPress={() =>
-              router.push(
-                '/(customer)/customer-discover' as never
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="flower-outline"
-            label="Bloom"
-            onPress={() =>
-              router.push(
-                '/(customer)/customer-bloomboard' as never
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="cart-outline"
-            label="Cart"
-            onPress={() =>
-              router.push(
-                '/(customer)/customer-cart' as never
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="sparkles-outline"
-            label="AI"
-            onPress={() =>
-              router.push(
-                '/(customer)/customer-ai' as never
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="person"
-            label="Me"
-            active
-            onPress={() => {}}
-          />
-        </View>
+        <CustomerBottomNav active="me" />
 
         {/*
          * ===============================================
@@ -1914,67 +1901,6 @@ function MenuDivider() {
   );
 }
 
-/*
- * =========================================================
- * BOTTOM NAVIGATION
- * =========================================================
- */
-
-function BottomNavItem({
-  icon,
-  label,
-  active = false,
-  onPress,
-}: {
-  icon: IoniconName;
-
-  label: string;
-
-  active?: boolean;
-
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={
-        styles.bottomNavItem
-      }
-      onPress={
-        onPress
-      }
-    >
-      <View
-        style={[
-          styles.bottomNavIcon,
-
-          active &&
-            styles.bottomNavIconActive,
-        ]}
-      >
-        <Ionicons
-          name={icon}
-          size={21}
-          color={
-            active
-              ? PINK
-              : '#938C90'
-          }
-        />
-      </View>
-
-      <Text
-        style={[
-          styles.bottomNavLabel,
-
-          active &&
-            styles.bottomNavLabelActive,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /*
  * =========================================================
@@ -2040,7 +1966,7 @@ const styles =
       color:
         TEXT_SECONDARY,
 
-      fontSize: 11,
+      fontSize: 13,
     },
 
     header: {
@@ -2092,7 +2018,7 @@ const styles =
       color:
         TEXT_SECONDARY,
 
-      fontSize: 9.5,
+      fontSize: 11.5,
     },
 
     headerButton: {
@@ -2272,7 +2198,7 @@ const styles =
       color:
         PINK_DARK,
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         '900',
@@ -2299,7 +2225,7 @@ const styles =
       color:
         TEXT_SECONDARY,
 
-      fontSize: 10,
+      fontSize: 12,
     },
 
     editIconButton: {
@@ -2350,7 +2276,7 @@ const styles =
       color:
         '#AAA1A6',
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         '800',
@@ -2365,7 +2291,7 @@ const styles =
       color:
         TEXT,
 
-      fontSize: 10.5,
+      fontSize: 12.5,
 
       fontWeight:
         '700',
@@ -2416,7 +2342,7 @@ const styles =
       color:
         '#A1989D',
 
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight:
         '900',
@@ -2538,7 +2464,7 @@ const styles =
       color:
         '#5C5559',
 
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight:
         '800',
@@ -2617,7 +2543,7 @@ const styles =
       color:
         TEXT,
 
-      fontSize: 12,
+      fontSize: 13,
 
       fontWeight:
         '800',
@@ -2634,7 +2560,7 @@ const styles =
       color:
         TEXT_SECONDARY,
 
-      fontSize: 9.5,
+      fontSize: 11.5,
 
       lineHeight: 13,
     },
@@ -2666,7 +2592,7 @@ const styles =
       color:
         WHITE,
 
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight:
         '900',
@@ -2742,7 +2668,7 @@ const styles =
       color:
         PINK,
 
-      fontSize: 12,
+      fontSize: 13,
 
       fontWeight:
         '900',
@@ -2757,7 +2683,7 @@ const styles =
       color:
         '#AAA1A6',
 
-      fontSize: 9,
+      fontSize: 11,
     },
 
     bottomNavigation: {
@@ -2822,7 +2748,7 @@ const styles =
       color:
         '#938C90',
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         '700',
@@ -2917,7 +2843,7 @@ const styles =
       color:
         TEXT_SECONDARY,
 
-      fontSize: 10,
+      fontSize: 12,
     },
 
     modalCloseButton: {
@@ -2944,7 +2870,7 @@ const styles =
       color:
         '#8E858A',
 
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight:
         '900',
@@ -2991,7 +2917,7 @@ const styles =
       color:
         TEXT,
 
-      fontSize: 12,
+      fontSize: 13,
 
       paddingVertical: 0,
     },
@@ -3009,14 +2935,14 @@ const styles =
       color:
         '#91898D',
 
-      fontSize: 11.5,
+      fontSize: 13.5,
     },
 
     inputHint: {
       color:
         '#AAA1A6',
 
-      fontSize: 8.5,
+      fontSize: 11.5,
 
       marginLeft: 3,
 
@@ -3054,7 +2980,7 @@ const styles =
       color:
         WHITE,
 
-      fontSize: 12,
+      fontSize: 13,
 
       fontWeight:
         '900',
@@ -3076,7 +3002,7 @@ const styles =
       color:
         TEXT_SECONDARY,
 
-      fontSize: 11,
+      fontSize: 13,
 
       fontWeight:
         '800',

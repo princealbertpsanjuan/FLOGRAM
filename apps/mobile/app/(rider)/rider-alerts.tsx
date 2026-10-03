@@ -28,6 +28,10 @@ import {
   type NotificationType,
 } from '../../services/notification';
 
+import RiderBottomNav, {
+  useRiderBottomNavSpace,
+} from '../../components/rider/rider-bottom-nav';
+
 /*
  * =========================================================
  * RIDER ALERTS
@@ -70,6 +74,9 @@ import {
  */
 
 export default function RiderAlertsScreen() {
+  const bottomSpace =
+    useRiderBottomNavSpace();
+
   const [
     notifications,
     setNotifications,
@@ -804,195 +811,19 @@ export default function RiderAlertsScreen() {
             )}
 
             <View
-              style={
-                styles.bottomSpacer
-              }
+              style={{
+                height: bottomSpace,
+              }}
             />
           </ScrollView>
         )}
 
-        {/* =====================================================
-            BOTTOM NAVIGATION
-        ===================================================== */}
-
-        <View
-          style={
-            styles.bottomNav
-          }
-        >
-          {/* DASHBOARD */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.replace(
-                '/(rider)/rider-dashboard'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ⌂
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Dashboard
-            </Text>
-          </Pressable>
-
-          {/* DELIVERIES */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                '/(rider)/rider-deliveries'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ▣
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Deliveries
-            </Text>
-          </Pressable>
-
-          {/* WALLET */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                '/(rider)/rider-wallet'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ₱
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Wallet
-            </Text>
-          </Pressable>
-
-          {/* ALERTS */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-          >
-            <View
-              style={[
-                styles.navIconContainer,
-                styles.activeNavIconContainer,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.navIcon,
-                  styles.activeNavIcon,
-                ]}
-              >
-                ♢
-              </Text>
-            </View>
-
-            <Text
-              style={[
-                styles.navText,
-                styles.activeNavText,
-              ]}
-            >
-              Alerts
-            </Text>
-          </Pressable>
-
-          {/* STATS */}
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                '/(rider)/rider-stats'
-              )
-            }
-          >
-            <View
-              style={
-                styles.navIconContainer
-              }
-            >
-              <Text
-                style={
-                  styles.navIcon
-                }
-              >
-                ♙
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Stats
-            </Text>
-          </Pressable>
-        </View>
+        {/* BOTTOM NAVIGATION */}
+        <RiderBottomNav
+          active="alerts"
+          alertCount={unreadCount}
+          onReselect={handleRefresh}
+        />
       </View>
     </SafeAreaView>
   );
@@ -1087,6 +918,22 @@ function NotificationCard({
           styles.alertContent
         }
       >
+        <Text
+          style={[
+            styles.alertCategory,
+            {
+              color:
+                getNotificationAppearance(
+                  notification.type
+                ).color,
+            },
+          ]}
+        >
+          {getAlertCategory(
+            notification.type
+          )}
+        </Text>
+
         <View
           style={
             styles.alertTitleRow
@@ -1607,6 +1454,14 @@ function getErrorMessage(
 
 const styles =
   StyleSheet.create({
+    alertCategory: {
+      marginBottom: 2,
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 0.3,
+      textTransform: 'uppercase',
+    },
+
     container: {
       flex:
         1,
@@ -1676,7 +1531,7 @@ const styles =
         '#9E979C',
 
       fontSize:
-        8,
+        11,
 
       marginTop:
         3,
@@ -1715,7 +1570,7 @@ const styles =
         '#79AF86',
 
       fontSize:
-        8,
+        11,
 
       fontWeight:
         '800',
@@ -1877,7 +1732,7 @@ const styles =
         '#4C464B',
 
       fontSize:
-        10,
+        12,
 
       fontWeight:
         '700',
@@ -1916,7 +1771,7 @@ const styles =
         '#837C81',
 
       fontSize:
-        8,
+        11,
 
       lineHeight:
         13,
@@ -1970,7 +1825,7 @@ const styles =
         '#8A8488',
 
       fontSize:
-        10,
+        12,
 
       fontWeight:
         '600',
@@ -2029,7 +1884,7 @@ const styles =
         '#8E888C',
 
       fontSize:
-        9,
+        11,
 
       lineHeight:
         14,
@@ -2063,7 +1918,7 @@ const styles =
         '#FFFFFF',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',
@@ -2139,7 +1994,7 @@ const styles =
         '#918A8F',
 
       fontSize:
-        9,
+        11,
 
       lineHeight:
         14,
@@ -2270,3 +2125,41 @@ const styles =
         '900',
     },
   });
+/*
+ * =========================================================
+ * ALERT CATEGORY
+ * =========================================================
+ *
+ * One label per notification type, matching the Rider
+ * delivery lifecycle wording used across the app:
+ *
+ * New Request → Accepted → Bouquet Pickup →
+ * Out for Delivery → Delivery Completed
+ * =========================================================
+ */
+
+const ALERT_CATEGORY_LABELS: Partial<Record<NotificationType, string>> = {
+  delivery_available: 'New Delivery Request',
+  delivery_accepted: 'Delivery Accepted',
+  delivery_ready: 'Ready for Pickup',
+  delivery_pickup_reminder: 'Pickup Reminder',
+  delivery_picked_up: 'Bouquet Picked Up',
+  delivery_out_for_delivery: 'Out for Delivery',
+  delivery_completed: 'Delivery Completed',
+  delivery_cancelled: 'Delivery Cancelled',
+  remittance_submitted: 'COD Remittance Submitted',
+  remittance_verified: 'COD Remittance Verified',
+  remittance_rejected: 'COD Remittance Rejected',
+  rating_received: 'New Rating',
+  verification_approved: 'Account Verified',
+  verification_rejected: 'Verification Update',
+  order_created: 'Order Update',
+  order_updated: 'Order Update',
+  order_cancelled: 'Order Cancelled',
+  announcement: 'Announcement',
+  system: 'FLOGRAM',
+};
+
+function getAlertCategory(type: NotificationType) {
+  return ALERT_CATEGORY_LABELS[type] ?? 'Notification';
+}

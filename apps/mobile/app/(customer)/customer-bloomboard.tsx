@@ -28,6 +28,10 @@ import {
 import { apiRequest } from "../../services/api";
 import { getStoredUser } from "../../services/auth";
 
+import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
+
+import NotificationBell from '../../components/customer/notification-bell';
+
 /* =========================================================
  * TYPES
  * ======================================================= */
@@ -242,13 +246,6 @@ type LocalPostState = {
   likeCount?: number;
 };
 
-type NavItem = {
-  key: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  activeIcon: keyof typeof Ionicons.glyphMap;
-  route: string;
-};
 
 /* =========================================================
  * COLORS
@@ -282,56 +279,6 @@ const SERVER_ORIGIN = API_BASE
   .replace(/\/api\/v1\/?$/i, "")
   .replace(/\/+$/, "");
 
-const NAV_ITEMS: NavItem[] = [
-  {
-    key: "home",
-    label: "Home",
-    icon: "home-outline",
-    activeIcon: "home",
-    route:
-      "/(customer)/customer-dashboard",
-  },
-  {
-    key: "discover",
-    label: "Discover",
-    icon: "search-outline",
-    activeIcon: "search",
-    route:
-      "/(customer)/customer-discover",
-  },
-  {
-    key: "bloom",
-    label: "Bloom",
-    icon: "flower-outline",
-    activeIcon: "flower",
-    route:
-      "/(customer)/customer-bloomboard",
-  },
-  {
-    key: "cart",
-    label: "Cart",
-    icon: "bag-outline",
-    activeIcon: "bag",
-    route:
-      "/(customer)/customer-cart",
-  },
-  {
-    key: "ai",
-    label: "AI",
-    icon: "sparkles-outline",
-    activeIcon: "sparkles",
-    route:
-      "/(customer)/customer-ai",
-  },
-  {
-    key: "me",
-    label: "Me",
-    icon: "person-outline",
-    activeIcon: "person",
-    route:
-      "/(customer)/customer-profile",
-  },
-];
 
 /* =========================================================
  * HELPERS
@@ -4662,19 +4609,7 @@ const openRequestAiConversation = (
             </Text>
           </View>
 
-          <View
-            style={
-              styles.headerFlower
-            }
-          >
-            <Ionicons
-              name="flower"
-              size={25}
-              color={
-                COLORS.primary
-              }
-            />
-          </View>
+          <NotificationBell />
         </View>
 
         <View
@@ -4845,73 +4780,7 @@ const openRequestAiConversation = (
             renderRequestsTab()}
         </ScrollView>
 
-        <View
-          style={
-            styles.bottomNav
-          }
-        >
-          {NAV_ITEMS.map(
-            (item) => {
-              const active =
-                item.key ===
-                "bloom";
-
-              return (
-                <Pressable
-                  key={item.key}
-                  onPress={() => {
-                    if (active) {
-                      return;
-                    }
-
-                    router.replace(
-                      item.route as never
-                    );
-                  }}
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.navItem,
-                    pressed &&
-                      styles.navPressed,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.navIconWrapper,
-                      active &&
-                        styles.navIconWrapperActive,
-                    ]}
-                  >
-                    <Ionicons
-                      name={
-                        active
-                          ? item.activeIcon
-                          : item.icon
-                      }
-                      size={22}
-                      color={
-                        active
-                          ? COLORS.primary
-                          : "#8E858A"
-                      }
-                    />
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.navLabel,
-                      active &&
-                        styles.navLabelActive,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </Pressable>
-              );
-            }
-          )}
-        </View>
+        <CustomerBottomNav active="bloom" />
       </KeyboardAvoidingView>
 
       {renderCommentsModal()}

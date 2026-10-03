@@ -38,6 +38,11 @@ import {
 
 import { apiRequest } from "../../services/api";
 
+import {
+  getSavedAddresses,
+  type SavedAddress,
+} from "../../services/addresses";
+
 /* =========================================================
  * TYPES
  * ======================================================= */
@@ -983,6 +988,85 @@ export default function CustomerCheckoutScreen() {
     setLandmark,
   ] =
     useState("");
+
+  /*
+   * Latest typed street, read by the address
+   * book loader without re-running it.
+   */
+  const streetRef =
+    useRef(street);
+
+  useEffect(() => {
+    streetRef.current =
+      street;
+  }, [street]);
+
+  /*
+   * Saved address book (Me -> Addresses).
+   */
+  const [
+    savedAddresses,
+    setSavedAddresses,
+  ] =
+    useState<SavedAddress[]>([]);
+
+  const applySavedAddress =
+    useCallback(
+      (address: SavedAddress) => {
+        setStreet(address.street);
+        setBarangay(address.barangay);
+        setCity(address.city);
+        setProvince(address.province);
+        setPostalCode(address.postalCode || "");
+        setLandmark(address.landmark || "");
+
+        if (address.recipientName) {
+          setRecipientName(address.recipientName);
+        }
+
+        if (address.recipientPhoneNumber) {
+          setRecipientPhone(address.recipientPhoneNumber);
+        }
+      },
+      []
+    );
+
+  useEffect(() => {
+    let active = true;
+
+    getSavedAddresses()
+      .then((addresses) => {
+        if (!active) {
+          return;
+        }
+
+        setSavedAddresses(addresses);
+
+        /*
+         * Pre-fill the default address only when the
+         * customer has not typed an address yet.
+         */
+        const defaultAddress =
+          addresses.find((item) => item.isDefault) ||
+          addresses[0];
+
+        if (
+          defaultAddress &&
+          !streetRef.current.trim()
+        ) {
+          applySavedAddress(
+            defaultAddress
+          );
+        }
+      })
+      .catch(() => {
+        // Address book is optional at checkout.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [applySavedAddress]);
 
   const [
     deliveryCoordinate,
@@ -3331,6 +3415,71 @@ export default function CustomerCheckoutScreen() {
               title="Delivery Address"
               subtitle="Enter the recipient's delivery location."
             >
+              {savedAddresses.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={
+                    false
+                  }
+                  contentContainerStyle={{
+                    gap: 8,
+                    paddingBottom: 12,
+                  }}
+                >
+                  {savedAddresses.map(
+                    (address, index) => {
+                      const selected =
+                        address.street ===
+                          street &&
+                        address.city ===
+                          city;
+
+                      return (
+                        <Pressable
+                          key={
+                            address._id ??
+                            index
+                          }
+                          onPress={() =>
+                            applySavedAddress(
+                              address
+                            )
+                          }
+                          style={{
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor:
+                              selected
+                                ? "#DF628F"
+                                : "#EEE7EB",
+                            backgroundColor:
+                              selected
+                                ? "#FCE8F0"
+                                : "#FFFFFF",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color:
+                                selected
+                                  ? "#DF628F"
+                                  : "#5E575B",
+                              fontSize: 13,
+                              fontWeight:
+                                "700",
+                            }}
+                          >
+                            {address.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    }
+                  )}
+                </ScrollView>
+              ) : null}
+
               <Field
                 label="Street / House Number"
               >

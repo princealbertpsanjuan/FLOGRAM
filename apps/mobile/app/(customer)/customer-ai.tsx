@@ -29,6 +29,8 @@ import {
 
 import { apiRequest } from "../../services/api";
 
+import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
+
 /* =========================================================
  * TYPES
  * ======================================================= */
@@ -248,13 +250,6 @@ type ArchiveConversationResponse = {
   };
 };
 
-type NavItem = {
-  key: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  activeIcon: keyof typeof Ionicons.glyphMap;
-  route: string;
-};
 
 /* =========================================================
  * COLORS
@@ -331,60 +326,6 @@ const getImageUrl = (
   return `${SERVER_ORIGIN}/${cleaned}`;
 };
 
-/* =========================================================
- * NAVIGATION
- * ======================================================= */
-
-const NAV_ITEMS: NavItem[] = [
-  {
-    key: "home",
-    label: "Home",
-    icon: "home-outline",
-    activeIcon: "home",
-    route:
-      "/(customer)/customer-dashboard",
-  },
-  {
-    key: "discover",
-    label: "Discover",
-    icon: "search-outline",
-    activeIcon: "search",
-    route:
-      "/(customer)/customer-discover",
-  },
-  {
-    key: "bloom",
-    label: "Bloom",
-    icon: "flower-outline",
-    activeIcon: "flower",
-    route:
-      "/(customer)/customer-bloomboard",
-  },
-  {
-    key: "cart",
-    label: "Cart",
-    icon: "bag-outline",
-    activeIcon: "bag",
-    route:
-      "/(customer)/customer-cart",
-  },
-  {
-    key: "ai",
-    label: "AI",
-    icon: "sparkles-outline",
-    activeIcon: "sparkles",
-    route:
-      "/(customer)/customer-ai",
-  },
-  {
-    key: "me",
-    label: "Me",
-    icon: "person-outline",
-    activeIcon: "person",
-    route:
-      "/(customer)/customer-profile",
-  },
-];
 
 /* =========================================================
  * HELPERS
@@ -2788,63 +2729,7 @@ useEffect(() => {
 
             {renderConversationList()}
 
-            <View
-              style={
-                styles.bottomNav
-              }
-            >
-              {NAV_ITEMS.map(
-                (item) => {
-                  const active =
-                    item.key ===
-                    "ai";
-
-                  return (
-                    <Pressable
-                      key={
-                        item.key
-                      }
-                      onPress={() => {
-                        if (active) {
-                          return;
-                        }
-
-                        router.replace(
-                          item.route as never
-                        );
-                      }}
-                      style={
-                        styles.navItem
-                      }
-                    >
-                      <Ionicons
-                        name={
-                          active
-                            ? item.activeIcon
-                            : item.icon
-                        }
-                        size={22}
-                        color={
-                          active
-                            ? COLORS.primary
-                            : "#8E858A"
-                        }
-                      />
-
-                      <Text
-                        style={[
-                          styles.navLabel,
-                          active &&
-                            styles.navLabelActive,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  );
-                }
-              )}
-            </View>
+            <CustomerBottomNav active="ai" />
           </>
         )}
       </KeyboardAvoidingView>

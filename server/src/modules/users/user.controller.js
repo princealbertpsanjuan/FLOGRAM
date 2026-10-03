@@ -5,6 +5,8 @@ import {
   getUsersForAdmin,
   updateProfileById,
   updateUserAccountStatusByAdmin,
+  getSavedAddresses,
+  replaceSavedAddresses,
 } from "./user.service.js";
 
 /*
@@ -175,6 +177,37 @@ export const updateUserStatus = async (
       data: {
         user,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMyAddresses = async (req, res, next) => {
+  try {
+    const addresses = await getSavedAddresses(req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Saved addresses retrieved successfully.",
+      data: { addresses },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMyAddresses = async (req, res, next) => {
+  try {
+    const addresses = await replaceSavedAddresses(
+      req.user.userId,
+      req.body?.addresses
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Saved addresses updated successfully.",
+      data: { addresses },
     });
   } catch (error) {
     next(error);

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -40,10 +41,7 @@ import {
   type CustomerOrder,
 } from "../../services/orders";
 
-import {
-  getCustomerDeliveries,
-  type Delivery,
-} from "../../services/delivery";
+import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
 
 /*
  * =========================================================
@@ -438,6 +436,13 @@ const getGreeting = () => {
  * OCCASION
  * =========================================================
  */
+
+const HOME_OCCASIONS = [
+  "Birthday",
+  "Anniversary",
+  "Sympathy",
+  "Congratulations",
+];
 
 const getOccasionIcon = (
   occasion: string
@@ -842,21 +847,6 @@ const getOrderCategory = (
   return "active";
 };
 
-const getDeliveryOrderId = (
-  delivery: Delivery
-) => {
-  if (
-    typeof delivery.order ===
-    "string"
-  ) {
-    return delivery.order;
-  }
-
-  return (
-    delivery.order?._id ||
-    ""
-  );
-};
 
 /*
  * =========================================================
@@ -905,16 +895,6 @@ export default function CustomerDashboardScreen() {
       CustomerOrder[]
     >([]);
 
-  const [
-    deliveryByOrderId,
-    setDeliveryByOrderId,
-  ] =
-    useState<
-      Record<
-        string,
-        Delivery
-      >
-    >({});
 
   const [
     unreadCount,
@@ -1098,77 +1078,6 @@ export default function CustomerDashboardScreen() {
           );
         }
 
-        /*
-         * Delivery lookup is separate so
-         * an unavailable delivery endpoint
-         * never breaks the dashboard.
-         */
-
-        try {
-          const result =
-            await getCustomerDeliveries();
-
-          const deliveries =
-            Array.isArray(
-              result.deliveries
-            )
-              ? result.deliveries
-              : [];
-
-          const lookup:
-            Record<
-              string,
-              Delivery
-            > = {};
-
-          deliveries.forEach(
-            (
-              delivery
-            ) => {
-              const orderId =
-                getDeliveryOrderId(
-                  delivery
-                );
-
-              if (
-                !orderId
-              ) {
-                return;
-              }
-
-              const existing =
-                lookup[
-                  orderId
-                ];
-
-              if (
-                !existing ||
-                existing.status ===
-                  "cancelled"
-              ) {
-                lookup[
-                  orderId
-                ] =
-                  delivery;
-              }
-            }
-          );
-
-          setDeliveryByOrderId(
-            lookup
-          );
-        } catch (
-          deliveryError
-        ) {
-          console.warn(
-            "Unable to load customer deliveries:",
-            deliveryError
-          );
-
-          setDeliveryByOrderId(
-            {}
-          );
-        }
       },
       []
     );
@@ -1453,88 +1362,6 @@ export default function CustomerDashboardScreen() {
       groupedOrderIds,
     ]);
 
-  /*
-   * =======================================================
-   * CURRENT PURCHASE DELIVERY
-   * =======================================================
-   */
-
-  const currentPurchaseDelivery =
-    useMemo<
-      Delivery | null
-    >(() => {
-      if (
-        !currentPurchase
-      ) {
-        return null;
-      }
-
-      if (
-        currentPurchase.kind ===
-        "order"
-      ) {
-        return (
-          deliveryByOrderId[
-            currentPurchase
-              .order._id
-          ] ||
-          null
-        );
-      }
-
-      const linkedDeliveries =
-        (
-          currentPurchase
-            .checkout
-            .orders ||
-          []
-        )
-          .map(
-            (order) => {
-              const id =
-                getCheckoutOrderId(
-                  order
-                );
-
-              return id
-                ? deliveryByOrderId[
-                    id
-                  ]
-                : undefined;
-            }
-          )
-          .filter(
-            (
-              delivery
-            ): delivery is Delivery =>
-              Boolean(
-                delivery &&
-                  delivery.status !==
-                    "cancelled"
-              )
-          );
-
-      /*
-       * Direct Track Delivery from the
-       * dashboard is only used when one
-       * child delivery is unambiguous.
-       *
-       * Multiple child deliveries must
-       * be chosen from Order Details.
-       */
-
-      if (
-        linkedDeliveries.length ===
-        1
-      ) {
-        return linkedDeliveries[0];
-      }
-
-      return null;
-    }, [
-      currentPurchase,
-      deliveryByOrderId,
-    ]);
 
   /*
    * =======================================================
@@ -1584,38 +1411,13 @@ export default function CustomerDashboardScreen() {
    * =======================================================
    */
 
+  /*
+   * Fixed occasion categories shown directly
+   * under the search bar. Selecting one filters
+   * products by that occasion on the server.
+   */
   const occasions =
-    useMemo(() => {
-      const values =
-        marketplaceFlowers
-          .flatMap(
-            (flower) =>
-              flower
-                .occasion ??
-              []
-          )
-          .map(
-            (occasion) =>
-              occasion.trim()
-          )
-          .filter(
-            Boolean
-          );
-
-      const unique =
-        Array.from(
-          new Set(
-            values
-          )
-        );
-
-      return unique.slice(
-        0,
-        4
-      );
-    }, [
-      marketplaceFlowers,
-    ]);
+    HOME_OCCASIONS;
 
   /*
    * =======================================================
@@ -1691,6 +1493,54 @@ export default function CustomerDashboardScreen() {
         selectedOccasion,
       ]
     );
+
+  /*
+   * =======================================================
+   * SEARCH AS YOU TYPE
+   * =======================================================
+   *
+   * Results update shortly after the customer stops
+   * typing, so "rose" shows rose bouquets without
+   * needing to press the keyboard's search key.
+   */
+
+  const handleSearchRef =
+    useRef(handleSearch);
+
+  useEffect(() => {
+    handleSearchRef.current =
+      handleSearch;
+  }, [handleSearch]);
+
+  const skipFirstSearchRun =
+    useRef(true);
+
+  useEffect(() => {
+    if (
+      skipFirstSearchRun.current
+    ) {
+      skipFirstSearchRun.current =
+        false;
+      return undefined;
+    }
+
+    const query =
+      search.trim();
+
+    if (
+      query.length === 1
+    ) {
+      return undefined;
+    }
+
+    const timer =
+      setTimeout(() => {
+        void handleSearchRef.current();
+      }, 450);
+
+    return () =>
+      clearTimeout(timer);
+  }, [search]);
 
   /*
    * =======================================================
@@ -1986,55 +1836,6 @@ const handleOrdersPress =
       handleOrdersPress,
     ]);
 
-  const handleTrackCurrentPurchase =
-    useCallback(() => {
-      if (
-        !currentPurchase ||
-        !currentPurchaseDelivery
-      ) {
-        handleCurrentPurchasePress();
-
-        return;
-      }
-
-      let linkedOrderId =
-        "";
-
-      if (
-        currentPurchase.kind ===
-        "order"
-      ) {
-        linkedOrderId =
-          currentPurchase
-            .order._id;
-      } else {
-        linkedOrderId =
-          getDeliveryOrderId(
-            currentPurchaseDelivery
-          );
-      }
-
-      router.push({
-        pathname:
-          "/(customer)/customer-tracking",
-
-        params: {
-          deliveryId:
-            currentPurchaseDelivery._id,
-
-          ...(linkedOrderId
-            ? {
-                orderId:
-                  linkedOrderId,
-              }
-            : {}),
-        },
-      } as never);
-    }, [
-      currentPurchase,
-      currentPurchaseDelivery,
-      handleCurrentPurchasePress,
-    ]);
 
   /*
    * =======================================================
@@ -2501,494 +2302,6 @@ const handleOrdersPress =
 
           {/*
            * =====================================================
-           * HERO
-           * =====================================================
-           */}
-
-          <View
-            style={
-              styles.banner
-            }
-          >
-            <View
-              style={
-                styles.bannerCircleOne
-              }
-            />
-
-            <View
-              style={
-                styles.bannerCircleTwo
-              }
-            />
-
-            <View
-              style={
-                styles.bannerContent
-              }
-            >
-              <Text
-                style={
-                  styles.offerText
-                }
-              >
-                FLOWERS FOR EVERY
-                MOMENT
-              </Text>
-
-              <Text
-                style={
-                  styles.bannerTitle
-                }
-              >
-                Say it with
-                {"\n"}
-                Fresh Flowers
-              </Text>
-
-              <Pressable
-                style={
-                  styles.shopButton
-                }
-                onPress={
-                  handleViewAll
-                }
-              >
-                <Text
-                  style={
-                    styles.shopButtonText
-                  }
-                >
-                  Explore Flowers
-                </Text>
-
-                <Ionicons
-                  name="arrow-forward"
-                  size={13}
-                  color="#FFFFFF"
-                />
-              </Pressable>
-            </View>
-
-            <View
-              style={
-                styles.bannerIconContainer
-              }
-            >
-              <Ionicons
-                name="flower-outline"
-                size={78}
-                color="rgba(255,255,255,0.55)"
-              />
-            </View>
-          </View>
-
-          {/*
-           * =====================================================
-           * CURRENT ORDER
-           * =====================================================
-           */}
-
-          <View
-            style={
-              styles.currentSectionHeader
-            }
-          >
-            <View>
-              <Text
-                style={
-                  styles.currentSectionTitle
-                }
-              >
-                Current Order
-              </Text>
-
-              <Text
-                style={
-                  styles.currentSectionSubtitle
-                }
-              >
-                Your latest active
-                purchase
-              </Text>
-            </View>
-
-            <Pressable
-              hitSlop={8}
-              onPress={
-                handleOrdersPress
-              }
-            >
-              <Text
-                style={
-                  styles.viewAllText
-                }
-              >
-                My Orders
-              </Text>
-            </Pressable>
-          </View>
-
-          {currentPurchase &&
-          currentPurchasePresentation ? (
-            <View
-              style={
-                styles.currentOrderCard
-              }
-            >
-              <Pressable
-                style={
-                  styles.currentOrderMain
-                }
-                onPress={
-                  handleCurrentPurchasePress
-                }
-              >
-                <View
-                  style={
-                    styles.currentOrderTop
-                  }
-                >
-                  <View
-                    style={
-                      styles.currentOrderIcon
-                    }
-                  >
-                    <Ionicons
-                      name="bag-handle-outline"
-                      size={22}
-                      color="#DF5D8D"
-                    />
-                  </View>
-
-                  <View
-                    style={
-                      styles.currentOrderHeading
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.currentOrderReference
-                      }
-                    >
-                      {
-                        currentPurchasePresentation.reference
-                      }
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.currentOrderTitle
-                      }
-                      numberOfLines={
-                        2
-                      }
-                    >
-                      {
-                        currentPurchasePresentation.title
-                      }
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.currentOrderShop
-                      }
-                      numberOfLines={
-                        1
-                      }
-                    >
-                      {
-                        currentPurchasePresentation.subtitle
-                      }
-                    </Text>
-                  </View>
-
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color="#BFB6BA"
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.currentOrderDivider
-                  }
-                />
-
-                <View
-                  style={
-                    styles.currentOrderMetaRow
-                  }
-                >
-                  <View
-                    style={[
-                      styles.currentStatusBadge,
-
-                      {
-                        backgroundColor:
-                          currentPurchasePresentation.statusBackground,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={
-                        currentPurchasePresentation.statusIcon
-                      }
-                      size={14}
-                      color={
-                        currentPurchasePresentation.statusForeground
-                      }
-                    />
-
-                    <Text
-                      style={[
-                        styles.currentStatusText,
-
-                        {
-                          color:
-                            currentPurchasePresentation.statusForeground,
-                        },
-                      ]}
-                    >
-                      {
-                        currentPurchasePresentation.status
-                      }
-                    </Text>
-                  </View>
-
-                  <Text
-                    style={
-                      styles.currentOrderTotal
-                    }
-                  >
-                    {formatPrice(
-                      currentPurchasePresentation.total
-                    )}
-                  </Text>
-                </View>
-
-                {currentPurchasePresentation
-                  .isDelivered ? (
-                  <View
-                    style={
-                      styles.deliveredHint
-                    }
-                  >
-                    <Ionicons
-                      name="checkmark-circle-outline"
-                      size={15}
-                      color="#4E8A59"
-                    />
-
-                    <Text
-                      style={
-                        styles.deliveredHintText
-                      }
-                    >
-                      Delivered — open
-                      the order to
-                      confirm receipt.
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-
-              <View
-                style={
-                  styles.currentOrderActions
-                }
-              >
-                {currentPurchaseDelivery &&
-                currentPurchaseDelivery.status !==
-                  "cancelled" ? (
-                  <Pressable
-                    style={
-                      styles.trackCurrentButton
-                    }
-                    onPress={
-                      handleTrackCurrentPurchase
-                    }
-                  >
-                    <Ionicons
-                      name="navigate-outline"
-                      size={16}
-                      color="#FFFFFF"
-                    />
-
-                    <Text
-                      style={
-                        styles.trackCurrentButtonText
-                      }
-                    >
-                      Track Delivery
-                    </Text>
-                  </Pressable>
-                ) : null}
-
-                <Pressable
-                  style={[
-                    styles.viewOrderButton,
-
-                    currentPurchaseDelivery &&
-                      currentPurchaseDelivery.status !==
-                        "cancelled" &&
-                      styles.viewOrderButtonSecondary,
-                  ]}
-                  onPress={
-                    handleCurrentPurchasePress
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.viewOrderButtonText,
-
-                      currentPurchaseDelivery &&
-                        currentPurchaseDelivery.status !==
-                          "cancelled" &&
-                        styles.viewOrderButtonTextSecondary,
-                    ]}
-                  >
-                    View Order
-                  </Text>
-
-                  <Ionicons
-                    name="arrow-forward"
-                    size={15}
-                    color={
-                      currentPurchaseDelivery &&
-                      currentPurchaseDelivery.status !==
-                        "cancelled"
-                        ? "#D75C7A"
-                        : "#FFFFFF"
-                    }
-                  />
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <Pressable
-              style={
-                styles.noCurrentOrderCard
-              }
-              onPress={
-                handleViewAll
-              }
-            >
-              <View
-                style={
-                  styles.noCurrentOrderIcon
-                }
-              >
-                <Ionicons
-                  name="flower-outline"
-                  size={25}
-                  color="#DC648F"
-                />
-              </View>
-
-              <View
-                style={
-                  styles.noCurrentOrderContent
-                }
-              >
-                <Text
-                  style={
-                    styles.noCurrentOrderTitle
-                  }
-                >
-                  No active orders
-                </Text>
-
-                <Text
-                  style={
-                    styles.noCurrentOrderText
-                  }
-                >
-                  Explore fresh
-                  bouquets from
-                  FLOGRAM florists.
-                </Text>
-              </View>
-
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color="#C8BEC2"
-              />
-            </Pressable>
-          )}
-
-          {/*
-           * =====================================================
-           * FLOWER TYPES
-           * =====================================================
-           */}
-
-          {flowerTypes.length >
-          1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={
-                false
-              }
-              style={
-                styles.categoryScroll
-              }
-              contentContainerStyle={
-                styles.categoryContainer
-              }
-            >
-              {flowerTypes.map(
-                (
-                  flowerType
-                ) => {
-                  const selected =
-                    selectedFlowerType ===
-                      flowerType &&
-                    !selectedOccasion;
-
-                  return (
-                    <Pressable
-                      key={
-                        flowerType
-                      }
-                      style={[
-                        styles.categoryButton,
-
-                        selected &&
-                          styles.categoryButtonActive,
-                      ]}
-                      onPress={() =>
-                        void handleFlowerType(
-                          flowerType
-                        )
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.categoryText,
-
-                          selected &&
-                            styles.categoryTextActive,
-                        ]}
-                      >
-                        {flowerType ===
-                        "All"
-                          ? "All"
-                          : pluralizeFlowerType(
-                              flowerType
-                            )}
-                      </Text>
-                    </Pressable>
-                  );
-                }
-              )}
-            </ScrollView>
-          ) : null}
-
-          {/*
-           * =====================================================
            * OCCASIONS
            * =====================================================
            */}
@@ -3082,6 +2395,211 @@ const handleOrdersPress =
                 )}
               </View>
             </>
+          ) : null}
+
+          {/*
+           * =====================================================
+           * HERO
+           * =====================================================
+           */}
+
+          <View
+            style={
+              styles.banner
+            }
+          >
+            <View
+              style={
+                styles.bannerCircleOne
+              }
+            />
+
+            <View
+              style={
+                styles.bannerCircleTwo
+              }
+            />
+
+            <View
+              style={
+                styles.bannerContent
+              }
+            >
+              <Text
+                style={
+                  styles.offerText
+                }
+              >
+                FLOWERS FOR EVERY
+                MOMENT
+              </Text>
+
+              <Text
+                style={
+                  styles.bannerTitle
+                }
+              >
+                Say it with
+                {"\n"}
+                Fresh Flowers
+              </Text>
+
+              <Pressable
+                style={
+                  styles.shopButton
+                }
+                onPress={
+                  handleViewAll
+                }
+              >
+                <Text
+                  style={
+                    styles.shopButtonText
+                  }
+                >
+                  Explore Flowers
+                </Text>
+
+                <Ionicons
+                  name="arrow-forward"
+                  size={13}
+                  color="#FFFFFF"
+                />
+              </Pressable>
+            </View>
+
+            <View
+              style={
+                styles.bannerIconContainer
+              }
+            >
+              <Ionicons
+                name="flower-outline"
+                size={78}
+                color="rgba(255,255,255,0.55)"
+              />
+            </View>
+          </View>
+
+          {/*
+           * =====================================================
+           * ACTIVE ORDER (compact)
+           * =====================================================
+           *
+           * Home focuses on products. Detailed order
+           * information lives in Me -> Orders, Order
+           * Details and Tracking; Home shows only a
+           * one-line shortcut when an order is active.
+           */}
+
+          {currentPurchase &&
+          currentPurchasePresentation ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={
+                handleCurrentPurchasePress
+              }
+              style={({ pressed }) => [
+                homeStyles.activeOrderBar,
+                pressed && {
+                  opacity: 0.85,
+                },
+              ]}
+            >
+              <Ionicons
+                name="cube-outline"
+                size={20}
+                color="#DF628F"
+              />
+              <Text
+                numberOfLines={1}
+                style={
+                  homeStyles.activeOrderText
+                }
+              >
+                You have an order in progress
+              </Text>
+              <Text
+                style={
+                  homeStyles.activeOrderLink
+                }
+              >
+                Track
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color="#DF628F"
+              />
+            </Pressable>
+          ) : null}
+
+          {/*
+           * =====================================================
+           * FLOWER TYPES
+           * =====================================================
+           */}
+
+          {flowerTypes.length >
+          1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={
+                false
+              }
+              style={
+                styles.categoryScroll
+              }
+              contentContainerStyle={
+                styles.categoryContainer
+              }
+            >
+              {flowerTypes.map(
+                (
+                  flowerType
+                ) => {
+                  const selected =
+                    selectedFlowerType ===
+                      flowerType &&
+                    !selectedOccasion;
+
+                  return (
+                    <Pressable
+                      key={
+                        flowerType
+                      }
+                      style={[
+                        styles.categoryButton,
+
+                        selected &&
+                          styles.categoryButtonActive,
+                      ]}
+                      onPress={() =>
+                        void handleFlowerType(
+                          flowerType
+                        )
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.categoryText,
+
+                          selected &&
+                            styles.categoryTextActive,
+                        ]}
+                      >
+                        {flowerType ===
+                        "All"
+                          ? "All"
+                          : pluralizeFlowerType(
+                              flowerType
+                            )}
+                      </Text>
+                    </Pressable>
+                  );
+                }
+              )}
+            </ScrollView>
           ) : null}
 
           {/*
@@ -3462,162 +2980,7 @@ const handleOrdersPress =
          * =======================================================
          */}
 
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          <Pressable
-            style={
-              styles.navItem
-            }
-          >
-            <View
-              style={
-                styles.activeNavIcon
-              }
-            >
-              <Ionicons
-                name="home"
-                size={19}
-                color="#DF5D8D"
-              />
-            </View>
-
-            <Text
-              style={
-                styles.activeNavText
-              }
-            >
-              Home
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(customer)/customer-discover"
-              )
-            }
-          >
-            <Ionicons
-              name="search-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Discover
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(customer)/customer-bloomboard"
-              )
-            }
-          >
-            <Ionicons
-              name="flower-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Bloom
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(customer)/customer-cart"
-              )
-            }
-          >
-            <Ionicons
-              name="bag-handle-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Cart
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(customer)/customer-ai"
-              )
-            }
-          >
-            <Ionicons
-              name="sparkles-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              AI
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={
-              styles.navItem
-            }
-            onPress={() =>
-              router.push(
-                "/(customer)/customer-profile"
-              )
-            }
-          >
-            <Ionicons
-              name="person-outline"
-              size={20}
-              color="#A5A0A4"
-            />
-
-            <Text
-              style={
-                styles.navText
-              }
-            >
-              Me
-            </Text>
-          </Pressable>
-        </View>
+        <CustomerBottomNav active="home" />
       </View>
     </SafeAreaView>
   );
@@ -3702,7 +3065,7 @@ const styles =
       color:
         "#989095",
 
-      fontSize: 11,
+      fontSize: 13,
     },
 
     /*
@@ -3734,7 +3097,7 @@ const styles =
       color:
         "#A59CA2",
 
-      fontSize: 12,
+      fontSize: 13,
 
       marginBottom: 2,
     },
@@ -3811,7 +3174,7 @@ const styles =
       color:
         "#FFFFFF",
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         "800",
@@ -3863,7 +3226,7 @@ const styles =
       color:
         "#494249",
 
-      fontSize: 12,
+      fontSize: 13,
 
       marginLeft: 9,
 
@@ -3988,7 +3351,7 @@ const styles =
       color:
         "#D55E86",
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         "800",
@@ -4040,7 +3403,7 @@ const styles =
       color:
         "#FFFFFF",
 
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight:
         "700",
@@ -4097,7 +3460,7 @@ const styles =
       color:
         "#A39CA0",
 
-      fontSize: 9,
+      fontSize: 11,
     },
 
     currentOrderCard: {
@@ -4172,7 +3535,7 @@ const styles =
       color:
         "#AAA1A6",
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         "700",
@@ -4198,7 +3561,7 @@ const styles =
       color:
         "#9F979C",
 
-      fontSize: 9,
+      fontSize: 11,
     },
 
     currentOrderDivider: {
@@ -4239,7 +3602,7 @@ const styles =
     },
 
     currentStatusText: {
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight:
         "800",
@@ -4281,7 +3644,7 @@ const styles =
     deliveredHintText: {
       flex: 1,
 
-      fontSize: 9,
+      fontSize: 11,
 
       lineHeight: 13,
 
@@ -4332,7 +3695,7 @@ const styles =
       color:
         "#FFFFFF",
 
-      fontSize: 10,
+      fontSize: 12,
 
       fontWeight:
         "800",
@@ -4374,7 +3737,7 @@ const styles =
       color:
         "#FFFFFF",
 
-      fontSize: 10,
+      fontSize: 12,
 
       fontWeight:
         "800",
@@ -4436,7 +3799,7 @@ const styles =
       color:
         "#4B4449",
 
-      fontSize: 12,
+      fontSize: 13,
 
       fontWeight:
         "800",
@@ -4448,7 +3811,7 @@ const styles =
       color:
         "#9C9499",
 
-      fontSize: 9,
+      fontSize: 11,
 
       lineHeight: 13,
     },
@@ -4504,7 +3867,7 @@ const styles =
       color:
         "#827B80",
 
-      fontSize: 10,
+      fontSize: 12,
 
       fontWeight:
         "600",
@@ -4622,7 +3985,7 @@ const styles =
       color:
         "#777077",
 
-      fontSize: 8,
+      fontSize: 11,
 
       marginTop: 6,
 
@@ -4671,7 +4034,7 @@ const styles =
       color:
         "#A39CA0",
 
-      fontSize: 9,
+      fontSize: 11,
 
       marginTop: 3,
     },
@@ -4680,7 +4043,7 @@ const styles =
       color:
         "#DB5D8B",
 
-      fontSize: 10,
+      fontSize: 12,
 
       fontWeight:
         "700",
@@ -4774,7 +4137,7 @@ const styles =
       color:
         "#B99DA7",
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         "600",
@@ -4867,7 +4230,7 @@ const styles =
       color:
         "#A69DA3",
 
-      fontSize: 8,
+      fontSize: 11,
 
       marginBottom: 3,
     },
@@ -4876,7 +4239,7 @@ const styles =
       color:
         "#494147",
 
-      fontSize: 11,
+      fontSize: 13,
 
       lineHeight: 14,
 
@@ -4903,7 +4266,7 @@ const styles =
       color:
         "#DE5D8B",
 
-      fontSize: 11,
+      fontSize: 13,
 
       fontWeight:
         "800",
@@ -4973,7 +4336,7 @@ const styles =
       color:
         "#938A90",
 
-      fontSize: 10,
+      fontSize: 12,
 
       lineHeight: 15,
 
@@ -5002,7 +4365,7 @@ const styles =
       color:
         "#FFFFFF",
 
-      fontSize: 9,
+      fontSize: 11,
 
       fontWeight:
         "700",
@@ -5089,7 +4452,7 @@ const styles =
       color:
         "#DF5D8D",
 
-      fontSize: 8,
+      fontSize: 11,
 
       fontWeight:
         "700",
@@ -5101,8 +4464,35 @@ const styles =
       color:
         "#A7A1A5",
 
-      fontSize: 8,
+      fontSize: 11,
 
       marginTop: 4,
     },
   });
+
+const homeStyles = StyleSheet.create({
+  activeOrderBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 20,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#F6D5E2",
+  },
+  activeOrderText: {
+    flex: 1,
+    color: "#3B3438",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  activeOrderLink: {
+    color: "#DF628F",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+});

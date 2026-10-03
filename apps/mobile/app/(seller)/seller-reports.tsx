@@ -1,5 +1,4 @@
 import {
-  router,
   useFocusEffect,
 } from 'expo-router';
 
@@ -35,6 +34,12 @@ import {
   type FloristProfile,
 } from '../../services/florist';
 
+import SellerBottomNav from '../../components/seller/seller-bottom-nav';
+
+import {
+  getShopRevenue,
+} from '../../utils/order-status';
+
 /*
  * =========================================================
  * SELLER REPORTS
@@ -51,6 +56,7 @@ import {
  * IMPORTANT:
  *
  * - Sales are calculated from PAID orders only.
+ * - Shop sales exclude Order.deliveryFee (Rider income).
  * - Seller rating uses sellerRating, not overallRating.
  * - No fake report values are used.
  * =========================================================
@@ -234,10 +240,15 @@ export default function SellerReportsScreen() {
   const completedOrders =
     useMemo(
       () =>
+        /*
+         * Delivered orders are successful even
+         * before the customer taps "Received".
+         */
         orders.filter(
           order =>
-            order.orderStatus ===
-              'completed'
+            SUCCESSFUL_STATUSES.includes(
+              order.orderStatus
+            )
         ).length,
       [
         orders,
@@ -347,9 +358,8 @@ export default function SellerReportsScreen() {
             order
           ) =>
             total +
-            Number(
-              order.totalAmount ||
-                0
+            getShopRevenue(
+              order
             ),
           0
         ),
@@ -379,9 +389,8 @@ export default function SellerReportsScreen() {
             order
           ) =>
             total +
-            Number(
-              order.totalAmount ||
-                0
+            getShopRevenue(
+              order
             ),
           0
         );
@@ -410,9 +419,8 @@ export default function SellerReportsScreen() {
             order
           ) =>
             total +
-            Number(
-              order.totalAmount ||
-                0
+            getShopRevenue(
+              order
             ),
           0
         );
@@ -912,9 +920,10 @@ export default function SellerReportsScreen() {
                 styles.sectionDescription
               }
             >
-              Based on orders with a
-              successful paid payment
-              status.
+              Paid orders only. Amounts are
+              your shop&apos;s bouquet sales and
+              exclude delivery fees, which go to
+              Riders.
             </Text>
 
             <View
@@ -1422,58 +1431,7 @@ export default function SellerReportsScreen() {
         </ScrollView>
 
         {/* BOTTOM NAVIGATION */}
-
-        <View
-          style={
-            styles.bottomNav
-          }
-        >
-          <NavItem
-            icon="⌂"
-            label="Dashboard"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-dashboard'
-              )
-            }
-          />
-
-          <NavItem
-            icon="♧"
-            label="Products"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-products'
-              )
-            }
-          />
-
-          <NavItem
-            icon="▣"
-            label="Orders"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-orders'
-              )
-            }
-          />
-
-          <NavItem
-            icon="▥"
-            label="Reports"
-            active
-          />
-
-          <NavItem
-            icon="○"
-            label="Profile"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-profile'
-              )
-            }
-          />
-        </View>
+        <SellerBottomNav active="reports" />
       </View>
     </SafeAreaView>
   );
@@ -1745,68 +1703,6 @@ function RatingRow({
   );
 }
 
-/*
- * =========================================================
- * NAV ITEM
- * =========================================================
- */
-
-function NavItem({
-  icon,
-  label,
-  active = false,
-  onPress,
-}: {
-  icon: string;
-  label: string;
-  active?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable
-      style={
-        styles.navItem
-      }
-      onPress={
-        onPress
-      }
-      disabled={
-        active
-      }
-    >
-      <View
-        style={[
-          styles.navIconContainer,
-
-          active &&
-            styles.activeNavIconContainer,
-        ]}
-      >
-        <Text
-          style={[
-            styles.navIcon,
-
-            active &&
-              styles.activeNavIcon,
-          ]}
-        >
-          {icon}
-        </Text>
-      </View>
-
-      <Text
-        style={[
-          styles.navText,
-
-          active &&
-            styles.activeNavText,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /*
  * =========================================================
@@ -1871,10 +1767,9 @@ function buildWeeklyData(
               order
             ) =>
               total +
-              Number(
-                order.totalAmount ||
-                  0
-              ),
+              getShopRevenue(
+              order
+            ),
             0
           );
 
@@ -1941,10 +1836,9 @@ function buildProductPerformance(
             : 1;
 
         current.sales +=
-          Number(
-            order.totalAmount ||
-              0
-          );
+          getShopRevenue(
+              order
+            );
 
         productMap.set(
           productName,
@@ -2183,7 +2077,7 @@ const styles =
         '#7F8982',
 
       fontSize:
-        10,
+        12,
 
       marginTop:
         12,
@@ -2259,7 +2153,7 @@ const styles =
         '#858E88',
 
       fontSize:
-        9,
+        11,
 
       lineHeight:
         14,
@@ -2293,7 +2187,7 @@ const styles =
         '#FFFFFF',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',
@@ -2318,7 +2212,7 @@ const styles =
         '#B96868',
 
       fontSize:
-        8,
+        11,
 
       lineHeight:
         12,
@@ -2395,7 +2289,7 @@ const styles =
         'rgba(255,255,255,0.78)',
 
       fontSize:
-        8,
+        11,
 
       marginTop:
         3,
@@ -2417,7 +2311,7 @@ const styles =
         '#FFFFFF',
 
       fontSize:
-        9,
+        11,
 
       letterSpacing:
         1,
@@ -2428,7 +2322,7 @@ const styles =
         '#FFFFFF',
 
       fontSize:
-        8,
+        11,
 
       fontWeight:
         '800',
@@ -2630,7 +2524,7 @@ const styles =
         '#414A44',
 
       fontSize:
-        11,
+        13,
 
       fontWeight:
         '900',
@@ -2697,7 +2591,7 @@ const styles =
         '#6F7972',
 
       fontSize:
-        8.5,
+        11.5,
     },
 
     performanceValue: {
@@ -2705,7 +2599,7 @@ const styles =
         '#414A44',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',
@@ -2854,7 +2748,7 @@ const styles =
         '#659276',
 
       fontSize:
-        8,
+        11,
 
       fontWeight:
         '900',
@@ -2873,7 +2767,7 @@ const styles =
         '#465049',
 
       fontSize:
-        8.5,
+        11.5,
 
       fontWeight:
         '800',
@@ -2895,7 +2789,7 @@ const styles =
         '#5F8F70',
 
       fontSize:
-        8.5,
+        11.5,
 
       fontWeight:
         '900',
@@ -2925,7 +2819,7 @@ const styles =
         '#465049',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',
@@ -3013,7 +2907,7 @@ const styles =
         '#74A485',
 
       fontSize:
-        11,
+        13,
 
       letterSpacing:
         1,
@@ -3024,7 +2918,7 @@ const styles =
         '#858F88',
 
       fontSize:
-        8,
+        11,
 
       marginTop:
         5,
@@ -3175,7 +3069,7 @@ const styles =
         '#414A44',
 
       fontSize:
-        9,
+        11,
 
       fontWeight:
         '900',
@@ -3239,7 +3133,7 @@ const styles =
         '#465049',
 
       fontSize:
-        8.5,
+        11.5,
 
       fontWeight:
         '900',
@@ -3250,7 +3144,7 @@ const styles =
         '#74A485',
 
       fontSize:
-        8,
+        11,
 
       letterSpacing:
         0.5,

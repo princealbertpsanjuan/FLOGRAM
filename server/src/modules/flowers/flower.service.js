@@ -295,6 +295,40 @@ export const deactivateFlower =
     return flower;
   };
 
+/*
+ * =========================================================
+ * SEARCH HELPERS
+ * =========================================================
+ */
+
+const escapeRegex = (value) =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/*
+ * Case-insensitive match at the start of a word, with the
+ * trailing plural removed: "Roses" -> /\brose/i, which
+ * matches "Rose", "Roses" and "Red Roses".
+ */
+const buildLooseWordRegex = (value) => {
+  let stem = String(value).trim().toLowerCase();
+
+  if (stem.length > 4 && stem.endsWith("ies")) {
+    stem = `${stem.slice(0, -3)}y`;
+  } else if (stem.length > 3 && stem.endsWith("s") && !stem.endsWith("ss")) {
+    stem = stem.slice(0, -1);
+  }
+
+  /*
+   * "lily" should also match "Lilies".
+   */
+  const pattern =
+    stem.length > 3 && stem.endsWith("y")
+      ? `${escapeRegex(stem.slice(0, -1))}(?:y|ies)`
+      : escapeRegex(stem);
+
+  return new RegExp(`\\b${pattern}`, "i");
+};
+
 export const getPublicFlowers =
   async (filters = {}) => {
     const query = {
@@ -302,79 +336,72 @@ export const getPublicFlowers =
       isAvailable: true,
     };
 
-    if (filters.search) {
-      const searchRegex =
-        new RegExp(
-          filters.search,
-          "i"
-        );
+    /*
+     * =====================================================
+     * KEYWORD SEARCH
+     * =====================================================
+     *
+     * - User input is escaped (no regex injection).
+     * - Every word must match at least one field, so
+     *   "red rose" finds red rose bouquets.
+     * - Simple singular/plural tolerance: "roses",
+     *   "rose" and "Rose" all match.
+     */
 
-      query.$or = [
-        {
-          name:
-            searchRegex,
-        },
-        {
-          description:
-            searchRegex,
-        },
-        {
-          category:
-            searchRegex,
-        },
-        {
-          occasion:
-            searchRegex,
-        },
-        {
-          flowerTypes:
-            searchRegex,
-        },
-        {
-          colors:
-            searchRegex,
-        },
-      ];
+    if (filters.search) {
+      const words =
+        String(filters.search)
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 6);
+
+      const wordConditions =
+        words.map((word) => {
+          const wordRegex =
+            buildLooseWordRegex(word);
+
+          return {
+            $or: [
+              { name: wordRegex },
+              { description: wordRegex },
+              { category: wordRegex },
+              { occasion: wordRegex },
+              { flowerTypes: wordRegex },
+              { colors: wordRegex },
+            ],
+          };
+        });
+
+      if (wordConditions.length) {
+        query.$and = wordConditions;
+      }
     }
 
-    if (filters.category) {
-      query.category = {
-        $regex:
-          `^${filters.category}$`,
+    /*
+     * Filters are matched loosely too, because Sellers
+     * type values freely (e.g. "Roses" vs "Rose",
+     * "Birthday Gift" vs "Birthday").
+     */
 
-        $options:
-          "i",
-      };
+    if (filters.category) {
+      query.category =
+        buildLooseWordRegex(filters.category);
     }
 
     if (filters.occasion) {
-      query.occasion = {
-        $regex:
-          `^${filters.occasion}$`,
-
-        $options:
-          "i",
-      };
+      query.occasion =
+        buildLooseWordRegex(filters.occasion);
     }
 
     if (filters.flowerType) {
-      query.flowerTypes = {
-        $regex:
-          `^${filters.flowerType}$`,
-
-        $options:
-          "i",
-      };
+      query.flowerTypes =
+        buildLooseWordRegex(filters.flowerType);
     }
 
     if (filters.color) {
-      query.colors = {
-        $regex:
-          `^${filters.color}$`,
-
-        $options:
-          "i",
-      };
+      query.colors =
+        buildLooseWordRegex(filters.color);
     }
 
     if (
