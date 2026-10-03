@@ -958,6 +958,65 @@ export default function SellerProfileScreen() {
             />
           </View>
 
+          {/* SHOP TOOLS */}
+
+          <View
+            style={
+              styles.menuCard
+            }
+          >
+            <MenuItem
+              icon="₱"
+              label="Earnings & Payouts"
+              onPress={() =>
+                router.push(
+                  '/(seller)/seller-earnings' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="+"
+              label="Gift Add-ons"
+              onPress={() =>
+                router.push(
+                  '/(seller)/seller-addons' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="↗"
+              label="Shop Insights"
+              onPress={() =>
+                router.push(
+                  '/(seller)/seller-insights' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="✦"
+              label="AI Seller Assistant"
+              onPress={() =>
+                router.push(
+                  '/(shared)/work-assistant' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="!"
+              label="My Reports"
+              onPress={() =>
+                router.push(
+                  '/(shared)/my-reports' as never
+                )
+              }
+              last
+            />
+          </View>
+
           {/* SETTINGS & SUPPORT */}
 
           <View

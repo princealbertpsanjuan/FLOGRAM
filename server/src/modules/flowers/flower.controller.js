@@ -143,6 +143,7 @@ export const getPublic = async (
       color: req.query.color,
       minPrice: req.query.minPrice,
       maxPrice: req.query.maxPrice,
+      florist: req.query.florist,
     };
 
     const flowers = await getPublicFlowers(

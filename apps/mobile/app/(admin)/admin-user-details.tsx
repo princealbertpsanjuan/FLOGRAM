@@ -144,6 +144,7 @@ function getStatusStyle(
       };
 
     case "suspended":
+    case "banned":
       return {
         backgroundColor:
           COLORS.redBackground,
@@ -1176,6 +1177,33 @@ export default function AdminUserDetailsScreen() {
             </View>
           )}
 
+          {user.role !== "admin" ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/(admin)/admin-violations",
+                  params: {
+                    userId,
+                    userName: getFullName(user),
+                    userRole: user.role,
+                  },
+                } as never)
+              }
+              style={styles.violationButton}
+            >
+              <Ionicons
+                name="warning-outline"
+                size={17}
+                color="#B45309"
+              />
+
+              <Text style={styles.violationButtonText}>
+                Policy Violations & Penalties
+              </Text>
+            </Pressable>
+          ) : null}
+
           <View
             style={
               styles.bottomSpace
@@ -1761,7 +1789,26 @@ const styles =
       marginTop: 14,
     },
 
-    bottomSpace: {
+    violationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 48,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#F2C27B",
+    backgroundColor: "#FFF8EC",
+  },
+
+  violationButtonText: {
+    color: "#B45309",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  bottomSpace: {
       height: 35,
     },
   });

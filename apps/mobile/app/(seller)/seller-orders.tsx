@@ -44,6 +44,8 @@ import { ScreenLoader } from '../../components/ui/state-views';
 
 import { formatAddOnsLine } from '../../services/addons';
 
+import ReportProblemLink from '../../components/ui/report-problem-link';
+
 /*
  * =========================================================
  * TYPES
@@ -2010,6 +2012,14 @@ function OrderCard({
             </Text>
           </View>
         </View>
+      ) : null}
+
+      {order.orderStatus !== 'pending' ? (
+        <ReportProblemLink
+          orderId={order._id}
+          productName={order.productName}
+          color="#5E9874"
+        />
       ) : null}
     </View>
   );

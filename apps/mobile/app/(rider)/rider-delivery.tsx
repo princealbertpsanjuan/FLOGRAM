@@ -51,6 +51,8 @@ import {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import ReportProblemLink from '../../components/ui/report-problem-link';
+
 /*
  * =========================================================
  * RIDER ACTIVE DELIVERY
@@ -3151,6 +3153,24 @@ setLocationError(null);
               </Pressable>
             </View>
           )}
+
+          {delivery.status !== 'available' ? (
+            <ReportProblemLink
+              orderId={
+                typeof delivery.order === 'object' && delivery.order
+                  ? delivery.order._id
+                  : typeof delivery.order === 'string'
+                    ? delivery.order
+                    : null
+              }
+              productName={
+                typeof delivery.order === 'object' && delivery.order
+                  ? delivery.order.productName
+                  : null
+              }
+              color="#C49317"
+            />
+          ) : null}
 
           <View
             style={

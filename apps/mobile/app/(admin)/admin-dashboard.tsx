@@ -31,6 +31,7 @@ import {
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import InboxBell from '../../components/ui/inbox-bell';
 
 /*
  * =========================================================
@@ -584,6 +585,9 @@ export default function AdminDashboardScreen() {
           </Text>
         </View>
 
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <InboxBell />
+
         <Pressable
           style={styles.headerMenu}
           onPress={() =>
@@ -598,6 +602,7 @@ export default function AdminDashboardScreen() {
             color="#FFFFFF"
           />
         </Pressable>
+        </View>
       </View>
 
           {/*
@@ -1594,6 +1599,121 @@ export default function AdminDashboardScreen() {
               </Text>
             </Pressable>
           </View>
+
+          {/*
+           * ===============================================
+           * MARKETPLACE TOOLS
+           * ===============================================
+           */}
+
+          <View
+            style={
+              styles.sectionHeadingRow
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.contentHeading
+                }
+              >
+                Marketplace Tools
+              </Text>
+
+              <Text
+                style={
+                  styles.contentSubheading
+                }
+              >
+                Seller payouts, disputes, penalties and insights
+              </Text>
+            </View>
+          </View>
+
+          {[
+            [
+              {
+                icon: "wallet-outline" as const,
+                title: "Seller Payouts",
+                text: "Sales minus commission, record transfers",
+                route: "/(admin)/admin-seller-payouts",
+              },
+              {
+                icon: "chatbubbles-outline" as const,
+                title: "Disputes",
+                text: "Review and resolve reported orders",
+                route: "/(admin)/admin-disputes",
+              },
+            ],
+            [
+              {
+                icon: "warning-outline" as const,
+                title: "Violations",
+                text: "Warnings, suspensions and bans",
+                route: "/(admin)/admin-violations",
+              },
+              {
+                icon: "analytics-outline" as const,
+                title: "Customer Insights",
+                text: "Review sentiment and buying patterns",
+                route: "/(admin)/admin-insights",
+              },
+            ],
+          ].map((row, rowIndex) => (
+            <View
+              key={rowIndex}
+              style={[
+                riderOpsStyles.row,
+                { marginBottom: 12 },
+              ]}
+            >
+              {row.map(tool => (
+                <Pressable
+                  key={tool.title}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    riderOpsStyles.card,
+                    pressed && {
+                      opacity: 0.9,
+                    },
+                  ]}
+                  onPress={() =>
+                    router.push(
+                      tool.route as never
+                    )
+                  }
+                >
+                  <View
+                    style={
+                      riderOpsStyles.icon
+                    }
+                  >
+                    <Ionicons
+                      name={tool.icon}
+                      size={20}
+                      color={COLORS.purpleAccent}
+                    />
+                  </View>
+
+                  <Text
+                    style={
+                      riderOpsStyles.title
+                    }
+                  >
+                    {tool.title}
+                  </Text>
+
+                  <Text
+                    style={
+                      riderOpsStyles.text
+                    }
+                  >
+                    {tool.text}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ))}
 
           {/*
            * ===============================================

@@ -1372,7 +1372,8 @@ export type AdminUserRole =
 export type AdminUserAccountStatus =
   | "active"
   | "inactive"
-  | "suspended";
+  | "suspended"
+  | "banned";
 
 export type AdminUserVerificationStatus =
   | "not_required"

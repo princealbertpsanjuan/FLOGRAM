@@ -51,6 +51,8 @@ import { ScreenLoader } from '../../components/ui/state-views';
 
 import { formatAddOnsLine } from '../../services/addons';
 
+import ReportProblemLink from '../../components/ui/report-problem-link';
+
 /*
  * =========================================================
  * API
@@ -2945,6 +2947,13 @@ function StandaloneOrderDetails({
             </Pressable>
           ) : null}
 
+          {order.orderStatus !== "pending" ? (
+            <ReportProblemLink
+              orderId={order._id}
+              productName={order.productName}
+            />
+          ) : null}
+
           <View
             style={{
               height: 35,
@@ -3495,6 +3504,14 @@ function ChildOrderCard({
                 </>
               )}
             </Pressable>
+          ) : null}
+
+          {order.orderStatus !== "pending" ? (
+            <ReportProblemLink
+              orderId={order._id}
+              productName={order.productName}
+              compact
+            />
           ) : null}
         </View>
       ) : null}

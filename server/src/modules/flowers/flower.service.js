@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Flower from "./flower.model.js";
 import Florist from "../florists/florist.model.js";
 import User from "../auth/auth.model.js";
@@ -346,6 +347,18 @@ export const getPublicFlowers =
       isActive: true,
       isAvailable: true,
     };
+
+    /*
+     * One shop's bouquets (Following list, shop page).
+     */
+    if (
+      filters.florist &&
+      mongoose.Types.ObjectId.isValid(
+        String(filters.florist)
+      )
+    ) {
+      query.florist = filters.florist;
+    }
 
     /*
      * =====================================================

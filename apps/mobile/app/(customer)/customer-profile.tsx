@@ -1158,6 +1158,32 @@ export default function CustomerProfileScreen() {
                 } as never)
               }
             />
+
+            <MenuDivider />
+
+            <ProfileMenuItem
+              icon="storefront-outline"
+              title="Following"
+              subtitle="Florist shops you follow"
+              onPress={() =>
+                router.push(
+                  '/(customer)/customer-following' as never
+                )
+              }
+            />
+
+            <MenuDivider />
+
+            <ProfileMenuItem
+              icon="flag-outline"
+              title="My Reports"
+              subtitle="Problems you reported about orders"
+              onPress={() =>
+                router.push(
+                  '/(shared)/my-reports' as never
+                )
+              }
+            />
           </View>
 
           {/*

@@ -39,6 +39,7 @@ import {
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import InboxBell from '../../components/ui/inbox-bell';
 
 /*
  * =========================================================
@@ -948,6 +949,9 @@ export default function SellerDashboardScreen() {
               </Text>
             </View>
 
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <InboxBell accent="#5E9874" />
+
             <Pressable
               style={
                 styles.headerMenuButton
@@ -966,6 +970,7 @@ export default function SellerDashboardScreen() {
                 •••
               </Text>
             </Pressable>
+            </View>
           </View>
 
           {/* SUMMARY */}
