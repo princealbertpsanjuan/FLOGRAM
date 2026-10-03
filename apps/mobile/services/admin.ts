@@ -1,4 +1,14 @@
 import { apiRequest } from "./api";
+import { File as ExpoFile } from "expo-file-system";
+
+import type {
+  RiderPayout,
+  RiderShift,
+  RiderShiftStatus,
+} from "./delivery";
+
+export type { RiderPayout, RiderShift } from "./delivery";
+
 
 /*
  * =========================================================
@@ -1887,4 +1897,283 @@ export async function updateAdminSettings(
     response,
     "Admin settings could not be updated."
   );
+}
+/*
+ * =========================================================
+ * ADMIN – RIDER WORK SHIFTS
+ * =========================================================
+ *
+ * Admin posts shifts with a slot limit, reviews Rider
+ * reservation requests, and sees filled slots.
+ *
+ * POST   /riders/shifts
+ * GET    /riders/shifts
+ * GET    /riders/shifts/:shiftId
+ * PATCH  /riders/shifts/:shiftId
+ * PATCH  /riders/shifts/:shiftId/reservations/:reservationId/review
+ * =========================================================
+ */
+
+
+type AdminShiftResponse = {
+  success: boolean;
+  message: string;
+  data: { shift: RiderShift };
+};
+
+type AdminShiftsResponse = {
+  success: boolean;
+  message: string;
+  data: { shifts: RiderShift[] };
+};
+
+export type CreateRiderShiftPayload = {
+  startAt: string;
+  endAt: string;
+  slotLimit: number;
+};
+
+export type UpdateRiderShiftPayload = Partial<CreateRiderShiftPayload> & {
+  status?: RiderShiftStatus;
+};
+
+export async function getAdminRiderShifts(): Promise<RiderShift[]> {
+  const response = await apiRequest<AdminShiftsResponse>("/riders/shifts", {
+    method: "GET",
+    authenticated: true,
+  });
+
+  return response.data.shifts;
+}
+
+export async function getAdminRiderShift(
+  shiftId: string
+): Promise<RiderShift> {
+  const response = await apiRequest<AdminShiftResponse>(
+    `/riders/shifts/${encodeURIComponent(shiftId)}`,
+    { method: "GET", authenticated: true }
+  );
+
+  return response.data.shift;
+}
+
+export async function createAdminRiderShift(
+  payload: CreateRiderShiftPayload
+): Promise<RiderShift> {
+  const response = await apiRequest<AdminShiftResponse>("/riders/shifts", {
+    method: "POST",
+    authenticated: true,
+    body: JSON.stringify(payload),
+  });
+
+  return response.data.shift;
+}
+
+export async function updateAdminRiderShift(
+  shiftId: string,
+  payload: UpdateRiderShiftPayload
+): Promise<RiderShift> {
+  const response = await apiRequest<AdminShiftResponse>(
+    `/riders/shifts/${encodeURIComponent(shiftId)}`,
+    {
+      method: "PATCH",
+      authenticated: true,
+      body: JSON.stringify(payload),
+    }
+  );
+
+  return response.data.shift;
+}
+
+export async function reviewAdminShiftRequest(
+  shiftId: string,
+  reservationId: string,
+  decision: "approved" | "rejected"
+): Promise<RiderShift> {
+  const response = await apiRequest<AdminShiftResponse>(
+    `/riders/shifts/${encodeURIComponent(
+      shiftId
+    )}/reservations/${encodeURIComponent(reservationId)}/review`,
+    {
+      method: "PATCH",
+      authenticated: true,
+      body: JSON.stringify({ decision }),
+    }
+  );
+
+  return response.data.shift;
+}
+
+/*
+ * =========================================================
+ * ADMIN – RIDER PAYOUTS
+ * =========================================================
+ *
+ * Rider pay = completed delivery fees (Order.deliveryFee).
+ * There is NO bank-transfer gateway: Admin transfers the
+ * money externally, then FLOGRAM records the reference
+ * number and payment proof. COD remittance is separate.
+ *
+ * GET    /riders/payouts/balances
+ * GET    /riders/payouts?status=
+ * GET    /riders/payouts/:payoutId
+ * POST   /riders/payouts/rider/:riderId
+ * PATCH  /riders/payouts/:payoutId/pay      (multipart)
+ * PATCH  /riders/payouts/:payoutId/cancel
+ * =========================================================
+ */
+
+export type RiderPayoutBalance = {
+  riderId: string;
+  riderUser: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phoneNumber: string;
+  } | null;
+  isActive: boolean;
+  unpaidDeliveryCount: number;
+  amountOwed: number;
+  oldestUnpaidAt: string | null;
+  latestUnpaidAt: string | null;
+};
+
+type PayoutBalancesResponse = {
+  success: boolean;
+  message: string;
+  data: { balances: RiderPayoutBalance[] };
+};
+
+type AdminPayoutResponse = {
+  success: boolean;
+  message: string;
+  data: { payout: RiderPayout };
+};
+
+type AdminPayoutsResponse = {
+  success: boolean;
+  message: string;
+  data: { payouts: RiderPayout[] };
+};
+
+export async function getRiderPayoutBalances(): Promise<RiderPayoutBalance[]> {
+  const response = await apiRequest<PayoutBalancesResponse>(
+    "/riders/payouts/balances",
+    { method: "GET", authenticated: true }
+  );
+
+  return response.data.balances;
+}
+
+export async function getAdminRiderPayouts(
+  status?: "pending" | "paid" | "cancelled"
+): Promise<RiderPayout[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+
+  const response = await apiRequest<AdminPayoutsResponse>(
+    `/riders/payouts${query}`,
+    { method: "GET", authenticated: true }
+  );
+
+  return response.data.payouts;
+}
+
+export async function getAdminRiderPayout(
+  payoutId: string
+): Promise<RiderPayout> {
+  const response = await apiRequest<AdminPayoutResponse>(
+    `/riders/payouts/${encodeURIComponent(payoutId)}`,
+    { method: "GET", authenticated: true }
+  );
+
+  return response.data.payout;
+}
+
+export async function createAdminRiderPayout(
+  riderId: string,
+  period: { periodStart: string; periodEnd: string }
+): Promise<RiderPayout> {
+  const response = await apiRequest<AdminPayoutResponse>(
+    `/riders/payouts/rider/${encodeURIComponent(riderId)}`,
+    {
+      method: "POST",
+      authenticated: true,
+      body: JSON.stringify(period),
+    }
+  );
+
+  return response.data.payout;
+}
+
+export type MarkRiderPayoutPaidPayload = {
+  referenceNumber: string;
+  paymentMethod?: string;
+  adminRemarks?: string;
+  proofImageUri: string;
+};
+
+export async function markAdminRiderPayoutPaid(
+  payoutId: string,
+  payload: MarkRiderPayoutPaidPayload
+): Promise<RiderPayout> {
+  const referenceNumber = payload.referenceNumber.trim();
+
+  if (!referenceNumber) {
+    throw new Error("Payment reference number is required.");
+  }
+
+  if (!payload.proofImageUri?.trim()) {
+    throw new Error("Proof of payment image is required.");
+  }
+
+  const formData = new FormData();
+
+  formData.append("referenceNumber", referenceNumber);
+
+  if (payload.paymentMethod?.trim()) {
+    formData.append("paymentMethod", payload.paymentMethod.trim());
+  }
+
+  if (payload.adminRemarks?.trim()) {
+    formData.append("adminRemarks", payload.adminRemarks.trim());
+  }
+
+  /*
+   * Expo SDK 57: append a real Expo File, not the old
+   * { uri, name, type } object (which fails with
+   * "Unsupported FormDataPart implementation").
+   * Must match riderPayoutProofUpload.single("proofImage").
+   */
+  formData.append(
+    "proofImage",
+    new ExpoFile(payload.proofImageUri.trim())
+  );
+
+  const response = await apiRequest<AdminPayoutResponse>(
+    `/riders/payouts/${encodeURIComponent(payoutId)}/pay`,
+    {
+      method: "PATCH",
+      authenticated: true,
+      body: formData,
+    }
+  );
+
+  return response.data.payout;
+}
+
+export async function cancelAdminRiderPayout(
+  payoutId: string,
+  reason: string
+): Promise<RiderPayout> {
+  const response = await apiRequest<AdminPayoutResponse>(
+    `/riders/payouts/${encodeURIComponent(payoutId)}/cancel`,
+    {
+      method: "PATCH",
+      authenticated: true,
+      body: JSON.stringify({ reason }),
+    }
+  );
+
+  return response.data.payout;
 }
