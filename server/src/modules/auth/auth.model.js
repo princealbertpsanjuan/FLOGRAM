@@ -48,8 +48,25 @@ const userSchema = new mongoose.Schema(
 
     accountStatus: {
       type: String,
-      enum: ["active", "inactive", "suspended"],
+      enum: ["active", "inactive", "suspended", "banned"],
       default: "active",
+    },
+
+    /*
+     * Set by Admin penalties (policy violations).
+     * A temporary suspension lifts itself once
+     * suspendedUntil has passed.
+     */
+    suspendedUntil: {
+      type: Date,
+      default: null,
+    },
+
+    suspensionReason: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 500,
     },
 
     verificationStatus: {

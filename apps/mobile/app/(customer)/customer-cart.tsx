@@ -34,6 +34,8 @@ import NotificationBell from '../../components/customer/notification-bell';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { formatAddOnsLine, type OrderAddOn } from '../../services/addons';
+
 /*
  * =========================================================
  * CONFIGURATION
@@ -121,6 +123,10 @@ type CartItem = {
   lineSubtotal?:
     | number
     | null;
+
+  addOns?: OrderAddOn[];
+
+  addOnsTotal?: number;
 };
 
 type Cart = {
@@ -1809,6 +1815,15 @@ function CartItemCard({
           </Text>
         )}
 
+        {item.addOns?.length ? (
+          <Text
+            numberOfLines={2}
+            style={styles.addOnsLine}
+          >
+            + {formatAddOnsLine(item.addOns)} ({formatCurrency(item.addOnsTotal ?? 0)})
+          </Text>
+        ) : null}
+
         <View
           style={
             styles.itemBottomRow
@@ -2562,6 +2577,13 @@ const styles =
 
       justifyContent:
         "center",
+    },
+
+    addOnsLine: {
+      marginTop: 4,
+      color: "#B5476F",
+      fontSize: 12,
+      fontWeight: "600",
     },
 
     unitPrice: {

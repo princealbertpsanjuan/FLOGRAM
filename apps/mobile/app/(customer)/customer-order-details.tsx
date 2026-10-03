@@ -49,6 +49,8 @@ import {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { formatAddOnsLine } from '../../services/addons';
+
 /*
  * =========================================================
  * API
@@ -3178,6 +3180,18 @@ function ChildOrderCard({
             {order.quantity ||
               1}
           </Text>
+
+          {order.addOns?.length ? (
+            <Text
+              numberOfLines={2}
+              style={[
+                styles.childQuantity,
+                { color: "#B5476F", fontWeight: "600" },
+              ]}
+            >
+              + {formatAddOnsLine(order.addOns)}
+            </Text>
+          ) : null}
         </View>
 
         <Text

@@ -309,3 +309,55 @@ export const customBouquetRequestUpload =
         10 * 1024 * 1024,
     },
   });
+/*
+ * =========================================================
+ * DISPUTE EVIDENCE PHOTOS
+ * uploads/disputes/
+ * =========================================================
+ *
+ * Field name: images (up to 3 photos)
+ * =========================================================
+ */
+
+export const disputeEvidenceUpload =
+  multer({
+    storage: createStorage([
+      "disputes",
+    ]),
+
+    fileFilter:
+      imageOnlyFileFilter,
+
+    limits: {
+      fileSize:
+        10 * 1024 * 1024,
+
+      files: 3,
+    },
+  });
+
+/*
+ * =========================================================
+ * SELLER PAYOUT PROOF
+ * uploads/sellers/payouts/
+ * =========================================================
+ *
+ * Field name: proofImage
+ * =========================================================
+ */
+
+export const sellerPayoutProofUpload =
+  multer({
+    storage: createStorage([
+      "sellers",
+      "payouts",
+    ]),
+
+    fileFilter:
+      imageOnlyFileFilter,
+
+    limits: {
+      fileSize:
+        10 * 1024 * 1024,
+    },
+  });

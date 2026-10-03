@@ -45,6 +45,8 @@ import {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { formatAddOnsLine, type OrderAddOn } from '../../services/addons';
+
 /* =========================================================
  * TYPES
  * ======================================================= */
@@ -215,6 +217,10 @@ type CartItem = {
   lineSubtotal?:
     | number
     | null;
+
+  addOns?: OrderAddOn[];
+
+  addOnsTotal?: number;
 };
 
 type Cart = {
@@ -3080,6 +3086,15 @@ export default function CustomerCheckoutScreen() {
                               item.quantity
                             }
                           </Text>
+
+                          {item.addOns?.length ? (
+                            <Text
+                              numberOfLines={2}
+                              style={styles.addOnsLine}
+                            >
+                              + {formatAddOnsLine(item.addOns)}
+                            </Text>
+                          ) : null}
                         </View>
 
                         <View
@@ -5368,6 +5383,13 @@ const styles =
 
       color:
         COLORS.primary,
+    },
+
+    addOnsLine: {
+      marginTop: 3,
+      color: "#B5476F",
+      fontSize: 12,
+      fontWeight: "600",
     },
 
     quantityText: {

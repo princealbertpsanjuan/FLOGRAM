@@ -30,6 +30,10 @@ import adminRouter from "../modules/admin/admin.routes.js";
 import analyticsRouter from "../modules/analytics/analytics.routes.js";
 import addOnRouter from "../modules/addons/addon.routes.js";
 import followRouter from "../modules/follows/follow.routes.js";
+import disputeRouter from "../modules/disputes/dispute.routes.js";
+import violationRouter from "../modules/violations/violation.routes.js";
+import sellerPayoutRouter from "../modules/sellerPayouts/seller-payout.routes.js";
+import workAssistantRouter from "../modules/assistant/work-assistant.routes.js";
 
 const apiRouter = Router();
 
@@ -289,6 +293,38 @@ apiRouter.use(
 apiRouter.use(
   "/follows",
   followRouter
+);
+
+/*
+ * DISPUTES, POLICY VIOLATIONS & PENALTIES
+ */
+
+apiRouter.use(
+  "/disputes",
+  disputeRouter
+);
+
+apiRouter.use(
+  "/violations",
+  violationRouter
+);
+
+/*
+ * SELLER EARNINGS & PAYOUTS
+ */
+
+apiRouter.use(
+  "/seller-payouts",
+  sellerPayoutRouter
+);
+
+/*
+ * AI ASSISTANT — SELLER AND RIDER MODES
+ */
+
+apiRouter.use(
+  "/assistant",
+  workAssistantRouter
 );
 
 export default apiRouter;

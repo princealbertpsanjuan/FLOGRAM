@@ -42,6 +42,8 @@ import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { formatAddOnsLine } from '../../services/addons';
+
 /*
  * =========================================================
  * TYPES
@@ -1470,6 +1472,18 @@ function OrderCard({
                 unitPrice
               )}
             </Text>
+
+            {order.addOns?.length ? (
+              <Text
+                numberOfLines={2}
+                style={[
+                  styles.productMeta,
+                  { color: '#B5476F', fontWeight: '600' },
+                ]}
+              >
+                Add-ons: {formatAddOnsLine(order.addOns)} ({formatCurrency(order.addOnsTotal ?? 0)})
+              </Text>
+            ) : null}
           </View>
 
           <Text

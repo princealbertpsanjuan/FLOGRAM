@@ -1650,6 +1650,15 @@ export type AdminOrder = {
   _id?: string;
   id?: string;
 
+  addOns?: {
+    name: string;
+    category?: string;
+    price: number;
+    quantity: number;
+  }[];
+
+  addOnsTotal?: number;
+
   customer?:
     | AdminOrderPerson
     | string

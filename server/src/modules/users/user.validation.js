@@ -136,6 +136,7 @@ export const adminUserListValidation = [
       "active",
       "inactive",
       "suspended",
+      "banned",
     ])
     .withMessage(
       "Account status must be active, inactive, or suspended."

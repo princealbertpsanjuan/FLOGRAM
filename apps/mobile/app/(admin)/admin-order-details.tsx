@@ -21,6 +21,8 @@ import {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { formatAddOnsLine } from '../../services/addons';
+
 const COLORS = {
   purple: "#312E81",
   purpleAccent: "#5B4FCF",
@@ -559,6 +561,13 @@ export default function AdminOrderDetailsScreen() {
     label="Quantity"
     value={order.quantity ?? 0}
   />
+
+  {order.addOns?.length ? (
+    <DetailRow
+      label="Gift Add-ons"
+      value={formatAddOnsLine(order.addOns)}
+    />
+  ) : null}
 
   <DetailRow
     label="Fulfillment Method"

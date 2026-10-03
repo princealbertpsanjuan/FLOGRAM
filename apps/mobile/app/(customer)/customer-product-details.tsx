@@ -28,6 +28,10 @@ import {
 } from "../../services/api";
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import AddOnPicker from '../../components/customer/addon-picker';
+import AlsoBoughtRow from '../../components/customer/also-bought-row';
+import FollowShopButton from '../../components/customer/follow-shop-button';
+import type { AddOnSelection, GiftAddOn } from '../../services/addons';
 
 /*
  * =========================================================
@@ -306,6 +310,13 @@ export default function CustomerProductDetailsScreen() {
     useState(false);
 
   /*
+   * Gift add-ons chosen on this page (sent with Add to Cart).
+   */
+  const [selectedAddOns, setSelectedAddOns] = useState<AddOnSelection[]>([]);
+
+  const [shopAddOns, setShopAddOns] = useState<GiftAddOn[]>([]);
+
+  /*
    * =======================================================
    * LOAD PRODUCT
    * =======================================================
@@ -448,9 +459,15 @@ export default function CustomerProductDetailsScreen() {
       ? flower.florist
       : null;
 
+  const addOnsTotal = selectedAddOns.reduce((sum, selection) => {
+    const addOn = shopAddOns.find(item => item._id === selection.addOnId);
+    return sum + (addOn ? Number(addOn.price || 0) * selection.quantity : 0);
+  }, 0);
+
   const totalPrice =
     (flower?.price ?? 0) *
-    quantity;
+    quantity +
+    addOnsTotal;
 
   /*
    * =======================================================
@@ -522,6 +539,9 @@ export default function CustomerProductDetailsScreen() {
                       flower._id,
 
                     quantity,
+
+                    addOns:
+                      selectedAddOns,
                   }
                 ),
               }
@@ -999,15 +1019,21 @@ export default function CustomerProductDetailsScreen() {
               styles.productCard
             }
           >
-            <Text
-              style={
-                styles.shopName
-              }
-            >
-              {getFloristName(
-                flower.florist
-              )}
-            </Text>
+            <View style={styles.shopRow}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.shopName,
+                  { flex: 1 },
+                ]}
+              >
+                {getFloristName(
+                  flower.florist
+                )}
+              </Text>
+
+              <FollowShopButton floristId={florist?._id} />
+            </View>
 
             <Text
               style={
@@ -1432,6 +1458,15 @@ export default function CustomerProductDetailsScreen() {
               order is confirmed.
             </Text>
           </View>
+
+          <AddOnPicker
+            floristId={florist?._id}
+            value={selectedAddOns}
+            onChange={setSelectedAddOns}
+            onAddOnsLoaded={setShopAddOns}
+          />
+
+          <AlsoBoughtRow flowerId={flower._id} />
 
           <View
             style={
@@ -2395,6 +2430,12 @@ const styles =
       lineHeight: 17,
 
       color: "#8A6C42",
+    },
+
+    shopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
     },
 
     bottomSpacer: {
