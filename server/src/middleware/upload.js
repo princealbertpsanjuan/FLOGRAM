@@ -2,6 +2,12 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
+import {
+  getSafeExtension,
+  imageFileFilter,
+  imageOrPdfFileFilter,
+} from "../utils/uploadFileTypes.js";
+
 const createStorage = (folders) =>
   multer.diskStorage({
     destination: (req, file, cb) => {
@@ -23,7 +29,7 @@ const createStorage = (folders) =>
         Date.now() +
         "-" +
         Math.round(Math.random() * 1e9) +
-        path.extname(file.originalname);
+        getSafeExtension(file);
 
       cb(null, uniqueName);
     },
@@ -46,33 +52,7 @@ const createStorage = (folders) =>
  * =========================================================
  */
 
-const fileFilter = (
-  req,
-  file,
-  cb
-) => {
-  const allowedTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/jpg",
-    "application/pdf",
-  ];
-
-  if (
-    !allowedTypes.includes(
-      file.mimetype
-    )
-  ) {
-    return cb(
-      new Error(
-        "Only JPG, PNG, and PDF files are allowed."
-      ),
-      false
-    );
-  }
-
-  cb(null, true);
-};
+const fileFilter = imageOrPdfFileFilter;
 
 /*
  * =========================================================
@@ -90,32 +70,7 @@ const fileFilter = (
  * =========================================================
  */
 
-const imageOnlyFileFilter = (
-  req,
-  file,
-  cb
-) => {
-  const allowedTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/jpg",
-  ];
-
-  if (
-    !allowedTypes.includes(
-      file.mimetype
-    )
-  ) {
-    return cb(
-      new Error(
-        "Only JPG or PNG images are allowed."
-      ),
-      false
-    );
-  }
-
-  cb(null, true);
-};
+const imageOnlyFileFilter = imageFileFilter;
 
 /*
  * =========================================================
@@ -135,7 +90,7 @@ export const sellerVerificationUpload =
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });
 
@@ -157,7 +112,7 @@ export const riderVerificationUpload =
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });
 
@@ -174,11 +129,11 @@ export const flowerUpload =
       "flowers",
     ]),
 
-    fileFilter,
+    fileFilter: imageOnlyFileFilter,
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });
 
@@ -195,11 +150,11 @@ export const bloomboardUpload =
       "bloomboard",
     ]),
 
-    fileFilter,
+    fileFilter: imageOnlyFileFilter,
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });
 
@@ -233,7 +188,7 @@ export const deliveryProofUpload =
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });
 
@@ -270,7 +225,7 @@ export const riderRemittanceProofUpload =
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });
 
@@ -313,7 +268,7 @@ export const riderPayoutProofUpload =
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });
 
@@ -351,6 +306,6 @@ export const customBouquetRequestUpload =
 
     limits: {
       fileSize:
-        5 * 1024 * 1024,
+        10 * 1024 * 1024,
     },
   });

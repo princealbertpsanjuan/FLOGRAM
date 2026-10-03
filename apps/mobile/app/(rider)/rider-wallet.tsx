@@ -722,6 +722,10 @@ export default function RiderWalletScreen() {
         const result =
           await ImagePicker
             .launchCameraAsync({
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
               mediaTypes: [
                 'images',
               ],
@@ -776,6 +780,10 @@ export default function RiderWalletScreen() {
         const result =
           await ImagePicker
             .launchImageLibraryAsync({
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
               mediaTypes: [
                 'images',
               ],

@@ -32,6 +32,8 @@ import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
 
 import NotificationBell from '../../components/customer/notification-bell';
 
+import { File as ExpoFile } from "expo-file-system";
+
 /* =========================================================
  * TYPES
  * ======================================================= */
@@ -1228,6 +1230,10 @@ export default function CustomerBloomboardScreen() {
         const result =
           await ImagePicker.launchImageLibraryAsync(
             {
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
               mediaTypes: [
                 "images",
               ],
@@ -1235,7 +1241,7 @@ export default function CustomerBloomboardScreen() {
                 true,
               selectionLimit:
                 remaining,
-              quality: 0.9,
+              quality: 0.8,
             }
           );
 
@@ -1343,33 +1349,19 @@ export default function CustomerBloomboardScreen() {
         );
 
         selectedImages.forEach(
-          (image, index) => {
-            const extension =
-              image.uri
-                .split(".")
-                .pop()
-                ?.split("?")[0]
-                ?.toLowerCase() ||
-              "jpg";
+          (image) => {
 
-            const fallbackType =
-              extension === "png"
-                ? "image/png"
-                : extension === "webp"
-                  ? "image/webp"
-                  : "image/jpeg";
-
+            /*
+             * Expo SDK 57 fetch rejects the old
+             * { uri, name, type } object
+             * ("Unsupported FormDataPart
+             * implementation"). Send a real Expo File.
+             */
             formData.append(
               "images",
-              {
-                uri: image.uri,
-                name:
-                  image.fileName ||
-                  `bloomboard-${Date.now()}-${index}.${extension}`,
-                type:
-                  image.mimeType ||
-                  fallbackType,
-              } as any
+              new ExpoFile(
+                image.uri
+              )
             );
           }
         );

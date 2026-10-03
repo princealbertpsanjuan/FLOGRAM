@@ -71,6 +71,17 @@ import {
 
 type Tab = 'owed' | 'pending' | 'paid';
 
+/*
+ * Ask iOS for JPEG instead of HEIC so the upload is
+ * accepted everywhere.
+ */
+const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: ['images'],
+  quality: 0.7,
+  preferredAssetRepresentationMode:
+    ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+};
+
 const getErrorMessage = (error: unknown) =>
   error instanceof Error && error.message
     ? error.message
@@ -255,8 +266,8 @@ export default function AdminRiderPayoutsScreen() {
 
     const result =
       source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+        ? await ImagePicker.launchCameraAsync(PICKER_OPTIONS)
+        : await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
 
     if (!result.canceled && result.assets?.[0]) {
       setProof(result.assets[0]);
