@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 
@@ -35,19 +34,11 @@ import {
 } from '../../services/florist';
 
 import {
-  getSellerOrders,
-  type CustomerOrder,
-} from '../../services/orders';
-
-import {
-  getSellerFlowers,
-  type FlowerListing,
-} from '../../services/flower';
-
-import {
   getSellerReviews,
   type SellerReviewsData,
 } from '../../services/review';
+
+import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
 /*
  * =========================================================
@@ -58,8 +49,6 @@ import {
 type ProfileData = {
   user: AuthUser | null;
   florist: FloristProfile;
-  orders: CustomerOrder[];
-  flowers: FlowerListing[];
   reviews: SellerReviewsData;
 };
 
@@ -75,22 +64,6 @@ type EditForm = {
   postalCode: string;
 };
 
-/*
- * =========================================================
- * HELPERS
- * =========================================================
- */
-
-const formatCurrency = (
-  value: number
-) => {
-  return `₱${Number(
-    value || 0
-  ).toLocaleString('en-PH', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })}`;
-};
 
 const getInitialForm = (
   florist: FloristProfile
@@ -196,15 +169,11 @@ export default function SellerProfileScreen() {
         const [
           storedUser,
           florist,
-          orders,
-          flowers,
           reviews,
         ] =
           await Promise.all([
             getStoredUser(),
             getMyFloristProfile(),
-            getSellerOrders(),
-            getSellerFlowers(),
             getSellerReviews(),
           ]);
 
@@ -212,8 +181,6 @@ export default function SellerProfileScreen() {
           user:
             storedUser,
           florist,
-          orders,
-          flowers,
           reviews,
         });
 
@@ -336,71 +303,6 @@ export default function SellerProfileScreen() {
       ]
     );
 
-  /*
-   * =======================================================
-   * ANALYTICS
-   * =======================================================
-   */
-
-  const analytics =
-    useMemo(() => {
-      const orders =
-        data?.orders ??
-        [];
-
-      const flowers =
-        data?.flowers ??
-        [];
-
-      const paidOrders =
-        orders.filter(
-          order =>
-            order.paymentStatus ===
-              'paid' &&
-            order.orderStatus !==
-              'cancelled'
-        );
-
-      const totalSales =
-        paidOrders.reduce(
-          (
-            total,
-            order
-          ) =>
-            total +
-            Number(
-              order.totalAmount ||
-                0
-            ),
-          0
-        );
-
-      const completedOrders =
-        orders.filter(
-          order =>
-            order.orderStatus ===
-              'completed' ||
-            order.orderStatus ===
-              'delivered'
-        ).length;
-
-      const activeProducts =
-        flowers.filter(
-          flower =>
-            flower.isActive !==
-            false
-        ).length;
-
-      return {
-        totalSales,
-        totalOrders:
-          orders.length,
-        completedOrders,
-        activeProducts,
-      };
-    }, [
-      data,
-    ]);
 
   /*
    * =======================================================
@@ -973,54 +875,13 @@ export default function SellerProfileScreen() {
             </View>
           </View>
 
-          {/* STATS */}
+          {/*
+           * Sales figures live in Dashboard and
+           * Reports. Profile is only for shop
+           * details, address, help and account.
+           */}
 
-          <View
-            style={
-              styles.statsGrid
-            }
-          >
-            <StatCard
-              value={formatCurrency(
-                analytics.totalSales
-              )}
-              label="Total Sales"
-            />
-
-            <StatCard
-              value={String(
-                analytics.totalOrders
-              )}
-              label="Orders"
-            />
-
-            <StatCard
-              value={
-                rating !==
-                null &&
-                rating !==
-                undefined
-                  ? `${rating.toFixed(
-                      1
-                    )} ★`
-                  : '—'
-              }
-              label={
-                reviews?.count
-                  ? `${reviews.count} Ratings`
-                  : 'Rating'
-              }
-            />
-
-            <StatCard
-              value={String(
-                analytics.activeProducts
-              )}
-              label="Products"
-            />
-          </View>
-
-          {/* SHOP INFORMATION */}
+          {/* SHOP / PROFILE INFORMATION */}
 
           <View
             style={
@@ -1043,6 +904,14 @@ export default function SellerProfileScreen() {
             />
 
             <InfoRow
+              label="Description"
+              value={
+                florist?.description ||
+                'Not set'
+              }
+            />
+
+            <InfoRow
               label="Contact"
               value={
                 florist?.contactNumber ||
@@ -1059,7 +928,42 @@ export default function SellerProfileScreen() {
             />
 
             <InfoRow
-              label="Address"
+              label="Shop Rating"
+              value={
+                rating !==
+                  null &&
+                rating !==
+                  undefined
+                  ? `${rating.toFixed(
+                      1
+                    )} / 5${
+                      reviews?.count
+                        ? ` (${reviews.count})`
+                        : ''
+                    }`
+                  : 'No ratings yet'
+              }
+              last
+            />
+          </View>
+
+          {/* ADDRESS */}
+
+          <View
+            style={
+              styles.sectionCard
+            }
+          >
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              Shop Address
+            </Text>
+
+            <InfoRow
+              label="Pickup Address"
               value={
                 locationText
               }
@@ -1067,7 +971,7 @@ export default function SellerProfileScreen() {
             />
           </View>
 
-          {/* MANAGEMENT */}
+          {/* SETTINGS & SUPPORT */}
 
           <View
             style={
@@ -1076,45 +980,39 @@ export default function SellerProfileScreen() {
           >
             <MenuItem
               icon="✎"
-              label="Edit Shop Profile"
+              label="Edit Shop Profile & Address"
               onPress={
                 openEditProfile
               }
             />
 
             <MenuItem
-              icon="◇"
-              label="Manage Products"
+              icon="?"
+              label="Help Center"
               onPress={() =>
-                router.replace(
-                  '/(seller)/seller-products'
-                )
+                router.push({
+                  pathname:
+                    '/(shared)/help-center',
+                  params: {
+                    role: 'seller',
+                  },
+                } as never)
               }
             />
 
             <MenuItem
-              icon="🛒"
-              label="Manage Orders"
+              icon="§"
+              label="Terms and Policies"
               onPress={() =>
-                router.replace(
-                  '/(seller)/seller-orders'
-                )
-              }
-            />
-
-            <MenuItem
-              icon="▥"
-              label="Shop Reports"
-              onPress={() =>
-                router.replace(
-                  '/(seller)/seller-reports'
+                router.push(
+                  '/(shared)/terms-policies' as never
                 )
               }
               last
             />
           </View>
 
-          {/* PERFORMANCE */}
+          {/* ACCOUNT SETTINGS */}
 
           <View
             style={
@@ -1126,63 +1024,11 @@ export default function SellerProfileScreen() {
                 styles.sectionTitle
               }
             >
-              Shop Performance
+              Account Settings
             </Text>
 
             <InfoRow
-              label="Total Orders"
-              value={String(
-                analytics.totalOrders
-              )}
-            />
-
-            <InfoRow
-              label="Completed"
-              value={String(
-                analytics.completedOrders
-              )}
-            />
-
-            <InfoRow
-              label="Total Sales"
-              value={formatCurrency(
-                analytics.totalSales
-              )}
-            />
-
-            <InfoRow
-              label="Seller Rating"
-              value={
-                rating !==
-                null &&
-                rating !==
-                undefined
-                  ? `${rating.toFixed(
-                      1
-                    )} / 5`
-                  : 'No ratings yet'
-              }
-              last
-            />
-          </View>
-
-          {/* ACCOUNT */}
-
-          <View
-            style={
-              styles.sectionCard
-            }
-          >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Account
-            </Text>
-
-            <InfoRow
-              label="Seller"
+              label="Owner"
               value={
                 sellerName
               }
@@ -1197,17 +1043,26 @@ export default function SellerProfileScreen() {
             />
 
             <InfoRow
-              label="Role"
-              value="Seller"
-            />
-
-            <InfoRow
               label="Verification"
               value={
                 verificationStatus
               }
-              last
             />
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.push(
+                  '/(auth)/forgot-password' as never
+                )
+              }
+            >
+              <InfoRow
+                label="Password"
+                value="Change password ›"
+                last
+              />
+            </Pressable>
           </View>
 
           {/* LOGOUT */}
@@ -1242,59 +1097,7 @@ export default function SellerProfileScreen() {
         </ScrollView>
 
         {/* BOTTOM NAVIGATION */}
-
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          <BottomNavItem
-            icon="⌂"
-            label="Dashboard"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-dashboard'
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="◇"
-            label="Products"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-products'
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="🛒"
-            label="Orders"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-orders'
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="▥"
-            label="Reports"
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-reports'
-              )
-            }
-          />
-
-          <BottomNavItem
-            icon="♙"
-            label="Profile"
-            active
-            onPress={() => {}}
-          />
-        </View>
+        <SellerBottomNav active="profile" />
 
         {/* ============================================= */}
         {/* EDIT PROFILE MODAL */}
@@ -1607,46 +1410,6 @@ export default function SellerProfileScreen() {
   );
 }
 
-/*
- * =========================================================
- * STAT CARD
- * =========================================================
- */
-
-function StatCard({
-  value,
-  label,
-}: {
-  value: string;
-  label: string;
-}) {
-  return (
-    <View
-      style={
-        styles.statCard
-      }
-    >
-      <Text
-        style={
-          styles.statValue
-        }
-        numberOfLines={
-          1
-        }
-      >
-        {value}
-      </Text>
-
-      <Text
-        style={
-          styles.statLabel
-        }
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
 
 /*
  * =========================================================
@@ -1761,65 +1524,6 @@ function MenuItem({
   );
 }
 
-/*
- * =========================================================
- * BOTTOM NAV
- * =========================================================
- */
-
-function BottomNavItem({
-  icon,
-  label,
-  active = false,
-  onPress,
-}: {
-  icon: string;
-  label: string;
-  active?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={
-        styles.navItem
-      }
-      onPress={
-        onPress
-      }
-    >
-      <View
-        style={[
-          styles.navIconContainer,
-
-          active &&
-            styles.activeNavIconContainer,
-        ]}
-      >
-        <Text
-          style={[
-            styles.navIcon,
-
-            active &&
-              styles.activeNavIcon,
-          ]}
-        >
-          {icon}
-        </Text>
-      </View>
-
-      <Text
-        style={[
-          styles.navText,
-
-          active &&
-            styles.activeNavText,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /*
  * =========================================================
@@ -2064,7 +1768,7 @@ const styles =
 
     inlineErrorText: {
       color: '#B75C5C',
-      fontSize: 10,
+      fontSize: 12,
       textAlign:
         'center',
     },
@@ -2139,13 +1843,13 @@ const styles =
 
     shopLocation: {
       color: '#8B8B8F',
-      fontSize: 10,
+      fontSize: 12,
       marginTop: 3,
     },
 
     description: {
       color: '#79797D',
-      fontSize: 10,
+      fontSize: 12,
       lineHeight: 16,
       marginTop: 10,
     },
@@ -2176,7 +1880,7 @@ const styles =
     },
 
     statusBadgeText: {
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '700',
     },
@@ -2200,7 +1904,7 @@ const styles =
 
     openBadgeText: {
       color: '#69A77B',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '700',
     },
@@ -2216,7 +1920,7 @@ const styles =
 
     closedBadgeText: {
       color: '#888888',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight:
         '700',
     },
@@ -2257,7 +1961,7 @@ const styles =
 
     statLabel: {
       color: '#A0A0A4',
-      fontSize: 9,
+      fontSize: 11,
       marginTop: 6,
     },
 
@@ -2281,7 +1985,7 @@ const styles =
 
     sectionTitle: {
       color: '#3E3E41',
-      fontSize: 12,
+      fontSize: 13,
       fontWeight:
         '800',
       marginBottom: 8,
@@ -2310,13 +2014,13 @@ const styles =
 
     infoLabel: {
       color: '#9A9A9D',
-      fontSize: 10,
+      fontSize: 12,
     },
 
     infoValue: {
       flex: 1,
       color: '#565659',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight:
         '600',
       textAlign:
@@ -2378,7 +2082,7 @@ const styles =
     menuLabel: {
       flex: 1,
       color: '#4B4B4E',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight:
         '600',
       marginLeft: 12,
@@ -2410,7 +2114,7 @@ const styles =
 
     logoutText: {
       color: '#6FA382',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight:
         '700',
     },
@@ -2482,7 +2186,7 @@ const styles =
 
     navText: {
       color: '#A4A5A6',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 3,
     },
 
@@ -2540,7 +2244,7 @@ const styles =
     modalSubtitle: {
       color:
         'rgba(255,255,255,0.78)',
-      fontSize: 9,
+      fontSize: 11,
       marginTop: 3,
     },
 
@@ -2582,7 +2286,7 @@ const styles =
 
     formLabel: {
       color: '#555A57',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight:
         '700',
       marginBottom: 6,
@@ -2599,7 +2303,7 @@ const styles =
       paddingHorizontal:
         13,
       color: '#404341',
-      fontSize: 12,
+      fontSize: 13,
     },
 
     multilineInput: {
@@ -2634,7 +2338,7 @@ const styles =
 
     cancelButtonText: {
       color: '#6FA382',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight:
         '800',
     },
@@ -2653,7 +2357,7 @@ const styles =
 
     saveButtonText: {
       color: '#FFFFFF',
-      fontSize: 11,
+      fontSize: 13,
       fontWeight:
         '800',
     },

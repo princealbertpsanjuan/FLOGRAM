@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "FLOGRAM",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -45,7 +45,20 @@
       "expo-font",
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FLOGRAM needs access to your photos to upload bouquet images and payment or delivery proof.",
+          "cameraPermission": "FLOGRAM needs camera access to take bouquet photos and delivery or payment proof."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FLOGRAM uses your location to share live delivery tracking while you are delivering an order."
+        }
+      ]
     ],
 
     "experiments": {

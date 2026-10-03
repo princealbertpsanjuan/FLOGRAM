@@ -24,6 +24,8 @@ import {
   type FlowerListing,
 } from '../../services/flower';
 
+import SellerBottomNav from '../../components/seller/seller-bottom-nav';
+
 /*
  * =========================================================
  * TYPES
@@ -739,123 +741,7 @@ onEdit={() =>
 
         {/* ============================================= */}
         {/* BOTTOM NAVIGATION */}
-        {/* ============================================= */}
-
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          <Pressable
-            style={styles.navItem}
-            onPress={() =>
-              router.replace(
-                '/(seller)/seller-dashboard'
-              )
-            }
-          >
-            <Text
-              style={styles.navIcon}
-            >
-              ⌂
-            </Text>
-
-            <Text
-              style={styles.navText}
-            >
-              Dashboard
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.navItem}
-          >
-            <View
-              style={
-                styles.activeNavIcon
-              }
-            >
-              <Text
-                style={
-                  styles.activeNavSymbol
-                }
-              >
-                ◈
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.activeNavText
-              }
-            >
-              Products
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.navItem}
-onPress={() =>
-  router.replace(
-    '/(seller)/seller-orders'
-  )
-}
-          >
-            <Text
-              style={styles.navIcon}
-            >
-              🛒
-            </Text>
-
-            <Text
-              style={styles.navText}
-            >
-              Orders
-            </Text>
-          </Pressable>
-
-<Pressable
-  style={styles.navItem}
-  onPress={() =>
-    router.replace(
-      '/(seller)/seller-reports'
-    )
-  }
->
-            <Text
-              style={styles.navIcon}
-            >
-              ▥
-            </Text>
-
-            <Text
-              style={styles.navText}
-            >
-              Reports
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.navItem}
-            onPress={() =>
-              router.push(
-                '/(seller)/seller-profile'
-              )
-            }
-          >
-            <Text
-              style={styles.navIcon}
-            >
-              ♙
-            </Text>
-
-            <Text
-              style={styles.navText}
-            >
-              Seller Profile
-            </Text>
-          </Pressable>
-        </View>
+        <SellerBottomNav active="products" />
       </View>
     </SafeAreaView>
   );
@@ -1188,7 +1074,7 @@ const styles =
 
     loadingText: {
       marginTop: 12,
-      fontSize: 12,
+      fontSize: 13,
       color: '#888888',
     },
 
@@ -1201,7 +1087,7 @@ const styles =
 
     errorText: {
       marginTop: 8,
-      fontSize: 11,
+      fontSize: 13,
       lineHeight: 17,
       color: '#888888',
       textAlign: 'center',
@@ -1219,7 +1105,7 @@ const styles =
     retryText: {
       color: '#FFFFFF',
       fontWeight: '700',
-      fontSize: 11,
+      fontSize: 13,
     },
 
     /*
@@ -1274,7 +1160,7 @@ const styles =
       marginTop: 4,
       color:
         'rgba(255,255,255,0.80)',
-      fontSize: 10,
+      fontSize: 12,
     },
 
     addButton: {
@@ -1298,7 +1184,7 @@ const styles =
 
     addButtonText: {
       color: '#608F70',
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
     },
 
@@ -1336,7 +1222,7 @@ const styles =
 
     filterText: {
       color: '#969696',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '600',
     },
 
@@ -1368,7 +1254,7 @@ const styles =
 
     inlineErrorText: {
       color: '#B65A5A',
-      fontSize: 10,
+      fontSize: 12,
       textAlign: 'center',
     },
 
@@ -1438,7 +1324,7 @@ const styles =
     },
 
     availabilityBadgeText: {
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '700',
     },
 
@@ -1476,7 +1362,7 @@ const styles =
 
     productCategory: {
       color: '#9A9A9A',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 3,
     },
 
@@ -1489,7 +1375,7 @@ const styles =
     productDescription: {
       marginTop: 8,
       color: '#888888',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 14,
     },
 
@@ -1511,7 +1397,7 @@ const styles =
 
     availabilityTitle: {
       color: '#4C4C4C',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '700',
     },
 
@@ -1544,13 +1430,13 @@ const styles =
 
     editIcon: {
       color: '#659676',
-      fontSize: 12,
+      fontSize: 13,
       marginRight: 5,
     },
 
     editText: {
       color: '#659676',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '700',
     },
 
@@ -1567,13 +1453,13 @@ const styles =
 
     deleteIcon: {
       color: '#D77A80',
-      fontSize: 11,
+      fontSize: 13,
       marginRight: 5,
     },
 
     deleteText: {
       color: '#D77A80',
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: '700',
     },
 
@@ -1615,7 +1501,7 @@ const styles =
     emptyText: {
       marginTop: 6,
       color: '#999999',
-      fontSize: 9,
+      fontSize: 11,
       lineHeight: 14,
       textAlign: 'center',
     },
@@ -1656,7 +1542,7 @@ const styles =
 
     navText: {
       color: '#A4A5A6',
-      fontSize: 8,
+      fontSize: 11,
       marginTop: 4,
     },
 
@@ -1677,7 +1563,7 @@ const styles =
 
     activeNavText: {
       color: '#6EA382',
-      fontSize: 8,
+      fontSize: 11,
       fontWeight: '700',
       marginTop: 3,
     },

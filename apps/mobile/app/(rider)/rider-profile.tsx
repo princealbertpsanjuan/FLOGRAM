@@ -328,6 +328,26 @@ export default function RiderProfileScreen() {
             />
           </Section>
 
+          {/* SUPPORT */}
+          <Section title="Support">
+            <LinkRow
+              icon="help-circle-outline"
+              label="Help Center"
+              onPress={() =>
+                router.push({
+                  pathname: '/(shared)/help-center',
+                  params: { role: 'rider' },
+                } as never)
+              }
+            />
+            <LinkRow
+              icon="document-text-outline"
+              label="Terms and Policies"
+              onPress={() => router.push('/(shared)/terms-policies' as never)}
+              last
+            />
+          </Section>
+
           {/* LOGOUT */}
           <Pressable
             accessibilityRole="button"
