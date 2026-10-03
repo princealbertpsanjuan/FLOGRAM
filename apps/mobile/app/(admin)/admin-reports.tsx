@@ -28,6 +28,10 @@ import {
   getAdminReports,
 } from "../../services/admin";
 
+import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * COLORS
@@ -719,141 +723,11 @@ function TopShopRow({
   );
 }
 
-/*
- * =========================================================
- * BOTTOM NAVIGATION
- * =========================================================
- */
 
-type AdminNavItem = {
-  label: string;
-
-  icon: React.ComponentProps<
-    typeof Ionicons
-  >["name"];
-
-  activeIcon: React.ComponentProps<
-    typeof Ionicons
-  >["name"];
-
-  route?: string;
-};
-
-const ADMIN_NAV_ITEMS: AdminNavItem[] = [
-  {
-    label: "Dashboard",
-    icon: "home-outline",
-    activeIcon: "home",
-    route:
-      "/(admin)/admin-dashboard",
-  },
-  {
-    label: "Users",
-    icon: "people-outline",
-    activeIcon: "people",
-    route:
-      "/(admin)/admin-users",
-  },
-  {
-    label: "Orders",
-    icon: "receipt-outline",
-    activeIcon: "receipt",
-    route:
-      "/(admin)/admin-orders",
-  },
-  {
-    label: "Reports",
-    icon: "bar-chart-outline",
-    activeIcon: "bar-chart",
-    route:
-      "/(admin)/admin-reports",
-  },
-  {
-    label: "Settings",
-    icon: "settings-outline",
-    activeIcon: "settings",
-    route:
-      "/(admin)/admin-settings",
-  },
-];
 
 function AdminBottomNavigation() {
-  const router = useRouter();
-
-  const handleNavigation = (
-    item: AdminNavItem
-  ) => {
-    if (!item.route) {
-      return;
-    }
-
-    if (
-      item.route ===
-      "/(admin)/admin-reports"
-    ) {
-      return;
-    }
-
-    router.replace(
-      item.route as never
-    );
-  };
-
   return (
-    <View
-      style={styles.bottomNavigation}
-    >
-      {ADMIN_NAV_ITEMS.map(
-        (item) => {
-          const isActive =
-            item.label === "Reports";
-
-          return (
-            <Pressable
-              key={item.label}
-              style={
-                styles.bottomNavItem
-              }
-              onPress={() =>
-                handleNavigation(item)
-              }
-            >
-              <View
-                style={[
-                  styles.bottomNavIconWrap,
-                  isActive &&
-                    styles.bottomNavIconWrapActive,
-                ]}
-              >
-                <Ionicons
-                  name={
-                    isActive
-                      ? item.activeIcon
-                      : item.icon
-                  }
-                  size={19}
-                  color={
-                    isActive
-                      ? COLORS.purpleAccent
-                      : COLORS.mutedText
-                  }
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.bottomNavLabel,
-                  isActive &&
-                    styles.bottomNavLabelActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        }
-      )}
-    </View>
+    <AdminBottomNav active="reports" />
   );
 }
 
@@ -1091,17 +965,10 @@ export default function AdminReportsScreen() {
 
   if (loading && !report) {
     return (
-      <View style={styles.centerScreen}>
-        <ActivityIndicator
-          size="large"
-          color={COLORS.purpleAccent}
-        />
-
-        <Text style={styles.loadingText}>
-          Loading reports and
-          analytics...
-        </Text>
-      </View>
+      <ScreenLoader
+        role="admin"
+        message="Loading..."
+      />
     );
   }
 
@@ -2268,8 +2135,8 @@ const styles = StyleSheet.create({
     paddingTop: 54,
     paddingHorizontal: 20,
     paddingBottom: 26,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
 
   headerTop: {

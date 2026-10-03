@@ -40,6 +40,8 @@ import {
 
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -822,30 +824,10 @@ useEffect(() => {
     loading
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <View
-          style={
-            styles.centerState
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#74A485"
-          />
-
-          <Text
-            style={
-              styles.stateText
-            }
-          >
-            Loading orders...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="seller"
+        message="Loading orders..."
+      />
     );
   }
 

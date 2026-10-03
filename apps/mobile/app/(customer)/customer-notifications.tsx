@@ -27,6 +27,8 @@ import {
   type NotificationType,
 } from "../../services/notification";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -946,56 +948,10 @@ export default function CustomerNotificationsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <View
-            style={
-              styles.loadingIcon
-            }
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={34}
-              color="#D85D7A"
-            />
-          </View>
-
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingTitle
-            }
-          >
-            Notifications
-          </Text>
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading your latest
-            updates...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading..."
+      />
     );
   }
 
@@ -1832,12 +1788,8 @@ const styles =
 
       backgroundColor:
         "#FFFFFF",
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#E8E2E0",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {

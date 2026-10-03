@@ -11,7 +11,6 @@ import {
 } from 'react';
 
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -32,6 +31,8 @@ import {
 import RiderBottomNav, {
   useRiderBottomNavSpace,
 } from '../../components/rider/rider-bottom-nav';
+
+import { ScreenLoader } from '../../components/ui/state-views';
 
 /*
  * =========================================================
@@ -316,24 +317,10 @@ export default function RiderDeliveriesScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#C99730"
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading deliveries...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="rider"
+        message="Loading deliveries..."
+      />
     );
   }
 
@@ -1748,6 +1735,8 @@ const styles =
         18,
       paddingTop: 18,
       paddingBottom: 17,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTop: {

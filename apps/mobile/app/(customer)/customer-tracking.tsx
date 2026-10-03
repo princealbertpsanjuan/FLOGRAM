@@ -39,6 +39,8 @@ import {
   type DeliveryStatus,
 } from "../../services/delivery";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -1447,56 +1449,10 @@ export default function CustomerTrackingScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <View
-            style={
-              styles.loadingIcon
-            }
-          >
-            <Ionicons
-              name="bicycle-outline"
-              size={34}
-              color="#D85D7A"
-            />
-          </View>
-
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingTitle
-            }
-          >
-            Loading Delivery
-          </Text>
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Getting the latest
-            tracking information...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading delivery..."
+      />
     );
   }
 
@@ -3366,12 +3322,8 @@ const styles =
 
       backgroundColor:
         "#FFFFFF",
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#EAE4E2",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {

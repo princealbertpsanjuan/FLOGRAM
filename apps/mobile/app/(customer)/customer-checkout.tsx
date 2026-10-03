@@ -43,6 +43,8 @@ import {
   type SavedAddress,
 } from "../../services/addresses";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /* =========================================================
  * TYPES
  * ======================================================= */
@@ -2709,53 +2711,10 @@ export default function CustomerCheckoutScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={
-            COLORS.background
-          }
-        />
-
-        <View
-          style={
-            styles.centerState
-          }
-        >
-          <View
-            style={
-              styles.stateIcon
-            }
-          >
-            <Ionicons
-              name="bag-check-outline"
-              size={31}
-              color={
-                COLORS.primary
-              }
-            />
-          </View>
-
-          <ActivityIndicator
-            size="large"
-            color={
-              COLORS.primary
-            }
-          />
-
-          <Text
-            style={
-              styles.stateText
-            }
-          >
-            Preparing your checkout...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Preparing your checkout..."
+      />
     );
   }
 
@@ -5101,14 +5060,10 @@ const styles =
       alignItems:
         "center",
 
-      borderBottomWidth:
-        1,
-
-      borderBottomColor:
-        COLORS.border,
-
       backgroundColor:
         COLORS.card,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     backButton: {

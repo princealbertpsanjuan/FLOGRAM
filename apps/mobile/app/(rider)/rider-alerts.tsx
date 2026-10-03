@@ -1496,12 +1496,8 @@ const styles =
 
       paddingBottom:
         15,
-
-      borderBottomWidth:
-        1,
-
-      borderBottomColor:
-        '#F0EEF0',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTop: {

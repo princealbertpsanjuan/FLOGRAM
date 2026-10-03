@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -29,6 +28,10 @@ import {
   type AdminRecentActivity,
 } from "../../services/admin";
 
+import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * CONSTANTS
@@ -55,56 +58,7 @@ const COLORS = {
   redLight: "#FFF0F3",
 };
 
-/*
- * =========================================================
- * ADMIN NAVIGATION
- * =========================================================
- */
 
-type AdminNavItem = {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  activeIcon: keyof typeof Ionicons.glyphMap;
-  route:
-    | "/(admin)/admin-dashboard"
-    | "/(admin)/admin-users"
-    | "/(admin)/admin-orders"
-    | "/(admin)/admin-reports"
-    | "/(admin)/admin-settings";
-};
-
-const ADMIN_NAV_ITEMS: AdminNavItem[] = [
-  {
-    label: "Dashboard",
-    icon: "home-outline",
-    activeIcon: "home",
-    route: "/(admin)/admin-dashboard",
-  },
-  {
-    label: "Users",
-    icon: "people-outline",
-    activeIcon: "people",
-    route: "/(admin)/admin-users",
-  },
-  {
-    label: "Orders",
-    icon: "receipt-outline",
-    activeIcon: "receipt",
-    route: "/(admin)/admin-orders",
-  },
-  {
-    label: "Reports",
-    icon: "bar-chart-outline",
-    activeIcon: "bar-chart",
-    route: "/(admin)/admin-reports",
-  },
-  {
-    label: "Settings",
-    icon: "settings-outline",
-    activeIcon: "settings",
-    route: "/(admin)/admin-settings",
-  },
-];
 
 /*
  * =========================================================
@@ -444,26 +398,10 @@ export default function AdminDashboardScreen() {
     !dashboard
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color={
-            COLORS.purpleAccent
-          }
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading Admin Dashboard...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="admin"
+        message="Loading dashboard..."
+      />
     );
   }
 
@@ -2027,60 +1965,7 @@ export default function AdminDashboardScreen() {
          * =================================================
          */}
 
-        <View style={styles.bottomNavigation}>
-        {ADMIN_NAV_ITEMS.map((item) => {
-          const isActive =
-            item.label === "Dashboard";
-
-          return (
-            <Pressable
-              key={item.label}
-              style={styles.bottomNavItem}
-              onPress={() => {
-                if (isActive) {
-                  return;
-                }
-
-                router.replace(
-                  item.route
-                );
-              }}
-            >
-              <View
-                style={[
-                  styles.bottomNavIconWrap,
-                  isActive &&
-                    styles.bottomNavIconWrapActive,
-                ]}
-              >
-                <Ionicons
-                  name={
-                    isActive
-                      ? item.activeIcon
-                      : item.icon
-                  }
-                  size={19}
-                  color={
-                    isActive
-                      ? COLORS.purpleAccent
-                      : COLORS.mutedText
-                  }
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.bottomNavLabel,
-                  isActive &&
-                    styles.bottomNavLabelActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+        <AdminBottomNav active="dashboard" />
     </View>
   );
 }
@@ -2181,9 +2066,9 @@ position: "relative",
   paddingTop: 54,
   paddingHorizontal: 18,
   paddingBottom: 23,
-  borderBottomLeftRadius: 26,
-  borderBottomRightRadius: 26,
-    },
+borderBottomLeftRadius: 26,
+borderBottomRightRadius: 26,
+},
 
     headerCircleOne: {
       position: "absolute",

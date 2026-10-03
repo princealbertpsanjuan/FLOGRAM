@@ -27,6 +27,8 @@ import {
   apiRequest,
 } from "../../services/api";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * API CONFIGURATION
@@ -604,70 +606,10 @@ export default function CustomerProductDetailsScreen() {
     !flower
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.header
-          }
-        >
-          <Pressable
-            style={
-              styles.headerButton
-            }
-            onPress={() =>
-              router.back()
-            }
-          >
-            <Ionicons
-              name="chevron-back"
-              size={24}
-              color="#302B2A"
-            />
-          </Pressable>
-
-          <Text
-            style={
-              styles.headerTitle
-            }
-          >
-            Bouquet Details
-          </Text>
-
-          <View
-            style={
-              styles.headerButton
-            }
-          />
-        </View>
-
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading bouquet...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading bouquet..."
+      />
     );
   }
 
@@ -1682,12 +1624,8 @@ const styles =
 
       backgroundColor:
         "#FFFFFF",
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#EBE5E3",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {

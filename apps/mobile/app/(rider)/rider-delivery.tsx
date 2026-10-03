@@ -49,6 +49,8 @@ import {
   formatPeso,
 } from '../../utils/rider-format';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * RIDER ACTIVE DELIVERY
@@ -1795,24 +1797,10 @@ setLocationError(null);
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#C99730"
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading delivery...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="rider"
+        message="Loading delivery..."
+      />
     );
   }
 
@@ -3288,6 +3276,8 @@ const styles =
       paddingHorizontal: 18,
       paddingTop: 18,
       paddingBottom: 16,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTop: {

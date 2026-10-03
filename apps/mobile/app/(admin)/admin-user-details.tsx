@@ -25,6 +25,8 @@ import {
   updateAdminUserStatus,
 } from "../../services/admin";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 const COLORS = {
   purple: "#312E81",
   purpleDark: "#29266D",
@@ -541,26 +543,10 @@ export default function AdminUserDetailsScreen() {
 
   if (loading) {
     return (
-      <View
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color={
-            COLORS.purpleAccent
-          }
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading user...
-        </Text>
-      </View>
+      <ScreenLoader
+        role="admin"
+        message="Loading user..."
+      />
     );
   }
 
@@ -1325,9 +1311,9 @@ const styles =
       paddingHorizontal: 18,
       paddingTop: 54,
       paddingBottom: 22,
-      borderBottomLeftRadius: 28,
-      borderBottomRightRadius: 28,
       overflow: "hidden",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerDecoration: {

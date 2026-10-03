@@ -46,6 +46,8 @@ import {
 
 import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -620,43 +622,10 @@ export default function CustomerProfileScreen() {
     !user
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <View
-          style={
-            styles.centerContainer
-          }
-        >
-          <View
-            style={
-              styles.loadingFlower
-            }
-          >
-            <Ionicons
-              name="flower"
-              size={28}
-              color={PINK}
-            />
-          </View>
-
-          <ActivityIndicator
-            size="small"
-            color={PINK}
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading your
-            FLOGRAM profile...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading..."
+      />
     );
   }
 
@@ -1983,12 +1952,8 @@ const styles =
 
       backgroundColor:
         WHITE,
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        BORDER,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerSpacer: {

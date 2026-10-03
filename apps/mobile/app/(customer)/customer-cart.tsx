@@ -32,6 +32,8 @@ import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
 
 import NotificationBell from '../../components/customer/notification-bell';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * CONFIGURATION
@@ -831,59 +833,10 @@ const handleCheckout =
     !cart
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <View
-            style={
-              styles.loadingIconContainer
-            }
-          >
-            <Ionicons
-              name="cart-outline"
-              size={34}
-              color="#D85D7A"
-            />
-          </View>
-
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingTitle
-            }
-          >
-            Loading your
-            cart
-          </Text>
-
-          <Text
-            style={
-              styles.loadingDescription
-            }
-          >
-            Getting your
-            flower selections...
-          </Text>
-        </View>
-
-        <CustomerBottomNav active="cart" />
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading..."
+      />
     );
   }
 
@@ -2030,12 +1983,6 @@ const styles =
       backgroundColor:
         "#FFFFFF",
 
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#EBE6E4",
-
       flexDirection:
         "row",
 
@@ -2044,6 +1991,8 @@ const styles =
 
       justifyContent:
         "space-between",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTitle: {

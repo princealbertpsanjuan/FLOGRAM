@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   RefreshControl,
@@ -36,6 +35,8 @@ import {
   getOrderReview,
   type OrderReviewStatus,
 } from "../../services/review";
+
+import { ScreenLoader } from '../../components/ui/state-views';
 
 /*
  * =========================================================
@@ -1532,36 +1533,10 @@ export default function CustomerOrdersScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.centerContainer
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading your
-            orders...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading..."
+      />
     );
   }
 
@@ -3121,12 +3096,8 @@ const styles =
 
       alignItems:
         "center",
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#EAE4E2",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {

@@ -2565,12 +2565,10 @@ const styles =
       flexDirection: "row",
       alignItems: "center",
 
-      borderBottomWidth: 1,
-      borderBottomColor:
-        COLORS.border,
-
       backgroundColor:
         COLORS.card,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     backButton: {

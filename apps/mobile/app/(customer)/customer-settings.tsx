@@ -37,6 +37,8 @@ import {
   type AuthUser,
 } from '../../services/auth';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -508,43 +510,10 @@ export default function CustomerSettingsScreen() {
     !user
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <View
-          style={
-            styles.centerContainer
-          }
-        >
-          <View
-            style={
-              styles.loadingIcon
-            }
-          >
-            <Ionicons
-              name="settings-outline"
-              size={27}
-              color={PINK}
-            />
-          </View>
-
-          <ActivityIndicator
-            color={PINK}
-            size="small"
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading account
-            settings...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading..."
+      />
     );
   }
 
@@ -1567,12 +1536,8 @@ const styles =
 
       backgroundColor:
         WHITE,
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        BORDER,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     backButton: {

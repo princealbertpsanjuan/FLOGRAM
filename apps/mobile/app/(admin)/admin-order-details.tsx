@@ -19,6 +19,8 @@ import {
   getAdminOrderById,
 } from "../../services/admin";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 const COLORS = {
   purple: "#312E81",
   purpleAccent: "#5B4FCF",
@@ -346,22 +348,10 @@ export default function AdminOrderDetailsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <View style={styles.loadingIcon}>
-          <ActivityIndicator
-            size="large"
-            color={COLORS.purpleAccent}
-          />
-        </View>
-
-        <Text style={styles.loadingTitle}>
-          Loading order
-        </Text>
-
-        <Text style={styles.loadingText}>
-          Retrieving transaction details...
-        </Text>
-      </View>
+      <ScreenLoader
+        role="admin"
+        message="Loading order..."
+      />
     );
   }
 
@@ -1126,8 +1116,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 52,
     paddingBottom: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
 
   headerTop: {

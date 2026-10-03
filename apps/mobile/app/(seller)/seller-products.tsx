@@ -26,6 +26,8 @@ import {
 
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -428,22 +430,10 @@ export default function SellerProductsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#74A485"
-        />
-
-        <Text
-          style={styles.loadingText}
-        >
-          Loading products...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="seller"
+        message="Loading products..."
+      />
     );
   }
 
@@ -1119,6 +1109,8 @@ const styles =
       paddingTop: 24,
       paddingBottom: 23,
       overflow: 'hidden',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerCircleOne: {
