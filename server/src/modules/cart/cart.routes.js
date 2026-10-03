@@ -8,6 +8,7 @@ import {
   getMine,
   removeFlower,
   removeItem,
+  updateCartItemAddOns,
   updateQuantity,
 } from "./cart.controller.js";
 
@@ -97,6 +98,15 @@ cartRouter.post(
  * }
  * =========================================================
  */
+
+/*
+ * PATCH /api/v1/cart/items/:cartItemId/add-ons
+ * Set the gift add-ons for one cart line.
+ */
+cartRouter.patch(
+  "/items/:cartItemId/add-ons",
+  updateCartItemAddOns
+);
 
 cartRouter.patch(
   "/items/:cartItemId",

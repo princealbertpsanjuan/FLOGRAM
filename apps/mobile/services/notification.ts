@@ -26,6 +26,10 @@ export type NotificationType =
   | 'verification_approved'
   | 'verification_rejected'
   | 'rating_received'
+  | 'shop_new_product'
+  | 'dispute_update'
+  | 'account_penalty'
+  | 'payout_update'
   | 'system'
   | 'announcement';
 

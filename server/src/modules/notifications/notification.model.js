@@ -188,6 +188,14 @@ const notificationSchema =
            * =================================================
            */
 
+          "shop_new_product",
+
+          "dispute_update",
+
+          "account_penalty",
+
+          "payout_update",
+
           "system",
           "announcement",
         ],

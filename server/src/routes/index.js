@@ -27,6 +27,9 @@ import reviewRouter from "../modules/reviews/review.routes.js";
  */
 
 import adminRouter from "../modules/admin/admin.routes.js";
+import analyticsRouter from "../modules/analytics/analytics.routes.js";
+import addOnRouter from "../modules/addons/addon.routes.js";
+import followRouter from "../modules/follows/follow.routes.js";
 
 const apiRouter = Router();
 
@@ -257,6 +260,35 @@ apiRouter.use(
 apiRouter.use(
   "/admin",
   adminRouter
+);
+
+/*
+ * =========================================================
+ * ANALYTICS (AFINN sentiment, FP-Growth)
+ * =========================================================
+ */
+
+apiRouter.use(
+  "/analytics",
+  analyticsRouter
+);
+
+/*
+ * GIFT ADD-ONS
+ */
+
+apiRouter.use(
+  "/addons",
+  addOnRouter
+);
+
+/*
+ * FOLLOW FLORIST SHOPS
+ */
+
+apiRouter.use(
+  "/follows",
+  followRouter
 );
 
 export default apiRouter;

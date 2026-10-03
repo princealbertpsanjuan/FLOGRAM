@@ -49,7 +49,33 @@ const cartItemSchema =
         default: 1,
       },
 
-      addedAt: {
+      /*
+     * Optional gift add-ons chosen for this bouquet.
+     * Prices are read from GiftAddOn at checkout.
+     */
+    addOns: {
+      type: [
+        new mongoose.Schema(
+          {
+            addOn: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "GiftAddOn",
+              required: true,
+            },
+            quantity: {
+              type: Number,
+              min: 1,
+              max: 10,
+              default: 1,
+            },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+
+    addedAt: {
         type: Date,
 
         default:

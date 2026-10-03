@@ -6,6 +6,7 @@ import {
   generateImageEmbedding,
   generateUploadedImageEmbedding,
 } from "../../services/ai.service.js";
+import { notifyFollowersOfNewProduct } from "../follows/follow.service.js";
 
 const normalizePath = (filePath) => {
   return filePath
@@ -175,6 +176,16 @@ export const createFlower = async (
         flowerData.isAvailable ??
         true,
     });
+
+  /*
+   * Let customers who follow this shop know.
+   * Runs in the background; never blocks the seller.
+   */
+  if (flower.isAvailable) {
+    void notifyFollowersOfNewProduct(
+      flower
+    );
+  }
 
   return flower;
 };
