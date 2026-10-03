@@ -2,6 +2,11 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
+import {
+  getSafeExtension,
+  imageFileFilter,
+} from "../../../utils/uploadFileTypes.js";
+
 /*
  * =========================================================
  * CUSTOM BOUQUET INSPIRATION IMAGE UPLOAD
@@ -127,44 +132,7 @@ const storage =
  * =========================================================
  */
 
-const fileFilter = (
-  req,
-  file,
-  callback
-) => {
-  const allowedMimeTypes =
-    [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
-
-  if (
-    !allowedMimeTypes.includes(
-      file.mimetype
-    )
-  ) {
-    const error =
-      new Error(
-        "Only JPG, JPEG, PNG, and WEBP images are allowed."
-      );
-
-    error.statusCode =
-      400;
-
-    callback(
-      error,
-      false
-    );
-
-    return;
-  }
-
-  callback(
-    null,
-    true
-  );
-};
+const fileFilter = imageFileFilter;
 
 /*
  * =========================================================
@@ -187,7 +155,7 @@ export const customBouquetRequestUpload =
 
     limits: {
       fileSize:
-        5 *
+        10 *
         1024 *
         1024,
     },

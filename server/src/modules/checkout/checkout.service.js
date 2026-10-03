@@ -22,6 +22,7 @@ import {
   parsePayMongoWebhook,
   verifyPayMongoWebhookSignature,
 } from "../payments/paymongo.service.js";
+import { resolveAddOnSelections } from "../addons/addon.service.js";
 
 /*
  * =========================================================
@@ -549,25 +550,42 @@ const resolveCartItems =
         );
       }
 
+      /*
+       * Gift add-ons chosen for this bouquet, priced
+       * from the database.
+       */
+      const {
+        addOns,
+        addOnsTotal,
+      } =
+        await resolveAddOnSelections(
+          florist._id,
+          (cartItem.addOns || []).map(
+            (entry) => ({
+              addOnId:
+                getId(entry.addOn),
+              quantity:
+                entry.quantity,
+            })
+          )
+        );
+
       const subtotal =
         unitPrice *
-        quantity;
+          quantity +
+        addOnsTotal;
 
       resolvedItems.push({
         cartItemId:
           cartItem._id,
-
         flower,
-
         florist,
-
         seller:
           flower.seller,
-
         quantity,
-
         unitPrice,
-
+        addOns,
+        addOnsTotal,
         subtotal,
       });
     }
@@ -954,10 +972,12 @@ export const quoteCustomerCheckout =
 
               unitPrice:
                 item.unitPrice,
-
+              addOns:
+                item.addOns || [],
+              addOnsTotal:
+                item.addOnsTotal || 0,
               subtotal:
                 item.subtotal,
-
               deliveryFee:
                 itemDeliveryFee,
 
@@ -1414,10 +1434,18 @@ export const createCustomerCheckout =
               flowerId:
                 quotedItem
                   .flowerId,
-
               quantity:
                 quotedItem
                   .quantity,
+              addOns:
+                (quotedItem.addOns || []).map(
+                  (entry) => ({
+                    addOnId:
+                      entry.addOn,
+                    quantity:
+                      entry.quantity,
+                  })
+                ),
 
               fulfillmentType,
 

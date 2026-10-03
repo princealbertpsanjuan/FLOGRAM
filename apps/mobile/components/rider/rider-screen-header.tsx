@@ -111,8 +111,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 16,
     backgroundColor: RIDER_GOLD,
-    borderBottomLeftRadius: 22,
-    borderBottomRightRadius: 22,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
   backButton: {
     width: 40,

@@ -7,6 +7,7 @@ import User from "../auth/auth.model.js";
 import {
   createNotification,
 } from "../notifications/notification.service.js";
+import { analyzeSentiment } from "../analytics/sentiment.service.js";
 
 /*
  * =========================================================
@@ -488,6 +489,24 @@ export const createCustomerReview =
           comment:
             cleanComment ||
             null,
+
+          ...(cleanComment
+            ? (() => {
+                const sentiment =
+                  analyzeSentiment(
+                    cleanComment
+                  );
+
+                return {
+                  sentimentScore:
+                    sentiment.score,
+                  sentimentComparative:
+                    sentiment.comparative,
+                  sentimentLabel:
+                    sentiment.label,
+                };
+              })()
+            : {}),
         });
     } catch (error) {
       /*

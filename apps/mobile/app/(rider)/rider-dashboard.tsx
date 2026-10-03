@@ -54,6 +54,8 @@ import RiderBottomNav, {
   useRiderBottomNavSpace,
 } from '../../components/rider/rider-bottom-nav';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const GOLD = '#D2A329';
@@ -587,21 +589,10 @@ export default function RiderDashboardScreen() {
     !dashboardData
   ) {
     return (
-      <View style={styles.loadingScreen}>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor={GOLD}
-        />
-
-        <ActivityIndicator
-          size="large"
-          color={GOLD}
-        />
-
-        <Text style={styles.loadingText}>
-          Loading dashboard...
-        </Text>
-      </View>
+      <ScreenLoader
+        role="rider"
+        message="Loading dashboard..."
+      />
     );
   }
 

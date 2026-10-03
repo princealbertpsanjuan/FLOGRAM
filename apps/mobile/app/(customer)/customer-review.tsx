@@ -1953,12 +1953,8 @@ const styles =
 
       backgroundColor:
         '#FFFFFF',
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        '#EDE5E8',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {

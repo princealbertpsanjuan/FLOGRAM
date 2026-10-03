@@ -1350,9 +1350,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 54,
     paddingBottom: 21,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
     overflow: "hidden",
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
 
   headerDecoration: {

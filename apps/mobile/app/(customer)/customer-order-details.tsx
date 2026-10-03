@@ -47,6 +47,12 @@ import {
   type OrderReviewStatus,
 } from "../../services/review";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
+import { formatAddOnsLine } from '../../services/addons';
+
+import ReportProblemLink from '../../components/ui/report-problem-link';
+
 /*
  * =========================================================
  * API
@@ -1392,36 +1398,10 @@ export default function CustomerOrderDetailsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.centerContainer
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading order
-            details...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading..."
+      />
     );
   }
 
@@ -2967,6 +2947,13 @@ function StandaloneOrderDetails({
             </Pressable>
           ) : null}
 
+          {order.orderStatus !== "pending" ? (
+            <ReportProblemLink
+              orderId={order._id}
+              productName={order.productName}
+            />
+          ) : null}
+
           <View
             style={{
               height: 35,
@@ -3202,6 +3189,18 @@ function ChildOrderCard({
             {order.quantity ||
               1}
           </Text>
+
+          {order.addOns?.length ? (
+            <Text
+              numberOfLines={2}
+              style={[
+                styles.childQuantity,
+                { color: "#B5476F", fontWeight: "600" },
+              ]}
+            >
+              + {formatAddOnsLine(order.addOns)}
+            </Text>
+          ) : null}
         </View>
 
         <Text
@@ -3505,6 +3504,14 @@ function ChildOrderCard({
                 </>
               )}
             </Pressable>
+          ) : null}
+
+          {order.orderStatus !== "pending" ? (
+            <ReportProblemLink
+              orderId={order._id}
+              productName={order.productName}
+              compact
+            />
           ) : null}
         </View>
       ) : null}
@@ -3910,12 +3917,8 @@ const styles =
 
       backgroundColor:
         "#FFFFFF",
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#E7E1DF",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {

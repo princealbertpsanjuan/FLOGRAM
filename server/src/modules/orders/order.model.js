@@ -156,6 +156,32 @@ const orderSchema =
           1,
       },
 
+      /*
+       * Optional gift add-ons (snapshot at order time).
+       * subtotal = unitPrice × quantity + addOnsTotal
+       */
+      addOns: {
+        type: [
+          new mongoose.Schema(
+            {
+              addOn: { type: mongoose.Schema.Types.ObjectId, ref: "GiftAddOn" },
+              name: { type: String, trim: true },
+              category: { type: String, trim: true, default: "other" },
+              price: { type: Number, min: 0 },
+              quantity: { type: Number, min: 1, default: 1 },
+            },
+            { _id: false }
+          ),
+        ],
+        default: [],
+      },
+
+      addOnsTotal: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+
       subtotal: {
         type:
           Number,

@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../modules/auth/auth.model.js";
+import { ensureAccountIsUsable } from "../utils/accountStatus.js";
 
 
 
@@ -33,13 +34,7 @@ const authenticate = async (req, res, next) => {
       throw error;
     }
 
-    if (user.accountStatus !== "active") {
-      const error = new Error(
-        `This account is currently ${user.accountStatus}.`
-      );
-      error.statusCode = 403;
-      throw error;
-    }
+    await ensureAccountIsUsable(user);
 
     req.user = {
       userId: user._id.toString(),

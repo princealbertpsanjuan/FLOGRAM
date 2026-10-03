@@ -32,6 +32,8 @@ import {
   type FlowerListing,
 } from '../../services/flower';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 const commaSeparatedToArray = (
   value: string
 ) =>
@@ -407,22 +409,10 @@ useEffect(() => {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#74A485"
-        />
-
-        <Text
-          style={styles.loadingText}
-        >
-          Loading product...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="seller"
+        message="Loading product..."
+      />
     );
   }
 
@@ -943,6 +933,8 @@ const styles =
       paddingTop: 18,
       paddingBottom: 20,
       overflow: 'hidden',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerCircleOne: {

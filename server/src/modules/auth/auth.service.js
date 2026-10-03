@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import User from "./auth.model.js";
+import { ensureAccountIsUsable } from "../../utils/accountStatus.js";
 
 const allowedRegistrationRoles = ["customer", "seller", "rider"];
 
@@ -100,13 +101,7 @@ export const loginUser = async ({ email, password }) => {
     throw error;
   }
 
-  if (user.accountStatus !== "active") {
-    const error = new Error(
-      `This account is currently ${user.accountStatus}.`
-    );
-    error.statusCode = 403;
-    throw error;
-  }
+  await ensureAccountIsUsable(user);
 
   user.lastLoginAt = new Date();
   await user.save();

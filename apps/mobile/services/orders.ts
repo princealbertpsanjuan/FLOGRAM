@@ -105,6 +105,19 @@ export type OrderLocation = {
 export type CustomerOrder = {
   _id: string;
 
+  /*
+   * Gift add-ons bought with this bouquet (snapshot).
+   */
+  addOns?: {
+    addOn?: string;
+    name: string;
+    category?: string;
+    price: number;
+    quantity: number;
+  }[];
+
+  addOnsTotal?: number;
+
   customer:
     | OrderUser
     | string;

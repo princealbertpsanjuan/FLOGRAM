@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from '../../services/storage';
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,6 +22,10 @@ import {
   getAdminSettings,
   updateAdminSettings,
 } from "../../services/admin";
+
+import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+
+import { ScreenLoader } from '../../components/ui/state-views';
 
 const COLORS = {
   purple: "#312E81",
@@ -890,19 +894,19 @@ export default function AdminSettingsScreen() {
         }
 
         await Promise.all([
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "token"
           ),
 
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "authToken"
           ),
 
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "accessToken"
           ),
 
-          SecureStore.deleteItemAsync(
+          SecureStore.deleteItem(
             "user"
           ),
         ]);
@@ -945,32 +949,10 @@ export default function AdminSettingsScreen() {
 
   if (loading) {
     return (
-      <View
-        style={
-          styles.loadingContainer
-        }
-      >
-        <View
-          style={
-            styles.loadingContent
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color={
-              COLORS.purpleAccent
-            }
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading settings...
-          </Text>
-        </View>
-      </View>
+      <ScreenLoader
+        role="admin"
+        message="Loading settings..."
+      />
     );
   }
 
@@ -2140,101 +2122,7 @@ export default function AdminSettingsScreen() {
           </View>
         </ScrollView>
 
-        <View
-          style={
-            styles.bottomNavigation
-          }
-        >
-          {[
-            {
-              label: "Dashboard",
-              route:
-                "/(admin)/admin-dashboard",
-              icon:
-                "home-outline" as const,
-            },
-            {
-              label: "Users",
-              route:
-                "/(admin)/admin-users",
-              icon:
-                "people-outline" as const,
-            },
-            {
-              label: "Orders",
-              route:
-                "/(admin)/admin-orders",
-              icon:
-                "receipt-outline" as const,
-            },
-            {
-              label: "Reports",
-              route:
-                "/(admin)/admin-reports",
-              icon:
-                "bar-chart-outline" as const,
-            },
-            {
-              label: "Settings",
-              route:
-                "/(admin)/admin-settings",
-              icon:
-                "settings" as const,
-            },
-          ].map((item) => {
-            const active =
-              item.label ===
-              "Settings";
-
-            return (
-              <Pressable
-                key={
-                  item.label
-                }
-                style={
-                  styles.bottomNavItem
-                }
-                onPress={() => {
-                  if (!active) {
-                    router.replace(
-                      item.route as never
-                    );
-                  }
-                }}
-              >
-                <View
-                  style={[
-                    styles.bottomNavIconWrap,
-                    active &&
-                      styles.bottomNavIconWrapActive,
-                  ]}
-                >
-                  <Ionicons
-                    name={
-                      item.icon
-                    }
-                    size={21}
-                    color={
-                      active
-                        ? COLORS.purpleAccent
-                        : COLORS.mutedText
-                    }
-                  />
-                </View>
-
-                <Text
-                  style={[
-                    styles.bottomNavLabel,
-                    active &&
-                      styles.bottomNavLabelActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <AdminBottomNav active="settings" />
       </View>
     </KeyboardAvoidingView>
   );
@@ -2266,9 +2154,9 @@ const styles =
       paddingHorizontal: 20,
       paddingTop: 54,
       paddingBottom: 26,
-      borderBottomLeftRadius: 28,
-      borderBottomRightRadius: 28,
       overflow: "hidden",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTop: {

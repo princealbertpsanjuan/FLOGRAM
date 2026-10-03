@@ -347,6 +347,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 10,
     backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
   back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { marginLeft: 4, color: TEXT, fontSize: 19, fontWeight: '800' },

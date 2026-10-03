@@ -43,6 +43,10 @@ import {
   type SavedAddress,
 } from "../../services/addresses";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
+import { formatAddOnsLine, type OrderAddOn } from '../../services/addons';
+
 /* =========================================================
  * TYPES
  * ======================================================= */
@@ -213,6 +217,10 @@ type CartItem = {
   lineSubtotal?:
     | number
     | null;
+
+  addOns?: OrderAddOn[];
+
+  addOnsTotal?: number;
 };
 
 type Cart = {
@@ -2709,53 +2717,10 @@ export default function CustomerCheckoutScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={
-            COLORS.background
-          }
-        />
-
-        <View
-          style={
-            styles.centerState
-          }
-        >
-          <View
-            style={
-              styles.stateIcon
-            }
-          >
-            <Ionicons
-              name="bag-check-outline"
-              size={31}
-              color={
-                COLORS.primary
-              }
-            />
-          </View>
-
-          <ActivityIndicator
-            size="large"
-            color={
-              COLORS.primary
-            }
-          />
-
-          <Text
-            style={
-              styles.stateText
-            }
-          >
-            Preparing your checkout...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Preparing your checkout..."
+      />
     );
   }
 
@@ -3121,6 +3086,15 @@ export default function CustomerCheckoutScreen() {
                               item.quantity
                             }
                           </Text>
+
+                          {item.addOns?.length ? (
+                            <Text
+                              numberOfLines={2}
+                              style={styles.addOnsLine}
+                            >
+                              + {formatAddOnsLine(item.addOns)}
+                            </Text>
+                          ) : null}
                         </View>
 
                         <View
@@ -5101,14 +5075,10 @@ const styles =
       alignItems:
         "center",
 
-      borderBottomWidth:
-        1,
-
-      borderBottomColor:
-        COLORS.border,
-
       backgroundColor:
         COLORS.card,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     backButton: {
@@ -5413,6 +5383,13 @@ const styles =
 
       color:
         COLORS.primary,
+    },
+
+    addOnsLine: {
+      marginTop: 3,
+      color: "#B5476F",
+      fontSize: 12,
+      fontWeight: "600",
     },
 
     quantityText: {

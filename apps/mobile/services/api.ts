@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './storage';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL;
@@ -82,7 +82,7 @@ export async function apiRequest<T>(
 
   if (authenticated) {
     const accessToken =
-      await SecureStore.getItemAsync(
+      await SecureStore.getItem(
         'flogram_access_token'
       );
 

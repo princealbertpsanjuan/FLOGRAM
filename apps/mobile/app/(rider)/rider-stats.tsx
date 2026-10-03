@@ -9,7 +9,6 @@ import {
 } from 'react';
 
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -27,6 +26,8 @@ import {
 import RiderBottomNav, {
   useRiderBottomNavSpace,
 } from '../../components/rider/rider-bottom-nav';
+
+import { ScreenLoader } from '../../components/ui/state-views';
 
 /*
  * =========================================================
@@ -345,30 +346,10 @@ export default function RiderStatsScreen() {
     !dashboard
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.container
-        }
-      >
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#C99730"
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading Rider stats...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="rider"
+        message="Loading stats..."
+      />
     );
   }
 
@@ -1406,6 +1387,8 @@ const styles =
 
       alignItems:
         'center',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     avatar: {

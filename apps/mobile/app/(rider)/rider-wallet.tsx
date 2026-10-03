@@ -47,6 +47,8 @@ import RiderBottomNav, {
 
 import RiderEarningsPanel from '../../components/rider/rider-earnings-panel';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * RIDER WALLET
@@ -722,6 +724,10 @@ export default function RiderWalletScreen() {
         const result =
           await ImagePicker
             .launchCameraAsync({
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
               mediaTypes: [
                 'images',
               ],
@@ -776,6 +782,10 @@ export default function RiderWalletScreen() {
         const result =
           await ImagePicker
             .launchImageLibraryAsync({
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
               mediaTypes: [
                 'images',
               ],
@@ -927,45 +937,10 @@ export default function RiderWalletScreen() {
     !walletData
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <View
-          style={
-            styles.centerState
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color={GOLD}
-          />
-
-          <Text
-            style={
-              styles.loadingTitle
-            }
-          >
-            Loading Wallet
-          </Text>
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Getting your COD
-            collection and daily
-            remittance records.
-          </Text>
-        </View>
-
-<RiderBottomNav
-        active="wallet"
-        onReselect={handleRefresh}
+      <ScreenLoader
+        role="rider"
+        message="Loading wallet..."
       />
-      </SafeAreaView>
     );
   }
 
@@ -3303,8 +3278,8 @@ const styles =
       paddingHorizontal: 18,
       paddingTop: 17,
       paddingBottom: 25,
-      borderBottomLeftRadius: 25,
-      borderBottomRightRadius: 25,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTopRow: {

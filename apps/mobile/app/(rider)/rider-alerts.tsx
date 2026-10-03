@@ -400,6 +400,20 @@ export default function RiderAlertsScreen() {
         notification:
           FlogramNotification
       ) => {
+        const disputeId =
+          typeof notification.metadata?.disputeId === 'string'
+            ? notification.metadata.disputeId
+            : null;
+
+        if (disputeId) {
+          router.push({
+            pathname: '/(shared)/dispute-details',
+            params: { disputeId },
+          } as never);
+
+          return;
+        }
+
         /*
          * -----------------------------------------------------
          * REMITTANCE
@@ -1281,6 +1295,42 @@ function getNotificationAppearance(
      * -----------------------------------------------------
      */
 
+    case 'dispute_update':
+      return {
+        icon:
+          '⚑',
+
+        color:
+          '#747BEF',
+
+        backgroundColor:
+          '#ECEEFF',
+      };
+
+    case 'account_penalty':
+      return {
+        icon:
+          '!',
+
+        color:
+          '#D26C6C',
+
+        backgroundColor:
+          '#FBEAEA',
+      };
+
+    case 'payout_update':
+      return {
+        icon:
+          '₱',
+
+        color:
+          '#3E9B62',
+
+        backgroundColor:
+          '#EAF7EE',
+      };
+
     case 'announcement':
       return {
         icon:
@@ -1496,12 +1546,8 @@ const styles =
 
       paddingBottom:
         15,
-
-      borderBottomWidth:
-        1,
-
-      borderBottomColor:
-        '#F0EEF0',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTop: {

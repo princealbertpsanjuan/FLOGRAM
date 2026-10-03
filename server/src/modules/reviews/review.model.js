@@ -259,6 +259,32 @@ const reviewSchema =
         maxlength:
           2000,
       },
+
+      /*
+       * =====================================================
+       * SENTIMENT (AFINN-165)
+       * =====================================================
+       *
+       * Calculated from the comment when the review is
+       * saved. Reports re-score comments on the fly, so
+       * older reviews without these fields still count.
+       */
+
+      sentimentScore: {
+        type: Number,
+        default: null,
+      },
+
+      sentimentComparative: {
+        type: Number,
+        default: null,
+      },
+
+      sentimentLabel: {
+        type: String,
+        enum: ["positive", "neutral", "negative", null],
+        default: null,
+      },
     },
     {
       timestamps:

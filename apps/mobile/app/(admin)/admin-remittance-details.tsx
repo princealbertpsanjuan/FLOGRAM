@@ -27,6 +27,8 @@ import {
   verifyAdminRemittance,
 } from "../../services/admin";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 const COLORS = {
   purple: "#312E81",
   purpleAccent: "#5B4FCF",
@@ -439,16 +441,10 @@ export default function AdminRemittanceDetailsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator
-          size="large"
-          color={COLORS.purpleAccent}
-        />
-
-        <Text style={styles.loadingText}>
-          Loading remittance...
-        </Text>
-      </View>
+      <ScreenLoader
+        role="admin"
+        message="Loading remittance..."
+      />
     );
   }
 

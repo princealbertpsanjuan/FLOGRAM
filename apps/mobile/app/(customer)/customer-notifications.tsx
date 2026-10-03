@@ -27,6 +27,8 @@ import {
   type NotificationType,
 } from "../../services/notification";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -306,6 +308,42 @@ const getNotificationPresentation =
         return {
           icon:
             "shield-outline" as const,
+
+          background:
+            "#FDECEE",
+
+          foreground:
+            "#B5505D",
+        };
+
+      case "shop_new_product":
+        return {
+          icon:
+            "storefront-outline" as const,
+
+          background:
+            "#FFF0F5",
+
+          foreground:
+            "#D85D7A",
+        };
+
+      case "dispute_update":
+        return {
+          icon:
+            "flag-outline" as const,
+
+          background:
+            "#EEF4FF",
+
+          foreground:
+            "#4773A8",
+        };
+
+      case "account_penalty":
+        return {
+          icon:
+            "warning-outline" as const,
 
           background:
             "#FDECEE",
@@ -672,6 +710,42 @@ export default function CustomerNotificationsScreen() {
         FlogramNotification
     ) => {
       /*
+       * Dispute updates open the report; new bouquets
+       * from a followed shop open the product page.
+       */
+
+      const disputeId =
+        typeof notification.metadata?.disputeId === "string"
+          ? notification.metadata.disputeId
+          : null;
+
+      if (disputeId) {
+        router.push({
+          pathname: "/(shared)/dispute-details",
+          params: { disputeId },
+        } as never);
+
+        return;
+      }
+
+      const flowerId =
+        typeof notification.metadata?.flowerId === "string"
+          ? notification.metadata.flowerId
+          : null;
+
+      if (
+        notification.type === "shop_new_product" &&
+        flowerId
+      ) {
+        router.push({
+          pathname: "/(customer)/customer-product-details",
+          params: { flowerId },
+        } as never);
+
+        return;
+      }
+
+      /*
        * =====================================================
        * DELIVERED
        * =====================================================
@@ -946,56 +1020,10 @@ export default function CustomerNotificationsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <View
-            style={
-              styles.loadingIcon
-            }
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={34}
-              color="#D85D7A"
-            />
-          </View>
-
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingTitle
-            }
-          >
-            Notifications
-          </Text>
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading your latest
-            updates...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading..."
+      />
     );
   }
 
@@ -1832,12 +1860,8 @@ const styles =
 
       backgroundColor:
         "#FFFFFF",
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#E8E2E0",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {

@@ -38,6 +38,9 @@ import {
 
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+import InboxBell from '../../components/ui/inbox-bell';
+
 /*
  * =========================================================
  * TYPES
@@ -827,25 +830,10 @@ export default function SellerDashboardScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#74A485"
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading
-          dashboard...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="seller"
+        message="Loading..."
+      />
     );
   }
 
@@ -961,6 +949,9 @@ export default function SellerDashboardScreen() {
               </Text>
             </View>
 
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <InboxBell accent="#5E9874" />
+
             <Pressable
               style={
                 styles.headerMenuButton
@@ -979,6 +970,7 @@ export default function SellerDashboardScreen() {
                 •••
               </Text>
             </Pressable>
+            </View>
           </View>
 
           {/* SUMMARY */}
@@ -2030,6 +2022,8 @@ const styles =
       paddingBottom: 19,
       overflow:
         'hidden',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerCircleOne: {

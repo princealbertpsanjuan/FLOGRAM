@@ -234,6 +234,14 @@ export const updateUserAccountStatusByAdmin =
     user.accountStatus =
       accountStatus;
 
+    /*
+     * Manual reactivation clears any penalty dates.
+     */
+    if (accountStatus === "active") {
+      user.suspendedUntil = null;
+      user.suspensionReason = "";
+    }
+
     await user.save();
 
     return user;

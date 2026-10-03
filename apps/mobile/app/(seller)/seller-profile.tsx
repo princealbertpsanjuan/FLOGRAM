@@ -40,6 +40,8 @@ import {
 
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 /*
  * =========================================================
  * TYPES
@@ -499,25 +501,10 @@ export default function SellerProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#6FA382"
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading seller
-          profile...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="seller"
+        message="Loading..."
+      />
     );
   }
 
@@ -966,6 +953,65 @@ export default function SellerProfileScreen() {
               label="Pickup Address"
               value={
                 locationText
+              }
+              last
+            />
+          </View>
+
+          {/* SHOP TOOLS */}
+
+          <View
+            style={
+              styles.menuCard
+            }
+          >
+            <MenuItem
+              icon="₱"
+              label="Earnings & Payouts"
+              onPress={() =>
+                router.push(
+                  '/(seller)/seller-earnings' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="+"
+              label="Gift Add-ons"
+              onPress={() =>
+                router.push(
+                  '/(seller)/seller-addons' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="↗"
+              label="Shop Insights"
+              onPress={() =>
+                router.push(
+                  '/(seller)/seller-insights' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="✦"
+              label="AI Seller Assistant"
+              onPress={() =>
+                router.push(
+                  '/(shared)/work-assistant' as never
+                )
+              }
+            />
+
+            <MenuItem
+              icon="!"
+              label="My Reports"
+              onPress={() =>
+                router.push(
+                  '/(shared)/my-reports' as never
+                )
               }
               last
             />
@@ -1697,6 +1743,8 @@ const styles =
       paddingTop: 23,
       overflow:
         'hidden',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerCircleOne: {

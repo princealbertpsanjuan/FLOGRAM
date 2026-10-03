@@ -90,6 +90,24 @@ const checkoutItemSchema =
         min: 0,
       },
 
+      addOns: {
+        type: [
+          {
+            addOn: { type: mongoose.Schema.Types.ObjectId, ref: "GiftAddOn" },
+            name: String,
+            category: String,
+            price: Number,
+            quantity: Number,
+          },
+        ],
+        default: [],
+      },
+
+      addOnsTotal: {
+        type: Number,
+        default: 0,
+      },
+
       subtotal: {
         type: Number,
 

@@ -2237,6 +2237,8 @@ const styles =
 
       alignItems:
         'center',
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     shopAvatar: {

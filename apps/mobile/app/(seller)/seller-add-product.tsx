@@ -111,6 +111,10 @@ export default function SellerAddProductScreen() {
     try {
       const result =
         await ImagePicker.launchCameraAsync({
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
           mediaTypes: ['images'],
           quality: 0.8,
           allowsEditing: true,
@@ -158,6 +162,10 @@ export default function SellerAddProductScreen() {
 
     const result =
       await ImagePicker.launchImageLibraryAsync({
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
         selectionLimit: remaining,
@@ -663,6 +671,8 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
 
   backButton: {

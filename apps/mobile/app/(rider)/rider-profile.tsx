@@ -324,6 +324,16 @@ export default function RiderProfileScreen() {
               icon="wallet-outline"
               label="Earnings & COD Remittance"
               onPress={() => router.replace('/(rider)/rider-wallet' as never)}
+            />
+            <LinkRow
+              icon="sparkles-outline"
+              label="AI Rider Assistant"
+              onPress={() => router.push('/(shared)/work-assistant' as never)}
+            />
+            <LinkRow
+              icon="flag-outline"
+              label="My Reports"
+              onPress={() => router.push('/(shared)/my-reports' as never)}
               last
             />
           </Section>

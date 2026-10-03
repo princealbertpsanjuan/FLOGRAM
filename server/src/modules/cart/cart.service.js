@@ -2,6 +2,7 @@ import Cart from "./cart.model.js";
 
 import User from "../auth/auth.model.js";
 import Flower from "../flowers/flower.model.js";
+import { resolveAddOnSelections } from "../addons/addon.service.js";
 
 /*
  * =========================================================
@@ -130,6 +131,10 @@ const populateCart = async (
   return Cart.findById(
     cartId
   )
+    .populate({
+      path: "items.addOns.addOn",
+      select: "name price category isAvailable isActive florist",
+    })
     .populate({
       path: "items.flower",
 
@@ -330,11 +335,44 @@ const buildCartResponse = (
               )
             : null;
 
+        /*
+         * Gift add-ons on this line (still available
+         * ones only).
+         */
+        const addOns =
+          (Array.isArray(item.addOns)
+            ? item.addOns
+            : []
+          )
+            .filter(
+              (entry) =>
+                entry?.addOn &&
+                entry.addOn.isActive !== false &&
+                entry.addOn.isAvailable !== false
+            )
+            .map((entry) => ({
+              addOnId: String(
+                entry.addOn._id || entry.addOn
+              ),
+              name: entry.addOn.name || "",
+              category: entry.addOn.category || "other",
+              price: Number(entry.addOn.price || 0),
+              quantity: Number(entry.quantity || 1),
+            }));
+
+        const addOnsTotal =
+          addOns.reduce(
+            (sum, entry) =>
+              sum + entry.price * entry.quantity,
+            0
+          );
+
         const lineSubtotal =
           isPurchasable &&
           currentPrice !== null
             ? currentPrice *
-              quantity
+                quantity +
+              addOnsTotal
             : null;
 
         if (isPurchasable) {
@@ -350,6 +388,10 @@ const buildCartResponse = (
 
         return {
           ...item,
+
+          addOns,
+
+          addOnsTotal,
 
           quantity,
 
@@ -431,7 +473,8 @@ export const addItemToCart =
     customerId,
     flowerId,
     quantity =
-      DEFAULT_QUANTITY
+      DEFAULT_QUANTITY,
+    addOnSelections = undefined
   ) => {
     await getCustomer(
       customerId
@@ -497,6 +540,23 @@ export const addItemToCart =
           )
       );
 
+    /*
+     * Validate add-ons against this bouquet's shop.
+     * undefined = keep the line's current add-ons.
+     */
+    const addOns =
+      addOnSelections === undefined
+        ? undefined
+        : (
+            await resolveAddOnSelections(
+              flower.florist,
+              addOnSelections
+            )
+          ).addOns.map((entry) => ({
+            addOn: entry.addOn,
+            quantity: entry.quantity,
+          }));
+
     if (existingItem) {
       existingItem.quantity =
         normalizeQuantity(
@@ -506,14 +566,17 @@ export const addItemToCart =
           ) +
             finalQuantity
         );
+
+      if (addOns !== undefined) {
+        existingItem.addOns = addOns;
+      }
     } else {
       cart.items.push({
         flower:
           flower._id,
-
         quantity:
           finalQuantity,
-
+        addOns: addOns || [],
         addedAt:
           new Date(),
       });
@@ -817,3 +880,46 @@ export const clearCustomerCart =
       populatedCart
     );
   };
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * SET GIFT ADD-ONS FOR A CART LINE
+ * =========================================================
+ *
+ * PATCH /api/v1/cart/items/:cartItemId/add-ons
+ * body: { addOns: [{ addOnId, quantity }] }   ([] clears)
+ * =========================================================
+ */
+export const setCartItemAddOns = async (
+  customerId,
+  cartItemId,
+  addOnSelections = []
+) => {
+  await getCustomer(customerId);
+
+  const cart = await Cart.findOne({ customer: customerId });
+  const item = cart?.items?.id(cartItemId);
+
+  if (!item) {
+    const error = new Error("Cart item was not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const flower = await Flower.findById(item.flower).select("florist");
+
+  if (!flower) {
+    const error = new Error("Flower listing was not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const { addOns } = await resolveAddOnSelections(flower.florist, addOnSelections);
+
+  item.addOns = addOns.map((entry) => ({ addOn: entry.addOn, quantity: entry.quantity }));
+
+  await cart.save();
+
+  return buildCartResponse(await populateCart(cart._id));
+};

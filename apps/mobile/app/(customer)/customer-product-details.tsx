@@ -27,6 +27,12 @@ import {
   apiRequest,
 } from "../../services/api";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+import AddOnPicker from '../../components/customer/addon-picker';
+import AlsoBoughtRow from '../../components/customer/also-bought-row';
+import FollowShopButton from '../../components/customer/follow-shop-button';
+import type { AddOnSelection, GiftAddOn } from '../../services/addons';
+
 /*
  * =========================================================
  * API CONFIGURATION
@@ -304,6 +310,13 @@ export default function CustomerProductDetailsScreen() {
     useState(false);
 
   /*
+   * Gift add-ons chosen on this page (sent with Add to Cart).
+   */
+  const [selectedAddOns, setSelectedAddOns] = useState<AddOnSelection[]>([]);
+
+  const [shopAddOns, setShopAddOns] = useState<GiftAddOn[]>([]);
+
+  /*
    * =======================================================
    * LOAD PRODUCT
    * =======================================================
@@ -446,9 +459,15 @@ export default function CustomerProductDetailsScreen() {
       ? flower.florist
       : null;
 
+  const addOnsTotal = selectedAddOns.reduce((sum, selection) => {
+    const addOn = shopAddOns.find(item => item._id === selection.addOnId);
+    return sum + (addOn ? Number(addOn.price || 0) * selection.quantity : 0);
+  }, 0);
+
   const totalPrice =
     (flower?.price ?? 0) *
-    quantity;
+    quantity +
+    addOnsTotal;
 
   /*
    * =======================================================
@@ -520,6 +539,9 @@ export default function CustomerProductDetailsScreen() {
                       flower._id,
 
                     quantity,
+
+                    addOns:
+                      selectedAddOns,
                   }
                 ),
               }
@@ -604,70 +626,10 @@ export default function CustomerProductDetailsScreen() {
     !flower
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor="#FFFFFF"
-        />
-
-        <View
-          style={
-            styles.header
-          }
-        >
-          <Pressable
-            style={
-              styles.headerButton
-            }
-            onPress={() =>
-              router.back()
-            }
-          >
-            <Ionicons
-              name="chevron-back"
-              size={24}
-              color="#302B2A"
-            />
-          </Pressable>
-
-          <Text
-            style={
-              styles.headerTitle
-            }
-          >
-            Bouquet Details
-          </Text>
-
-          <View
-            style={
-              styles.headerButton
-            }
-          />
-        </View>
-
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#D85D7A"
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading bouquet...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="customer"
+        message="Loading bouquet..."
+      />
     );
   }
 
@@ -1057,15 +1019,21 @@ export default function CustomerProductDetailsScreen() {
               styles.productCard
             }
           >
-            <Text
-              style={
-                styles.shopName
-              }
-            >
-              {getFloristName(
-                flower.florist
-              )}
-            </Text>
+            <View style={styles.shopRow}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.shopName,
+                  { flex: 1 },
+                ]}
+              >
+                {getFloristName(
+                  flower.florist
+                )}
+              </Text>
+
+              <FollowShopButton floristId={florist?._id} />
+            </View>
 
             <Text
               style={
@@ -1491,6 +1459,15 @@ export default function CustomerProductDetailsScreen() {
             </Text>
           </View>
 
+          <AddOnPicker
+            floristId={florist?._id}
+            value={selectedAddOns}
+            onChange={setSelectedAddOns}
+            onAddOnsLoaded={setShopAddOns}
+          />
+
+          <AlsoBoughtRow flowerId={flower._id} />
+
           <View
             style={
               styles.bottomSpacer
@@ -1682,12 +1659,8 @@ const styles =
 
       backgroundColor:
         "#FFFFFF",
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      borderBottomColor:
-        "#EBE5E3",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerButton: {
@@ -2457,6 +2430,12 @@ const styles =
       lineHeight: 17,
 
       color: "#8A6C42",
+    },
+
+    shopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
     },
 
     bottomSpacer: {

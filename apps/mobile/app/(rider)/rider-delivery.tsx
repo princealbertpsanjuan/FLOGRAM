@@ -49,6 +49,10 @@ import {
   formatPeso,
 } from '../../utils/rider-format';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
+import ReportProblemLink from '../../components/ui/report-problem-link';
+
 /*
  * =========================================================
  * RIDER ACTIVE DELIVERY
@@ -1330,6 +1334,10 @@ const sendLocationToBackend =
         const result =
           await ImagePicker.launchCameraAsync(
             {
+        // Ask iOS for JPEG instead of HEIC so every upload
+        // and the image-search model can read the photo.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
               mediaTypes:
                 ['images'],
 
@@ -1791,24 +1799,10 @@ setLocationError(null);
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#C99730"
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading delivery...
-        </Text>
-      </SafeAreaView>
+      <ScreenLoader
+        role="rider"
+        message="Loading delivery..."
+      />
     );
   }
 
@@ -3160,6 +3154,24 @@ setLocationError(null);
             </View>
           )}
 
+          {delivery.status !== 'available' ? (
+            <ReportProblemLink
+              orderId={
+                typeof delivery.order === 'object' && delivery.order
+                  ? delivery.order._id
+                  : typeof delivery.order === 'string'
+                    ? delivery.order
+                    : null
+              }
+              productName={
+                typeof delivery.order === 'object' && delivery.order
+                  ? delivery.order.productName
+                  : null
+              }
+              color="#C49317"
+            />
+          ) : null}
+
           <View
             style={
               styles.bottomSpacer
@@ -3284,6 +3296,8 @@ const styles =
       paddingHorizontal: 18,
       paddingTop: 18,
       paddingBottom: 16,
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerTop: {

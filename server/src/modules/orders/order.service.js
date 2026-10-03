@@ -13,6 +13,7 @@ import {
 import {
   createNotification,
 } from "../notifications/notification.service.js";
+import { resolveAddOnSelections } from "../addons/addon.service.js";
 
 /*
  * =========================================================
@@ -813,11 +814,35 @@ export const createOrder = async (
    *
    * Never trust frontend subtotal.
    */
+  /*
+   * Gift add-ons: only for shop bouquet listings, priced
+   * from the database and limited to this florist.
+   */
+  const {
+    addOns,
+    addOnsTotal,
+  } =
+    sourceType ===
+      "flower_listing" &&
+    Array.isArray(
+      orderData.addOns
+    ) &&
+    orderData.addOns.length
+      ? await resolveAddOnSelections(
+          florist,
+          orderData.addOns
+        )
+      : {
+          addOns: [],
+          addOnsTotal: 0,
+        };
+
   const subtotal =
     Number(
       unitPrice
     ) *
-    finalQuantity;
+      finalQuantity +
+    addOnsTotal;
 
   /*
    * =======================================================
@@ -1222,6 +1247,10 @@ const totalAmount =
         finalQuantity,
 
       subtotal,
+
+      addOns,
+
+      addOnsTotal,
 
       /*
        * DELIVERY PRICING

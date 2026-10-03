@@ -40,6 +40,12 @@ import {
 
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
+import { formatAddOnsLine } from '../../services/addons';
+
+import ReportProblemLink from '../../components/ui/report-problem-link';
+
 /*
  * =========================================================
  * TYPES
@@ -822,30 +828,10 @@ useEffect(() => {
     loading
   ) {
     return (
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        <View
-          style={
-            styles.centerState
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#74A485"
-          />
-
-          <Text
-            style={
-              styles.stateText
-            }
-          >
-            Loading orders...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ScreenLoader
+        role="seller"
+        message="Loading orders..."
+      />
     );
   }
 
@@ -1488,6 +1474,18 @@ function OrderCard({
                 unitPrice
               )}
             </Text>
+
+            {order.addOns?.length ? (
+              <Text
+                numberOfLines={2}
+                style={[
+                  styles.productMeta,
+                  { color: '#B5476F', fontWeight: '600' },
+                ]}
+              >
+                Add-ons: {formatAddOnsLine(order.addOns)} ({formatCurrency(order.addOnsTotal ?? 0)})
+              </Text>
+            ) : null}
           </View>
 
           <Text
@@ -2014,6 +2012,14 @@ function OrderCard({
             </Text>
           </View>
         </View>
+      ) : null}
+
+      {order.orderStatus !== 'pending' ? (
+        <ReportProblemLink
+          orderId={order._id}
+          productName={order.productName}
+          color="#5E9874"
+        />
       ) : null}
     </View>
   );

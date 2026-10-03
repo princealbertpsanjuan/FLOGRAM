@@ -4,6 +4,7 @@ import {
   getCustomerCart,
   removeCartItem,
   removeFlowerFromCart,
+  setCartItemAddOns,
   updateCartItemQuantity,
 } from "./cart.service.js";
 
@@ -83,7 +84,8 @@ export const addItem = async (
       await addItemToCart(
         customerId,
         req.body.flowerId,
-        req.body.quantity
+        req.body.quantity,
+        req.body.addOns
       );
 
     return res
@@ -270,6 +272,24 @@ export const clearCart = async (
           cart,
         },
       });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateCartItemAddOns = async (req, res, next) => {
+  try {
+    const cart = await setCartItemAddOns(
+      getAuthenticatedUserId(req),
+      req.params.cartItemId,
+      req.body?.addOns || []
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Gift add-ons updated successfully.",
+      data: { cart },
+    });
   } catch (error) {
     next(error);
   }

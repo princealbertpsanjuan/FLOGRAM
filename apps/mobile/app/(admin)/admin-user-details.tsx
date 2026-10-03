@@ -25,6 +25,8 @@ import {
   updateAdminUserStatus,
 } from "../../services/admin";
 
+import { ScreenLoader } from '../../components/ui/state-views';
+
 const COLORS = {
   purple: "#312E81",
   purpleDark: "#29266D",
@@ -142,6 +144,7 @@ function getStatusStyle(
       };
 
     case "suspended":
+    case "banned":
       return {
         backgroundColor:
           COLORS.redBackground,
@@ -541,26 +544,10 @@ export default function AdminUserDetailsScreen() {
 
   if (loading) {
     return (
-      <View
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color={
-            COLORS.purpleAccent
-          }
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading user...
-        </Text>
-      </View>
+      <ScreenLoader
+        role="admin"
+        message="Loading user..."
+      />
     );
   }
 
@@ -1190,6 +1177,33 @@ export default function AdminUserDetailsScreen() {
             </View>
           )}
 
+          {user.role !== "admin" ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/(admin)/admin-violations",
+                  params: {
+                    userId,
+                    userName: getFullName(user),
+                    userRole: user.role,
+                  },
+                } as never)
+              }
+              style={styles.violationButton}
+            >
+              <Ionicons
+                name="warning-outline"
+                size={17}
+                color="#B45309"
+              />
+
+              <Text style={styles.violationButtonText}>
+                Policy Violations & Penalties
+              </Text>
+            </Pressable>
+          ) : null}
+
           <View
             style={
               styles.bottomSpace
@@ -1325,9 +1339,9 @@ const styles =
       paddingHorizontal: 18,
       paddingTop: 54,
       paddingBottom: 22,
-      borderBottomLeftRadius: 28,
-      borderBottomRightRadius: 28,
       overflow: "hidden",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerDecoration: {
@@ -1775,7 +1789,26 @@ const styles =
       marginTop: 14,
     },
 
-    bottomSpace: {
+    violationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 48,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#F2C27B",
+    backgroundColor: "#FFF8EC",
+  },
+
+  violationButtonText: {
+    color: "#B45309",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  bottomSpace: {
       height: 35,
     },
   });

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Flower from "./flower.model.js";
 import Florist from "../florists/florist.model.js";
 import User from "../auth/auth.model.js";
@@ -6,6 +7,7 @@ import {
   generateImageEmbedding,
   generateUploadedImageEmbedding,
 } from "../../services/ai.service.js";
+import { notifyFollowersOfNewProduct } from "../follows/follow.service.js";
 
 const normalizePath = (filePath) => {
   return filePath
@@ -176,6 +178,16 @@ export const createFlower = async (
         true,
     });
 
+  /*
+   * Let customers who follow this shop know.
+   * Runs in the background; never blocks the seller.
+   */
+  if (flower.isAvailable) {
+    void notifyFollowersOfNewProduct(
+      flower
+    );
+  }
+
   return flower;
 };
 
@@ -335,6 +347,18 @@ export const getPublicFlowers =
       isActive: true,
       isAvailable: true,
     };
+
+    /*
+     * One shop's bouquets (Following list, shop page).
+     */
+    if (
+      filters.florist &&
+      mongoose.Types.ObjectId.isValid(
+        String(filters.florist)
+      )
+    ) {
+      query.florist = filters.florist;
+    }
 
     /*
      * =====================================================

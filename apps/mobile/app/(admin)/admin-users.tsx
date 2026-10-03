@@ -26,6 +26,8 @@ import {
   getAdminUsers,
 } from "../../services/admin";
 
+import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+
 type RoleFilter = "all" | AdminUserRole;
 
 type RegistrationPeriod =
@@ -1475,65 +1477,7 @@ const handleHeaderRefresh = useCallback(async () => {
 
       {/* BOTTOM NAVIGATION */}
 
-      <View
-        style={
-          styles.bottomNavigation
-        }
-      >
-        <BottomNavItem
-          icon="home-outline"
-          activeIcon="home"
-          label="Dashboard"
-          onPress={() =>
-            router.replace(
-              "/(admin)/admin-dashboard"
-            )
-          }
-        />
-
-        <BottomNavItem
-          icon="people-outline"
-          activeIcon="people"
-          label="Users"
-          active
-          onPress={() =>
-            undefined
-          }
-        />
-
-        <BottomNavItem
-          icon="receipt-outline"
-          activeIcon="receipt"
-          label="Orders"
-          onPress={() =>
-            router.replace(
-              "/(admin)/admin-orders"
-            )
-          }
-        />
-
-        <BottomNavItem
-          icon="bar-chart-outline"
-          activeIcon="bar-chart"
-          label="Reports"
-          onPress={() =>
-            router.replace(
-              "/(admin)/admin-reports"
-            )
-          }
-        />
-
-        <BottomNavItem
-          icon="settings-outline"
-          activeIcon="settings"
-          label="Settings"
-          onPress={() =>
-            router.replace(
-              "/(admin)/admin-settings"
-            )
-          }
-        />
-      </View>
+      <AdminBottomNav active="users" />
     </View>
   );
 }
@@ -1660,64 +1604,6 @@ function FilterButton({
   );
 }
 
-function BottomNavItem({
-  icon,
-  activeIcon,
-  label,
-  active = false,
-  onPress,
-}: {
-  icon: React.ComponentProps<
-    typeof Ionicons
-  >["name"];
-  activeIcon: React.ComponentProps<
-    typeof Ionicons
-  >["name"];
-  label: string;
-  active?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={
-        styles.bottomNavItem
-      }
-      onPress={onPress}
-    >
-      <View
-        style={[
-          styles.bottomNavIconWrap,
-          active &&
-            styles.bottomNavIconWrapActive,
-        ]}
-      >
-        <Ionicons
-          name={
-            active
-              ? activeIcon
-              : icon
-          }
-          size={19}
-          color={
-            active
-              ? COLORS.purpleAccent
-              : COLORS.mutedText
-          }
-        />
-      </View>
-
-      <Text
-        style={[
-          styles.bottomNavLabel,
-          active &&
-            styles.bottomNavLabelActive,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /* =========================================================
  * STYLES
@@ -1747,9 +1633,9 @@ const styles =
       paddingHorizontal: 18,
       paddingTop: 54,
       paddingBottom: 22,
-      borderBottomLeftRadius: 28,
-      borderBottomRightRadius: 28,
       overflow: "hidden",
+      borderBottomLeftRadius: 26,
+      borderBottomRightRadius: 26,
     },
 
     headerDecoration: {
