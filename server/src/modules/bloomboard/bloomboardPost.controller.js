@@ -9,6 +9,7 @@ import {
   saveBloomboardPost,
   unlikeBloomboardPost,
   unsaveBloomboardPost,
+  getMyLikedBloomboardPosts,
 } from "./bloomboardPost.service.js";
 
 export const createPost = async (
@@ -254,6 +255,33 @@ export const getMySavedPosts =
         success: true,
         message:
           "Saved BloomBoard posts retrieved successfully.",
+        data: {
+          count:
+            posts.length,
+          posts,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+export const getMyLikedPosts =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const posts =
+        await getMyLikedBloomboardPosts(
+          req.user.userId
+        );
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Liked BloomBoard posts retrieved successfully.",
         data: {
           count:
             posts.length,

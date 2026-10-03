@@ -2,6 +2,7 @@ import {
   createBloomboardComment,
   deleteBloomboardComment,
   getBloomboardComments,
+  getMyBloomboardComments,
 } from "./bloomboardComment.service.js";
 
 export const createComment = async (
@@ -74,6 +75,31 @@ export const removeComment = async (
         "Comment deleted successfully.",
       data: {
         comment,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMyComments = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const comments =
+      await getMyBloomboardComments(
+        req.user.userId
+      );
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Your BloomBoard comments retrieved successfully.",
+      data: {
+        count: comments.length,
+        comments,
       },
     });
   } catch (error) {

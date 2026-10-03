@@ -4,6 +4,7 @@ import {
   createPost,
   getFeed,
   getMyPosts,
+  getMyLikedPosts,
   getMySavedPosts,
   getPost,
   likePost,
@@ -16,6 +17,7 @@ import {
 import {
   createComment,
   getComments,
+  getMyComments,
   removeComment,
 } from "./bloomboardComment.controller.js";
 
@@ -73,6 +75,22 @@ bloomboardPostRouter.get(
   "/saved/mine",
   authenticate,
   getMySavedPosts
+);
+
+/*
+ * Liked posts and own comment activity.
+ * Keep before /:postId
+ */
+bloomboardPostRouter.get(
+  "/liked/mine",
+  authenticate,
+  getMyLikedPosts
+);
+
+bloomboardPostRouter.get(
+  "/comments/mine",
+  authenticate,
+  getMyComments
 );
 
 /*

@@ -2,9 +2,11 @@ import { Router } from "express";
 
 import {
   changeMyPassword,
+  getMyAddresses,
   getMyProfile,
   getUser,
   getUsers,
+  updateMyAddresses,
   updateMyProfile,
   updateUserStatus,
 } from "./user.controller.js";
@@ -56,6 +58,25 @@ userRouter.patch(
   changePasswordValidation,
   validateUserRequest,
   changeMyPassword
+);
+
+/*
+ * =========================================================
+ * CUSTOMER ADDRESS BOOK
+ *
+ * GET /api/v1/users/me/addresses
+ * PUT /api/v1/users/me/addresses   { addresses: [...] }
+ * =========================================================
+ */
+
+userRouter.get(
+  "/me/addresses",
+  getMyAddresses
+);
+
+userRouter.put(
+  "/me/addresses",
+  updateMyAddresses
 );
 
 /*
