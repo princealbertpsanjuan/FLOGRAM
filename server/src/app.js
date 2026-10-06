@@ -8,6 +8,11 @@ import path from "path";
 import apiRouter from "./routes/index.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
+import {
+  mirrorUploadsMiddleware,
+  uploadsFallback,
+} from "./services/cloudStorage.service.js";
+import paymentPagesRouter from "./routes/paymentPages.js";
 
 const app = express();
 
@@ -172,6 +177,31 @@ app.use(
       "uploads"
     )
   )
+);
+
+/*
+ * Not on local disk (e.g. after a Render redeploy)?
+ * Redirect to the Cloudinary copy when configured.
+ */
+app.use(
+  "/uploads",
+  uploadsFallback
+);
+
+/*
+ * Copy new Multer uploads to Cloudinary after a
+ * successful response (no-op when not configured).
+ */
+app.use(
+  mirrorUploadsMiddleware
+);
+
+/*
+ * PayMongo redirects the customer here after paying.
+ */
+app.use(
+  "/payment",
+  paymentPagesRouter
 );
 
 /*

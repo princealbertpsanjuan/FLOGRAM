@@ -162,7 +162,7 @@ export const createPayMongoCheckoutSession =
       buildRedirectUrl(
         process.env
           .PAYMONGO_SUCCESS_URL ||
-          "https://example.com/payment-success",
+          `${process.env.PUBLIC_BASE_URL || "http://localhost:5000"}/payment/success`,
         order._id
       );
 
@@ -170,7 +170,7 @@ export const createPayMongoCheckoutSession =
       buildRedirectUrl(
         process.env
           .PAYMONGO_CANCEL_URL ||
-          "https://example.com/payment-cancelled",
+          `${process.env.PUBLIC_BASE_URL || "http://localhost:5000"}/payment/cancelled`,
         order._id
       );
 

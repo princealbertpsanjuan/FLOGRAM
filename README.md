@@ -6,7 +6,10 @@ AI-powered floral marketplace for Naga City: Customers, Sellers (florist shops),
 apps/mobile   Expo (React Native) app — Customer, Seller, Rider, Admin
               + the Admin web portal (same code, `expo start --web`)
 server        Node.js / Express 5 / MongoDB (Mongoose) REST API
+ai-service    FastAPI + CLIP image embeddings (image search)
 ```
+
+**Deploying (Render + Cloudinary + Atlas + Android APK): see [DEPLOYMENT.md](DEPLOYMENT.md).**
 
 ## Run
 
@@ -21,7 +24,8 @@ cd apps/mobile && npm install && npx expo start
 cd apps/mobile && npx expo start --web
 ```
 
-`apps/mobile/.env` needs `EXPO_PUBLIC_API_URL=http://<server-ip>:<port>/api/v1`.
+`apps/mobile/.env` needs `EXPO_PUBLIC_API_URL=http://<server-ip>:<port>/api/v1` (see `apps/mobile/.env.example`).
+`server/.env` variables are listed in `server/.env.example`.
 
 The web build is for Admin only. Customer, Seller and Rider accounts are told to use the mobile app;
 their screens redirect to the login page on web.

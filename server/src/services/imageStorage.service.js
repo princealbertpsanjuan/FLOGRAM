@@ -4,6 +4,8 @@ import {
   randomUUID,
 } from "crypto";
 
+import { mirrorToCloud } from "./cloudStorage.service.js";
+
 const MAX_IMAGE_SIZE =
   15 * 1024 * 1024;
 
@@ -195,6 +197,14 @@ export const saveRemoteAiImage =
     await fs.writeFile(
       absolutePath,
       buffer
+    );
+
+    /*
+     * Keep a permanent copy on Cloudinary
+     * (no-op when not configured).
+     */
+    await mirrorToCloud(
+      absolutePath
     );
 
     /*

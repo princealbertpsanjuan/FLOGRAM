@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "create-admin": "node scripts/createAdmin.js",
-    "verify:shifts": "node scripts/verifyShiftRules.js"
+    "verify:shifts": "node scripts/verifyShiftRules.js",
+    "upload-to-cloud": "node scripts/uploadExistingFiles.js"
   },
   "keywords": [],
   "author": "",
@@ -29,5 +30,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
