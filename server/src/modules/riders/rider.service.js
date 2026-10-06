@@ -1,4 +1,5 @@
 import Rider from "./rider.model.js";
+import { notifySafely } from "../notifications/notify-helpers.js";
 import User from "../auth/auth.model.js";
 import Verification from "../verification/verification.model.js";
 import Delivery from "../deliveries/delivery.model.js";
@@ -260,9 +261,22 @@ export const updateRiderProfile =
 
 export const getPendingRiders =
   async () => {
+    /*
+     * Only applicants who already uploaded their
+     * requirements are ready for review.
+     */
+    const submitted =
+      await Verification.find({
+        role: "rider",
+        status: "pending",
+      }).distinct("user");
+
     return Rider.find({
       verificationStatus:
         "pending",
+      owner: {
+        $in: submitted,
+      },
     })
       .populate(
         "owner",
@@ -406,6 +420,14 @@ export const approveRider = async (
 
   await verification.save();
 
+  await notifySafely({
+    recipient: rider.owner,
+    role: "rider",
+    type: "verification_approved",
+    title: "You're approved as a FLOGRAM Rider",
+    message: "You can now request work shifts and accept deliveries.",
+  });
+
   return rider;
 };
 
@@ -510,6 +532,14 @@ export const rejectRider = async (
     reviewedAt;
 
   await verification.save();
+
+  await notifySafely({
+    recipient: rider.owner,
+    role: "rider",
+    type: "verification_rejected",
+    title: "Rider application needs changes",
+    message: remarks ? `Admin's remarks: ${remarks}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
+  });
 
   return rider;
 };

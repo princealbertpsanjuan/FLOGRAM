@@ -1,5 +1,8 @@
 import Verification from "./verification.model.js";
 import User from "../auth/auth.model.js";
+import Florist from "../florists/florist.model.js";
+import Rider from "../riders/rider.model.js";
+import { notifyAdmins } from "../notifications/notify-helpers.js";
 
 /*
  * Convert absolute Windows/Linux upload paths into paths
@@ -74,6 +77,17 @@ export const saveRiderVerification = async (
     throw error;
   }
 
+  const riderProfile =
+    await Rider.findOne({ owner: userId });
+
+  if (!riderProfile) {
+    const error = new Error(
+      "Complete your rider details before uploading documents."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
   const verification =
     await Verification.findOneAndUpdate(
       {
@@ -103,6 +117,21 @@ export const saveRiderVerification = async (
 
   user.verificationStatus = "pending";
   await user.save();
+
+  /*
+   * A resubmission after rejection goes back to the
+   * Admin queue.
+   */
+  riderProfile.verificationStatus = "pending";
+  riderProfile.verificationRemarks = "";
+  await riderProfile.save();
+
+  await notifyAdmins({
+    type: "verification_submitted",
+    title: "Rider application submitted",
+    message: `${user.firstName} ${user.lastName} uploaded rider requirements for review.`,
+    metadata: { screen: "rider-verification", userId: String(user._id) },
+  });
 
   return verification;
 };
@@ -179,6 +208,17 @@ export const saveSellerVerification = async (
     throw error;
   }
 
+  const floristProfile =
+    await Florist.findOne({ owner: userId });
+
+  if (!floristProfile) {
+    const error = new Error(
+      "Complete your shop details before uploading documents."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
   const verification =
     await Verification.findOneAndUpdate(
       {
@@ -210,6 +250,19 @@ export const saveSellerVerification = async (
 
   user.verificationStatus = "pending";
   await user.save();
+
+  floristProfile.verificationStatus = "pending";
+  floristProfile.verificationRemarks = "";
+  floristProfile.isActive = true;
+  floristProfile.shopLogo = floristProfile.shopLogo || `/${shopLogo}`;
+  await floristProfile.save();
+
+  await notifyAdmins({
+    type: "verification_submitted",
+    title: "Seller application submitted",
+    message: `${user.firstName} ${user.lastName} (${floristProfile.shopName}) uploaded seller requirements for review.`,
+    metadata: { screen: "seller-verification", userId: String(user._id) },
+  });
 
   return verification;
 };

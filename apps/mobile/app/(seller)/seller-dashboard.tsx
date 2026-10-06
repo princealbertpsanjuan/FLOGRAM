@@ -17,7 +17,11 @@ import {
   View,
 } from 'react-native';
 
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+
+import { Ionicons } from '@expo/vector-icons';
+
+import { getMyProposals, getSellerCustomRequests, requestIdOf } from '../../services/custom-requests';
 
 import {
   getSellerOrders,
@@ -322,6 +326,40 @@ export default function SellerDashboardScreen() {
     useState<
       string | null
     >(null);
+
+  /*
+   * =======================================================
+   * CUSTOM BOUQUET REQUESTS (refreshed on every visit)
+   * =======================================================
+   */
+
+  const [customRequests, setCustomRequests] = useState({ open: 0, needsOffer: 0 });
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      Promise.all([getSellerCustomRequests(), getMyProposals()])
+        .then(([requests, proposals]) => {
+          if (!active) return;
+
+          const offered = new Set(
+            proposals.filter(proposal => proposal.status !== 'withdrawn').map(requestIdOf)
+          );
+          const open = requests.filter(request => request.status === 'open');
+
+          setCustomRequests({
+            open: open.length,
+            needsOffer: open.filter(request => !offered.has(request._id)).length,
+          });
+        })
+        .catch(() => undefined);
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
 
   /*
    * =======================================================
@@ -1530,6 +1568,34 @@ export default function SellerDashboardScreen() {
             </View>
           ) : null}
 
+          {/* CUSTOM BOUQUET REQUESTS */}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/(seller)/seller-custom-requests' as never)}
+            style={({ pressed }) => [customStyles.card, pressed && { opacity: 0.9 }]}
+          >
+            <View style={customStyles.icon}>
+              <Ionicons name="color-wand-outline" size={22} color="#5E9874" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={customStyles.title}>Custom Bouquet Requests</Text>
+              <Text style={customStyles.text}>
+                {customRequests.needsOffer > 0
+                  ? `${customRequests.needsOffer} request${customRequests.needsOffer === 1 ? '' : 's'} waiting for your price offer`
+                  : customRequests.open > 0
+                    ? `${customRequests.open} open request${customRequests.open === 1 ? '' : 's'} · you already sent offers`
+                    : 'No open requests right now'}
+              </Text>
+            </View>
+            {customRequests.needsOffer > 0 ? (
+              <View style={customStyles.badge}>
+                <Text style={customStyles.badgeText}>{customRequests.needsOffer}</Text>
+              </View>
+            ) : null}
+            <Ionicons name="chevron-forward" size={18} color="#8A958E" />
+          </Pressable>
+
           {/* WEEKLY REVENUE */}
 
           <View
@@ -2711,3 +2777,37 @@ const styles =
       marginTop: 4,
     },
   });
+
+const customStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#DCEBE1',
+    backgroundColor: '#FFFFFF',
+  },
+  icon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F2EC',
+  },
+  title: { color: '#2F3A33', fontSize: 15, fontWeight: '800' },
+  text: { marginTop: 2, color: '#6F7A73', fontSize: 12 },
+  badge: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DF628F',
+  },
+  badgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+});

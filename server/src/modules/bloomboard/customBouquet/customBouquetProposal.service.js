@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { notifySafely } from "../../notifications/notify-helpers.js";
 
 import CustomBouquetProposal from "./customBouquetProposal.model.js";
 import CustomBouquetRequest from "./customBouquetRequest.model.js";
@@ -633,6 +634,19 @@ export const createCustomBouquetProposal =
       florist,
     });
 
+    await notifySafely({
+      recipient: request.customer,
+      role: "customer",
+      type: "custom_request",
+      title: "New offer for your custom bouquet",
+      message: `${florist.shopName || "A florist"} offered ₱${Number(proposal.quotedPrice || 0).toLocaleString("en-PH")}. Open your AI conversation to compare offers.`,
+      metadata: {
+        screen: "ai",
+        requestId: String(request._id),
+        aiConversationId: request.aiConversation ? String(request.aiConversation) : null,
+      },
+    });
+
     return populateProposal(
       proposal._id
     );
@@ -1242,6 +1256,15 @@ export const selectCustomBouquetProposal =
       await populateProposal(
         proposal._id
       );
+
+    await notifySafely({
+      recipient: selectedProposal?.seller?._id || proposal.seller,
+      role: "seller",
+      type: "custom_request",
+      title: "Your custom bouquet offer was chosen",
+      message: `The customer selected your offer of ₱${Number(proposal.quotedPrice || 0).toLocaleString("en-PH")}. The order will appear once they check out.`,
+      metadata: { screen: "custom-request", requestId: String(requestId) },
+    });
 
     return {
       request:

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import User from "./auth.model.js";
+import { notifyAdmins } from "../notifications/notify-helpers.js";
 import { ensureAccountIsUsable } from "../../utils/accountStatus.js";
 
 const allowedRegistrationRoles = ["customer", "seller", "rider"];
@@ -66,6 +67,15 @@ export const registerUser = async (userData) => {
     verificationStatus: requiresVerification
       ? "pending"
       : "not_required",
+  });
+
+  await notifyAdmins({
+    type: "account_created",
+    title: `New ${requestedRole} account`,
+    message: requiresVerification
+      ? `${user.firstName} ${user.lastName} signed up as a ${requestedRole}. Their requirements will appear in ${requestedRole === "seller" ? "Seller" : "Rider"} Verification once uploaded.`
+      : `${user.firstName} ${user.lastName} created a customer account.`,
+    metadata: { userId: String(user._id), role: requestedRole },
   });
 
   const accessToken = generateAccessToken(user);

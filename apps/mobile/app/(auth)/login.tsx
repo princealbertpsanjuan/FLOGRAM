@@ -192,33 +192,13 @@ export default function LoginScreen() {
           user.verificationStatus !==
             'approved'
         ) {
-          if (
-            user.verificationStatus ===
-            'pending'
-          ) {
-            Alert.alert(
-              'Account Verification',
-              'Your account is still waiting for administrator approval.'
-            );
-
-            return;
-          }
-
-          if (
-            user.verificationStatus ===
-            'rejected'
-          ) {
-            Alert.alert(
-              'Account Verification',
-              'Your account verification was rejected. Please contact the administrator.'
-            );
-
-            return;
-          }
-
-          Alert.alert(
-            'Account Verification',
-            'Your account has not been approved yet.'
+          /*
+           * Pending or rejected Sellers/Riders go to
+           * their application: upload requirements,
+           * see review status or resubmit.
+           */
+          router.replace(
+            '/(auth)/application' as never
           );
 
           return;

@@ -40,6 +40,11 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   verification_approved: 'shield-checkmark-outline',
   verification_rejected: 'shield-outline',
   rating_received: 'star-outline',
+  account_created: 'person-add-outline',
+  verification_submitted: 'document-attach-outline',
+  shift_update: 'calendar-outline',
+  custom_request: 'color-wand-outline',
+  remittance_submitted: 'cash-outline',
 };
 
 const timeAgo = (value: string) => {
@@ -92,6 +97,21 @@ export default function NotificationsScreen() {
 
     if (disputeId) {
       router.push({ pathname: '/(shared)/dispute-details', params: { disputeId } } as never);
+    } else if (item.type === 'custom_request' && role === 'seller') {
+      const requestId = typeof item.metadata?.requestId === 'string' ? item.metadata.requestId : undefined;
+      router.push({ pathname: '/(seller)/seller-custom-requests', params: requestId ? { requestId } : {} } as never);
+    } else if (item.type === 'verification_submitted' && role === 'admin') {
+      router.push(
+        (item.metadata?.screen === 'rider-verification'
+          ? '/(admin)/admin-rider-verification'
+          : '/(admin)/admin-seller-verification') as never
+      );
+    } else if (item.type === 'account_created' && role === 'admin') {
+      router.push('/(admin)/admin-users' as never);
+    } else if (item.type === 'remittance_submitted' && role === 'admin') {
+      router.push('/(admin)/admin-remittances' as never);
+    } else if (item.type === 'shift_update' && role === 'admin') {
+      router.push('/(admin)/admin-rider-shifts' as never);
     } else if (item.type === 'payout_update' && role === 'seller') {
       router.push('/(seller)/seller-earnings' as never);
     } else if (item.orderId && role === 'admin') {
