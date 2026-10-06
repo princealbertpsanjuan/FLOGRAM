@@ -106,6 +106,16 @@ export type CustomerOrder = {
   _id: string;
 
   /*
+   * Seller order list only: the latest delivery request.
+   */
+  delivery?: {
+    _id: string;
+    status: 'available' | 'accepted' | 'picked_up' | 'out_for_delivery' | 'delivered' | 'cancelled';
+    acceptedAt?: string | null;
+    rider?: { firstName?: string; lastName?: string; phoneNumber?: string } | null;
+  } | null;
+
+  /*
    * Gift add-ons bought with this bouquet (snapshot).
    */
   addOns?: {
@@ -572,6 +582,31 @@ export async function updateSellerOrderStatus(
         }),
       }
     );
+
+  return response.data.order;
+}
+
+/*
+ * =========================================================
+ * SELLER
+ * PICKUP HANDOVER / CANCEL ORDER
+ * =========================================================
+ */
+
+export async function markPickupOrderCollected(orderId: string): Promise<CustomerOrder> {
+  const response = await apiRequest<UpdateSellerOrderStatusResponse>(
+    `/orders/${encodeURIComponent(orderId.trim())}/picked-up`,
+    { method: 'PATCH', authenticated: true }
+  );
+
+  return response.data.order;
+}
+
+export async function cancelOrderAsSeller(orderId: string, reason: string): Promise<CustomerOrder> {
+  const response = await apiRequest<UpdateSellerOrderStatusResponse>(
+    `/orders/${encodeURIComponent(orderId.trim())}/seller-cancel`,
+    { method: 'PATCH', authenticated: true, body: JSON.stringify({ reason: reason.trim() }) }
+  );
 
   return response.data.order;
 }

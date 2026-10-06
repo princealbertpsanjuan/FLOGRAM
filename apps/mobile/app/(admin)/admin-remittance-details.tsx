@@ -29,6 +29,8 @@ import {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { getUploadUrl } from '../../utils/media';
+
 const COLORS = {
   purple: "#312E81",
   purpleAccent: "#5B4FCF",
@@ -781,7 +783,10 @@ export default function AdminRemittanceDetailsScreen() {
               <View style={styles.imageContainer}>
                 <Image
                   source={{
-                    uri: remittance.proofImageUrl,
+                    uri:
+                      getUploadUrl(
+                        remittance.proofImageUrl
+                      ) || undefined,
                   }}
                   style={styles.proofImage}
                   resizeMode="contain"

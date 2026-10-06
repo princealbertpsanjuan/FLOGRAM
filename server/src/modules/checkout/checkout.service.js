@@ -2373,6 +2373,30 @@ export const createCheckoutPayMongoSession =
       });
 
       /*
+       * Gift add-ons bought with this bouquet.
+       */
+      (order.addOns || []).forEach(
+        (addOn) => {
+          if (
+            Number(addOn.price) > 0
+          ) {
+            lineItems.push({
+              name:
+                `Add-on: ${addOn.name}`.slice(0, 100),
+              description:
+                `Gift add-on for ${order.productName || "bouquet"}`.slice(0, 200),
+              amount:
+                pesoToCentavos(addOn.price),
+              currency:
+                "PHP",
+              quantity:
+                Math.max(Number(addOn.quantity) || 1, 1),
+            });
+          }
+        }
+      );
+
+      /*
        * Delivery fee.
        *
        * Only the first Order belonging to a florist has

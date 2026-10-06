@@ -2709,6 +2709,13 @@ function StandaloneOrderDetails({
               }
             />
 
+            {order.addOns?.length ? (
+              <PriceRow
+                label={`Gift add-ons (${formatAddOnsLine(order.addOns)})`}
+                value={formatMoney(order.addOnsTotal ?? 0)}
+              />
+            ) : null}
+
             <PriceRow
               label="Delivery Fee"
               value={
@@ -3198,7 +3205,7 @@ function ChildOrderCard({
                 { color: "#B5476F", fontWeight: "600" },
               ]}
             >
-              + {formatAddOnsLine(order.addOns)}
+              + {formatAddOnsLine(order.addOns)} ({formatMoney(order.addOnsTotal ?? 0)})
             </Text>
           ) : null}
         </View>
@@ -3290,6 +3297,13 @@ function ChildOrderCard({
               )
             }
           />
+
+          {order.addOns?.length ? (
+            <InfoRow
+              label="Gift add-ons"
+              value={`${formatAddOnsLine(order.addOns)} · ${formatMoney(order.addOnsTotal ?? 0)}`}
+            />
+          ) : null}
 
           <InfoRow
             label="Delivery Fee"
