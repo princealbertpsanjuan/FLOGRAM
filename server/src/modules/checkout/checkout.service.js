@@ -1,4 +1,5 @@
 import Checkout from "./checkout.model.js";
+import { notifySafely } from "../notifications/notify-helpers.js";
 
 import User from "../auth/auth.model.js";
 import Cart from "../cart/cart.model.js";
@@ -2373,6 +2374,30 @@ export const createCheckoutPayMongoSession =
       });
 
       /*
+       * Gift add-ons bought with this bouquet.
+       */
+      (order.addOns || []).forEach(
+        (addOn) => {
+          if (
+            Number(addOn.price) > 0
+          ) {
+            lineItems.push({
+              name:
+                `Add-on: ${addOn.name}`.slice(0, 100),
+              description:
+                `Gift add-on for ${order.productName || "bouquet"}`.slice(0, 200),
+              amount:
+                pesoToCentavos(addOn.price),
+              currency:
+                "PHP",
+              quantity:
+                Math.max(Number(addOn.quantity) || 1, 1),
+            });
+          }
+        }
+      );
+
+      /*
        * Delivery fee.
        *
        * Only the first Order belonging to a florist has
@@ -3197,6 +3222,39 @@ export const processCheckoutPayMongoWebhook =
             eventId,
         },
       }
+    );
+
+    /*
+     * Tell the customer and each shop that payment went
+     * through (the order is now visible to the shop).
+     */
+    const paidOrders =
+      await Order.find({ _id: { $in: checkout.orders } })
+        .select("_id seller productName totalAmount")
+        .lean();
+
+    await notifySafely({
+      recipient: checkout.customer,
+      role: "customer",
+      type: "order_updated",
+      title: "Payment received",
+      message: `We received your online payment of ₱${Number(checkout.totalAmount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}. Your order${paidOrders.length === 1 ? " was" : "s were"} sent to the shop.`,
+      order: paidOrders[0]?._id || null,
+      metadata: { screen: "order", checkoutId: String(checkout._id) },
+    });
+
+    await Promise.all(
+      paidOrders.map((order) =>
+        notifySafely({
+          recipient: order.seller,
+          role: "seller",
+          type: "order_created",
+          title: "New paid order",
+          message: `${order.productName || "A bouquet"} was paid online. Please accept the order.`,
+          order: order._id,
+          metadata: { screen: "order" },
+        })
+      )
     );
 
     return {

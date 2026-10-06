@@ -30,6 +30,10 @@ export type NotificationType =
   | 'dispute_update'
   | 'account_penalty'
   | 'payout_update'
+  | 'account_created'
+  | 'verification_submitted'
+  | 'shift_update'
+  | 'custom_request'
   | 'system'
   | 'announcement';
 

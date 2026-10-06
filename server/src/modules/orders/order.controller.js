@@ -1,5 +1,7 @@
 import {
   cancelCustomerOrder,
+  cancelSellerOrder,
+  completePickupOrder,
   completeCustomerOrder,
   createOrder,
   getAdminOrderById,
@@ -275,6 +277,27 @@ export const complete = async (
         order,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * SELLER: pickup handover / cancel
+ */
+export const pickedUp = async (req, res, next) => {
+  try {
+    const order = await completePickupOrder(req.params.orderId, req.user.userId);
+    res.status(200).json({ success: true, message: "Order marked as picked up.", data: { order } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const sellerCancel = async (req, res, next) => {
+  try {
+    const order = await cancelSellerOrder(req.params.orderId, req.user.userId, req.body?.reason);
+    res.status(200).json({ success: true, message: "Order cancelled.", data: { order } });
   } catch (error) {
     next(error);
   }

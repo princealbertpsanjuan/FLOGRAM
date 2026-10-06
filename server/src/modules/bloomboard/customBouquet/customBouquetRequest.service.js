@@ -1,4 +1,5 @@
 import CustomBouquetRequest from "./customBouquetRequest.model.js";
+import { notifySafely } from "../../notifications/notify-helpers.js";
 
 import User from "../../auth/auth.model.js";
 import Florist from "../../florists/florist.model.js";
@@ -715,6 +716,34 @@ export const createCustomBouquetRequest =
 
         await aiConversation.save();
       }
+    }
+
+    /*
+     * =====================================================
+     * TELL APPROVED SELLERS A NEW REQUEST IS OPEN
+     * =====================================================
+     */
+
+    try {
+      const shops =
+        await Florist.find({ verificationStatus: "approved", isActive: true })
+          .select("owner")
+          .lean();
+
+      await Promise.all(
+        shops.map((shop) =>
+          notifySafely({
+            recipient: shop.owner,
+            role: "seller",
+            type: "custom_request",
+            title: "New custom bouquet request",
+            message: `A customer wants a ${request.occasion ? `${request.occasion} ` : ""}bouquet${request.budget ? ` (budget ₱${Number(request.budget).toLocaleString("en-PH")})` : ""}. Send your price offer.`,
+            metadata: { screen: "custom-request", requestId: String(request._id) },
+          })
+        )
+      );
+    } catch (error) {
+      console.error("Custom request notification failed:", error.message);
     }
 
     /*

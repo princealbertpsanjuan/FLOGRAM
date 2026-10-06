@@ -351,7 +351,7 @@ export default function RegisterScreen() {
 
                 onPress: () => {
                   router.replace(
-                    "/(tabs)"
+                    "/(customer)/customer-dashboard"
                   );
                 },
               },
@@ -379,28 +379,14 @@ export default function RegisterScreen() {
           user.verificationStatus ===
           "pending"
         ) {
-          await logout();
-
-          const accountType =
-            user.role ===
-            "seller"
-              ? "Seller"
-              : "Rider";
-
-          Alert.alert(
-            "Account Created",
-            `Your ${accountType.toLowerCase()} account was created successfully and is awaiting administrator verification.`,
-            [
-              {
-                text: "OK",
-
-                onPress: () => {
-                  router.replace(
-                    "/(auth)/login"
-                  );
-                },
-              },
-            ]
+          /*
+           * Sellers and Riders stay signed in and go
+           * straight to uploading their requirements.
+           * Their account stays pending until Admin
+           * approves it.
+           */
+          router.replace(
+            "/(auth)/application" as never
           );
 
           return;

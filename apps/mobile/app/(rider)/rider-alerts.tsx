@@ -13,12 +13,13 @@ import {
   Alert,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import {
   getNotifications,
@@ -411,6 +412,16 @@ export default function RiderAlertsScreen() {
             params: { disputeId },
           } as never);
 
+          return;
+        }
+
+        if (notification.type === 'shift_update') {
+          router.push('/(rider)/rider-shifts' as never);
+          return;
+        }
+
+        if (notification.type === 'payout_update') {
+          router.push('/(rider)/rider-wallet' as never);
           return;
         }
 
@@ -1319,6 +1330,18 @@ function getNotificationAppearance(
           '#FBEAEA',
       };
 
+    case 'shift_update':
+      return {
+        icon:
+          '◷',
+
+        color:
+          '#C49317',
+
+        backgroundColor:
+          '#FFF4DA',
+      };
+
     case 'payout_update':
       return {
         icon:
@@ -2202,6 +2225,10 @@ const ALERT_CATEGORY_LABELS: Partial<Record<NotificationType, string>> = {
   order_created: 'Order Update',
   order_updated: 'Order Update',
   order_cancelled: 'Order Cancelled',
+  shift_update: 'Work Shift',
+  payout_update: 'Payout',
+  dispute_update: 'Report Update',
+  account_penalty: 'Account Notice',
   announcement: 'Announcement',
   system: 'FLOGRAM',
 };

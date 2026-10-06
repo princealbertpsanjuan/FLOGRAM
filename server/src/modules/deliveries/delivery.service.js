@@ -1077,7 +1077,7 @@ export const getAvailableDeliveryRequests =
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd"
+        "productName inspirationImage totalAmount deliveryFee orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd"
       )
       .sort({
         availableAt:
@@ -1135,7 +1135,7 @@ export const getSellerDeliveries =
       })
       .populate(
         "order",
-        "productName totalAmount orderStatus fulfillmentType paymentMethod paymentStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd"
+        "productName totalAmount deliveryFee orderStatus fulfillmentType paymentMethod paymentStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd"
       )
       .sort({
         createdAt:
@@ -1189,7 +1189,7 @@ export const getRiderDeliveries =
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd paymentMethod paymentStatus"
+        "productName inspirationImage totalAmount deliveryFee orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd paymentMethod paymentStatus"
       )
       .sort({
         createdAt:
@@ -1230,7 +1230,7 @@ export const getCustomerDeliveries =
       )
       .populate(
         "order",
-        "productName inspirationImage totalAmount orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd paymentMethod paymentStatus"
+        "productName inspirationImage totalAmount deliveryFee orderStatus requestedDeliveryDate isPreOrder requestedDeliveryTimeStart requestedDeliveryTimeEnd paymentMethod paymentStatus"
       )
       .sort({
         createdAt:

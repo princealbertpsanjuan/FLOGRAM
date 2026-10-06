@@ -16,7 +16,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -24,6 +23,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import { apiRequest } from "../../services/api";
 import { getStoredUser } from "../../services/auth";

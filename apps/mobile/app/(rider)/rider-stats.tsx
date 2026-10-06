@@ -11,12 +11,13 @@ import {
 import {
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import {
   getRiderDashboard,
@@ -254,13 +255,15 @@ export default function RiderStatsScreen() {
     dashboard?.deliveries
       .active ?? 0;
 
-  const cancelledDeliveries =
-    dashboard?.deliveries
-      .cancelled ?? 0;
-
+  /*
+   * Once a shop releases an order to riders the customer
+   * can no longer cancel it, so the completion rate is
+   * completed ÷ (completed + active).
+   */
   const completionRate =
-    dashboard?.performance
-      .completionRate ?? 0;
+    completedDeliveries + activeDeliveries > 0
+      ? (completedDeliveries / (completedDeliveries + activeDeliveries)) * 100
+      : 0;
 
   const totalDeliveryFees =
     dashboard?.deliveryFees
@@ -640,13 +643,6 @@ export default function RiderStatsScreen() {
                 label="Active"
                 value={formatNumber(
                   activeDeliveries
-                )}
-              />
-
-              <PerformanceRow
-                label="Cancelled"
-                value={formatNumber(
-                  cancelledDeliveries
                 )}
               />
 

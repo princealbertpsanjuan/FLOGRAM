@@ -103,3 +103,29 @@ export const getAlsoBought = async <T = unknown>(flowerId: string) =>
       { method: 'GET' }
     )
   ).data;
+
+/*
+ * Customer search box suggestions (FP-Growth based).
+ */
+export type SearchSuggestions = {
+  basedOn: 'fp-growth' | 'newest';
+  transactionCount: number;
+  popular: { _id: string; name: string; price: number; image: string | null; shopName: string; timesBought: number }[];
+  boughtTogether: { items: { id: string | null; name: string; type: 'bouquet' | 'addon' }[]; confidence: number }[];
+  keywords: string[];
+};
+
+let suggestionsCache: { at: number; data: SearchSuggestions } | null = null;
+
+export const getSearchSuggestions = async () => {
+  if (suggestionsCache && Date.now() - suggestionsCache.at < 5 * 60 * 1000) {
+    return suggestionsCache.data;
+  }
+
+  const data = (
+    await apiRequest<Wrapped<SearchSuggestions>>('/analytics/search-suggestions', { method: 'GET' })
+  ).data;
+
+  suggestionsCache = { at: Date.now(), data };
+  return data;
+};

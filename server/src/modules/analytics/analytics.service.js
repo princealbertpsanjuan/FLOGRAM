@@ -327,3 +327,111 @@ export const getReviewSentiment = async ({ floristId = null, limit = 10 } = {}) 
       .sort((a, b) => a.averageScore - b.averageScore),
   };
 };
+
+/*
+ * =========================================================
+ * SEARCH SUGGESTIONS (Customer search box)
+ * =========================================================
+ *
+ * Popular bouquets = most frequent single items found by
+ * FP-Growth; "bought together" = its association rules.
+ * Keywords come from the popular bouquets' flower types
+ * and occasions. While there are no completed orders yet,
+ * the newest available bouquets are suggested instead.
+ */
+export const getSearchSuggestions = async ({ limit = 8 } = {}) => {
+  const transactions = await buildTransactions();
+  const mined = fpGrowth(transactions, { minCount: 2 });
+  const rules = transactions.length ? associationRules(mined, { minConfidence: 0.2 }) : [];
+
+  /*
+   * Single-item support (frequent 1-itemsets). Counted
+   * directly so a bouquet bought once still ranks.
+   */
+  const singleCounts = new Map();
+  transactions.forEach((items) => {
+    new Set(items).forEach((item) => {
+      if (item.startsWith("flower:")) {
+        singleCounts.set(item, (singleCounts.get(item) || 0) + 1);
+      }
+    });
+  });
+
+  const popularIds = [...singleCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([item, count]) => ({ id: item.slice(7), count }));
+
+  const countById = new Map(popularIds.map((entry) => [entry.id, entry.count]));
+
+  let flowers = await Flower.find({
+    _id: { $in: popularIds.map((entry) => entry.id) },
+    isActive: true,
+    isAvailable: true,
+  })
+    .select("_id name price images flowerTypes occasion category florist")
+    .populate("florist", "shopName")
+    .lean();
+
+  flowers.sort((a, b) => (countById.get(String(b._id)) || 0) - (countById.get(String(a._id)) || 0));
+
+  const basedOn = flowers.length ? "fp-growth" : "newest";
+
+  if (flowers.length < limit) {
+    const extra = await Flower.find({
+      _id: { $nin: flowers.map((flower) => flower._id) },
+      isActive: true,
+      isAvailable: true,
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit - flowers.length)
+      .select("_id name price images flowerTypes occasion category florist")
+      .populate("florist", "shopName")
+      .lean();
+
+    flowers = [...flowers, ...extra];
+  }
+
+  flowers = flowers.slice(0, limit);
+
+  const keywordCounts = new Map();
+  flowers.forEach((flower) => {
+    [...(flower.flowerTypes || []), flower.occasion, flower.category]
+      .flat()
+      .filter(Boolean)
+      .forEach((word) => {
+        const key = String(word).trim().toLowerCase();
+        if (key) keywordCounts.set(key, (keywordCounts.get(key) || 0) + 1);
+      });
+  });
+
+  const describe = await describeItems(
+    [...new Set(rules.flatMap((rule) => [...rule.antecedent, ...rule.consequent]))]
+  );
+
+  return {
+    basedOn,
+    transactionCount: transactions.length,
+    popular: flowers.map((flower) => ({
+      _id: String(flower._id),
+      name: flower.name,
+      price: flower.price,
+      image: flower.images?.[0] || null,
+      shopName: flower.florist?.shopName || "",
+      timesBought: countById.get(String(flower._id)) || 0,
+    })),
+    boughtTogether: rules
+      .filter((rule, index, all) => {
+        const key = [...rule.antecedent, ...rule.consequent].sort().join("|");
+        return all.findIndex((other) => [...other.antecedent, ...other.consequent].sort().join("|") === key) === index;
+      })
+      .slice(0, 4)
+      .map((rule) => ({
+      items: [...rule.antecedent, ...rule.consequent].map(describe).map((item) => ({ id: item.id, name: item.name, type: item.type })),
+      confidence: Number(rule.confidence.toFixed(2)),
+    })),
+    keywords: [...keywordCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([word]) => word),
+  };
+};

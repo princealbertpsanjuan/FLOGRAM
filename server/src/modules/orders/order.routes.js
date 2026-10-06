@@ -11,6 +11,8 @@ import {
   getMine,
   getOne,
   getOneForAdmin,
+  pickedUp,
+  sellerCancel,
   updateStatus,
 } from "./order.controller.js";
 
@@ -110,6 +112,28 @@ orderRouter.patch(
   sellerOrderStatusValidation,
   validateOrderRequest,
   updateStatus
+);
+
+/*
+ * SELLER
+ * Hand over a pickup order (ready_for_pickup -> completed).
+ */
+orderRouter.patch(
+  "/:orderId/picked-up",
+  authenticate,
+  authorize("seller"),
+  pickedUp
+);
+
+/*
+ * SELLER
+ * Cancel / decline an order before a rider accepts it.
+ */
+orderRouter.patch(
+  "/:orderId/seller-cancel",
+  authenticate,
+  authorize("seller"),
+  sellerCancel
 );
 
 /*

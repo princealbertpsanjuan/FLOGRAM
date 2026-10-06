@@ -1,4 +1,5 @@
 import Florist from "./florist.model.js";
+import { notifySafely } from "../notifications/notify-helpers.js";
 import User from "../auth/auth.model.js";
 import Verification from "../verification/verification.model.js";
 import Flower from "../flowers/flower.model.js";
@@ -276,9 +277,22 @@ export const updateFloristProfile =
  */
 export const getPendingFlorists =
   async () => {
+    /*
+     * Only applicants who already uploaded their
+     * requirements are ready for review.
+     */
+    const submitted =
+      await Verification.find({
+        role: "seller",
+        status: "pending",
+      }).distinct("user");
+
     return Florist.find({
       verificationStatus:
         "pending",
+      owner: {
+        $in: submitted,
+      },
     })
       .populate(
         "owner",
@@ -433,6 +447,14 @@ export const approveFlorist =
 
     await verification.save();
 
+    await notifySafely({
+      recipient: florist.owner,
+      role: "seller",
+      type: "verification_approved",
+      title: "Your shop is approved",
+      message: `${florist.shopName} is now live on FLOGRAM. You can add products and receive orders.`,
+    });
+
     return florist;
   };
 
@@ -546,6 +568,14 @@ export const rejectFlorist =
       reviewedAt;
 
     await verification.save();
+
+    await notifySafely({
+      recipient: florist.owner,
+      role: "seller",
+      type: "verification_rejected",
+      title: "Shop application needs changes",
+      message: remarks ? `Admin's remarks: ${String(remarks).slice(0, 300)}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
+    });
 
     return florist;
   };

@@ -216,6 +216,21 @@ export const createPayMongoCheckoutSession =
     ];
 
     /*
+     * Gift add-ons bought with this bouquet.
+     */
+    (order.addOns || []).forEach((addOn) => {
+      if (Number(addOn.price) > 0) {
+        lineItems.push({
+          name: `Add-on: ${addOn.name}`.slice(0, 255),
+          description: "FLOGRAM gift add-on",
+          amount: pesosToCentavos(addOn.price),
+          currency: "PHP",
+          quantity: Math.max(Number(addOn.quantity) || 1, 1),
+        });
+      }
+    });
+
+    /*
      * =====================================================
      * DELIVERY FEE
      * =====================================================

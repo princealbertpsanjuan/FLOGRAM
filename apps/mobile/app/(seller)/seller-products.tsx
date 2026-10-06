@@ -6,13 +6,14 @@ import {
   Image,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
 } from 'react-native';
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import { router } from 'expo-router';
 

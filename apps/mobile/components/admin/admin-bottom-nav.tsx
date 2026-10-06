@@ -1,4 +1,5 @@
 import BottomNavBar, { type BottomNavItem } from '../ui/bottom-nav-bar';
+import { useDesktopWeb } from '../../hooks/use-desktop-web';
 
 /*
  * =========================================================
@@ -31,6 +32,15 @@ export default function AdminBottomNav({
   active: AdminTab;
   onReselect?: () => void;
 }) {
+  /*
+   * Desktop web uses the sidebar instead.
+   */
+  const desktop = useDesktopWeb();
+
+  if (desktop) {
+    return null;
+  }
+
   return (
     <BottomNavBar
       items={ITEMS}

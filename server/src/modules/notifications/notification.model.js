@@ -196,6 +196,14 @@ const notificationSchema =
 
           "payout_update",
 
+          /*
+           * Admin / account events.
+           */
+          "account_created",
+          "verification_submitted",
+          "shift_update",
+          "custom_request",
+
           "system",
           "announcement",
         ],

@@ -328,6 +328,18 @@ const getNotificationPresentation =
             "#D85D7A",
         };
 
+      case "custom_request":
+        return {
+          icon:
+            "color-wand-outline" as const,
+
+          background:
+            "#FFF0F5",
+
+          foreground:
+            "#D85D7A",
+        };
+
       case "dispute_update":
         return {
           icon:
@@ -723,6 +735,23 @@ export default function CustomerNotificationsScreen() {
         router.push({
           pathname: "/(shared)/dispute-details",
           params: { disputeId },
+        } as never);
+
+        return;
+      }
+
+      const aiConversationId =
+        typeof notification.metadata?.aiConversationId === "string"
+          ? notification.metadata.aiConversationId
+          : null;
+
+      if (
+        notification.type === "custom_request" &&
+        aiConversationId
+      ) {
+        router.push({
+          pathname: "/(customer)/customer-ai",
+          params: { aiConversationId },
         } as never);
 
         return;

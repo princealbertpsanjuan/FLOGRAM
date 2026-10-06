@@ -12,13 +12,14 @@ import {
   Modal,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import {
   router,
@@ -41,9 +42,9 @@ import {
 
 import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
 
+import SearchSuggestions from '../../components/customer/search-suggestions';
 import NotificationBell from '../../components/customer/notification-bell';
 
-import InspirationFeed from '../../components/customer/inspiration-feed';
 
 /*
  * =========================================================
@@ -115,32 +116,13 @@ export default function CustomerDiscoverScreen() {
       action?: string;
     }>();
 
+  const [searchFocused, setSearchFocused] = useState(false);
+
   /*
-   * Discover opens on the image inspiration feed.
-   * "Shop Bouquets" keeps the catalog, filters and
-   * image search. Links with ?action=... open Shop.
+   * Discover = Shop Bouquets (catalog, filters, image
+   * search). The community inspiration feed lives in
+   * BloomBoard.
    */
-  const [
-    mode,
-    setMode,
-  ] =
-    useState<'inspiration' | 'shop'>(
-      params.action
-        ? 'shop'
-        : 'inspiration'
-    );
-
-  const [
-    feedRefreshKey,
-    setFeedRefreshKey,
-  ] =
-    useState(0);
-
-  useEffect(() => {
-    if (params.action) {
-      setMode('shop');
-    }
-  }, [params.action]);
 
   const [
     flowers,
@@ -1152,9 +1134,6 @@ export default function CustomerDiscoverScreen() {
                 refreshing
               }
               onRefresh={() => {
-                setFeedRefreshKey(
-                  key => key + 1
-                );
                 void loadDiscover(
                   true
                 );
@@ -1194,85 +1173,14 @@ export default function CustomerDiscoverScreen() {
                   styles.pageSubtitle
                 }
               >
-                Bouquet inspiration from the
-                FLOGRAM community
+                Shop bouquets from FLOGRAM
+                florists
               </Text>
             </View>
 
             <NotificationBell />
           </View>
 
-          {/* ================================================
-              MODE: INSPIRATION FEED | SHOP BOUQUETS
-          ================================================ */}
-
-          <View
-            style={{
-              flexDirection: 'row',
-              marginHorizontal: 20,
-              marginBottom: 14,
-              padding: 4,
-              borderRadius: 14,
-              backgroundColor: '#F4EEF1',
-            }}
-          >
-            {(
-              [
-                ['inspiration', 'Inspiration'],
-                ['shop', 'Shop Bouquets'],
-              ] as const
-            ).map(([key, label]) => (
-              <Pressable
-                key={key}
-                accessibilityRole="tab"
-                accessibilityState={{
-                  selected: mode === key,
-                }}
-                onPress={() => setMode(key)}
-                style={{
-                  flex: 1,
-                  alignItems: 'center',
-                  paddingVertical: 9,
-                  borderRadius: 11,
-                  backgroundColor:
-                    mode === key
-                      ? '#FFFFFF'
-                      : 'transparent',
-                }}
-              >
-                <Text
-                  style={{
-                    color:
-                      mode === key
-                        ? '#DF628F'
-                        : '#8A8287',
-                    fontSize: 14,
-                    fontWeight:
-                      mode === key
-                        ? '800'
-                        : '600',
-                  }}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {mode === 'inspiration' ? (
-            <View
-              style={{
-                paddingHorizontal: 16,
-              }}
-            >
-              <InspirationFeed
-                refreshKey={
-                  feedRefreshKey
-                }
-              />
-            </View>
-          ) : (
-            <>
           {/* ================================================
               SEARCH BAR
           ================================================ */}
@@ -1309,6 +1217,8 @@ export default function CustomerDiscoverScreen() {
                 onSubmitEditing={
                   handleSearch
                 }
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
               />
 
               {search.length >
@@ -1394,6 +1304,15 @@ export default function CustomerDiscoverScreen() {
               )}
             </Pressable>
           </View>
+
+          <SearchSuggestions
+            visible={searchFocused && search.trim().length === 0}
+            onPickKeyword={keyword => {
+              setSearch(keyword);
+              setSearchFocused(false);
+              void applyFilters({ search: keyword });
+            }}
+          />
 
           {/* ================================================
               FLOWER TYPE CHIPS
@@ -2131,8 +2050,6 @@ export default function CustomerDiscoverScreen() {
               </View>
             )}
 
-            </>
-          )}
 
           <View
             style={

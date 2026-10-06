@@ -94,10 +94,25 @@ export type AdminRecentActivityType =
   | "order"
   | "seller_verification"
   | "rider_verification"
-  | "remittance";
+  | "remittance"
+  | "account"
+  | "dispute"
+  | "shift_request"
+  | "payout"
+  | "review"
+  | "violation"
+  | "custom_request"
+  | "product";
 
 export type AdminRecentActivity = {
   type: AdminRecentActivityType;
+
+  /*
+   * Generic platform events carry their own text.
+   */
+  heading?: string;
+
+  description?: string;
 
   id?: string;
 

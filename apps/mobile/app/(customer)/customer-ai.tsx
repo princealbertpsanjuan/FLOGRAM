@@ -18,7 +18,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -26,6 +25,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import { apiRequest } from "../../services/api";
 
@@ -434,14 +435,6 @@ const formatCurrency = (
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}`;
-};
-
-const cleanArray = (
-  value?: string[]
-) => {
-  return Array.isArray(value)
-    ? value.filter(Boolean)
-    : [];
 };
 
 /* =========================================================
@@ -1938,96 +1931,6 @@ useEffect(() => {
     };
 
   /* =======================================================
-   * PREFERENCES
-   * ===================================================== */
-
-  const renderPreferences =
-    () => {
-      const preferences =
-        selectedConversation
-          ?.preferences;
-
-      if (!preferences) {
-        return null;
-      }
-
-      const chips: string[] =
-        [];
-
-      if (
-        preferences.occasion
-      ) {
-        chips.push(
-          preferences.occasion
-        );
-      }
-
-      const budget =
-        preferences.maxBudget ??
-        preferences.minBudget;
-
-      if (
-        budget !== null &&
-        budget !== undefined
-      ) {
-        chips.push(
-          `Budget ${formatCurrency(
-            budget
-          )}`
-        );
-      }
-
-      chips.push(
-        ...cleanArray(
-          preferences.flowerTypes
-        ).slice(0, 3)
-      );
-
-      chips.push(
-        ...cleanArray(
-          preferences.colors
-        ).slice(0, 3)
-      );
-
-      if (
-        chips.length === 0
-      ) {
-        return null;
-      }
-
-      return (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={
-            false
-          }
-          contentContainerStyle={
-            styles.preferenceRow
-          }
-        >
-          {chips.map(
-            (chip, index) => (
-              <View
-                key={`${chip}-${index}`}
-                style={
-                  styles.preferenceChip
-                }
-              >
-                <Text
-                  style={
-                    styles.preferenceChipText
-                  }
-                >
-                  {chip}
-                </Text>
-              </View>
-            )
-          )}
-        </ScrollView>
-      );
-    };
-
-  /* =======================================================
    * QUICK PROMPTS
    * ===================================================== */
 
@@ -2563,7 +2466,6 @@ useEffect(() => {
             </Pressable>
           </View>
 
-          {renderPreferences()}
 
           {renderRequestStatus()}
 
@@ -2998,28 +2900,6 @@ const styles =
         COLORS.primarySoft,
     },
 
-    preferenceRow: {
-      paddingHorizontal: 14,
-      paddingVertical: 9,
-      gap: 7,
-      backgroundColor:
-        COLORS.card,
-    },
-
-    preferenceChip: {
-      paddingHorizontal: 10,
-      paddingVertical: 7,
-      borderRadius: 15,
-      backgroundColor:
-        COLORS.primarySoft,
-    },
-
-    preferenceChipText: {
-      fontSize: 10,
-      fontWeight: "700",
-      color:
-        COLORS.primary,
-    },
 
     requestCard: {
       marginHorizontal: 14,

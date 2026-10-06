@@ -358,6 +358,7 @@ function getStatusStyle(
       };
 
     case "suspended":
+    case "banned":
       return {
         backgroundColor:
           COLORS.redBackground,
@@ -1252,10 +1253,26 @@ const handleHeaderRefresh = useCallback(async () => {
 
           {filteredUsers.map(
             (user) => {
+              /*
+               * Sellers/Riders not yet approved show as
+               * pending, whatever their login status.
+               */
+              const awaitingVerification =
+                (user.role === "seller" ||
+                  user.role === "rider") &&
+                user.accountStatus === "active" &&
+                user.verificationStatus !== "approved";
+
               const statusStyle =
-                getStatusStyle(
-                  user.accountStatus
-                );
+                awaitingVerification
+                  ? {
+                      backgroundColor: "#FFF4DA",
+                      textColor: "#B7801E",
+                      dotColor: "#D5A33D",
+                    }
+                  : getStatusStyle(
+                      user.accountStatus
+                    );
 
               const roleStyle =
                 getRoleStyle(
@@ -1412,9 +1429,11 @@ const handleHeaderRefresh = useCallback(async () => {
                           },
                         ]}
                       >
-                        {
-                          user.accountStatus
-                        }
+                        {awaitingVerification
+                          ? user.verificationStatus === "rejected"
+                            ? "rejected"
+                            : "pending"
+                          : user.accountStatus}
                       </Text>
                     </View>
                   </View>

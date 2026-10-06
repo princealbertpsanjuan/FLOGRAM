@@ -3,6 +3,7 @@ import Order from "./order.model.js";
 import User from "../auth/auth.model.js";
 import Flower from "../flowers/flower.model.js";
 import Florist from "../florists/florist.model.js";
+import Delivery from "../deliveries/delivery.model.js";
 
 import CustomBouquetRequest from "../bloomboard/customBouquet/customBouquetRequest.model.js";
 
@@ -319,9 +320,11 @@ const createNotificationSafely =
     notificationData
   ) => {
     try {
-      return await createNotification(
-        notificationData
-      );
+      return await createNotification({
+        ...notificationData,
+        title: String(notificationData?.title || "").slice(0, 120),
+        message: String(notificationData?.message || "").slice(0, 500),
+      });
     } catch (error) {
       console.error(
         "Order notification creation failed:",
@@ -1593,21 +1596,91 @@ export const getSellerOrders =
         filters.paymentStatus;
     }
 
-    return Order.find(
-      query
-    )
-      .populate(
-        "customer",
-        "firstName lastName email phoneNumber profileImage"
+    const orders =
+      await Order.find(
+        query
       )
-      .populate(
-        "florist",
-        "shopName address location shopLogo"
-      )
-      .sort({
-        createdAt:
-          -1,
-      });
+        .populate(
+          "customer",
+          "firstName lastName email phoneNumber profileImage"
+        )
+        .populate(
+          "florist",
+          "shopName address location shopLogo"
+        )
+        .sort({
+          createdAt:
+            -1,
+        });
+
+    /*
+     * Attach the latest delivery request so the Seller
+     * screen knows whether an order was already released
+     * ("Waiting for a rider") or accepted by a rider.
+     */
+    const deliveries =
+      await Delivery.find({
+        order: {
+          $in: orders.map(
+            (order) => order._id
+          ),
+        },
+      })
+        .select(
+          "order status riderUser acceptedAt createdAt"
+        )
+        .populate(
+          "riderUser",
+          "firstName lastName phoneNumber"
+        )
+        .sort({ createdAt: -1 })
+        .lean();
+
+    const latestByOrder =
+      new Map();
+
+    deliveries.forEach(
+      (delivery) => {
+        const key =
+          String(delivery.order);
+
+        if (
+          !latestByOrder.has(key)
+        ) {
+          latestByOrder.set(
+            key,
+            delivery
+          );
+        }
+      }
+    );
+
+    return orders.map(
+      (order) => {
+        const delivery =
+          latestByOrder.get(
+            String(order._id)
+          );
+
+        return {
+          ...order.toObject(),
+          delivery: delivery
+            ? {
+                _id: delivery._id,
+                status: delivery.status,
+                acceptedAt: delivery.acceptedAt || null,
+                rider: delivery.riderUser
+                  ? {
+                      firstName: delivery.riderUser.firstName,
+                      lastName: delivery.riderUser.lastName,
+                      phoneNumber: delivery.riderUser.phoneNumber,
+                    }
+                  : null,
+              }
+            : null,
+        };
+      }
+    );
   };
 
 /*
@@ -2007,6 +2080,174 @@ export const updateSellerOrderStatus =
           status,
       },
     });
+
+    return order;
+  };
+
+/*
+ * =========================================================
+ * SELLER
+ * PICKUP HANDOVER
+ * =========================================================
+ *
+ * ready_for_pickup -> completed when the customer collects
+ * the bouquet. Cash on Pickup is paid at handover.
+ */
+const getSellerOwnedOrder =
+  async (orderId, sellerId) => {
+    const florist =
+      await Florist.findOne({ owner: sellerId }).select("_id");
+
+    const order =
+      florist
+        ? await Order.findOne({ _id: orderId, florist: florist._id })
+        : null;
+
+    if (!order) {
+      const error = new Error("Order was not found or does not belong to your shop.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    return order;
+  };
+
+export const completePickupOrder =
+  async (orderId, sellerId) => {
+    const order =
+      await getSellerOwnedOrder(orderId, sellerId);
+
+    if (order.fulfillmentType !== "pickup" || order.orderStatus !== "ready_for_pickup") {
+      const error = new Error("Only pickup orders that are ready for pickup can be handed over.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (order.paymentMethod === "paymongo" && order.paymentStatus !== "paid") {
+      const error = new Error("This online order is not paid yet.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const now = new Date();
+
+    if (order.paymentMethod === "cash_on_pickup" && order.paymentStatus !== "paid") {
+      order.paymentStatus = "paid";
+      order.paidAt = now;
+    }
+
+    order.orderStatus = "completed";
+    order.completedAt = now;
+    await order.save();
+
+    await createNotificationSafely({
+      recipient: order.customer,
+      role: "customer",
+      type: "order_updated",
+      title: "Order Picked Up",
+      message: "You collected your bouquet. Thank you for ordering with FLOGRAM! You can now leave a review.",
+      order: order._id,
+      metadata: { screen: "order", orderStatus: "completed" },
+    });
+
+    return order;
+  };
+
+/*
+ * =========================================================
+ * SELLER
+ * CANCEL / DECLINE ORDER
+ * =========================================================
+ *
+ * Allowed until a rider accepts the delivery. A request
+ * that is still waiting for riders is withdrawn.
+ * Paid online orders are flagged for refund by FLOGRAM.
+ */
+export const cancelSellerOrder =
+  async (orderId, sellerId, reason) => {
+    const cleanReason = String(reason || "").trim().slice(0, 300);
+
+    if (cleanReason.length < 5) {
+      const error = new Error("Please give the customer a reason (at least 5 characters).");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const order =
+      await getSellerOwnedOrder(orderId, sellerId);
+
+    const cancellable = ["pending", "confirmed", "preparing", "ready_for_pickup", "ready_for_delivery"];
+
+    if (!cancellable.includes(order.orderStatus)) {
+      const error = new Error("This order can no longer be cancelled.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (order.paymentMethod === "paymongo" && order.paymentStatus === "pending") {
+      const error = new Error("The customer is completing online payment for this order. Try again in a few minutes.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    /*
+     * Withdraw the open delivery request first, then check
+     * whether a rider had already accepted it, so a rider
+     * cannot accept in between.
+     */
+    await Delivery.updateMany(
+      { order: order._id, status: "available" },
+      { $set: { status: "cancelled", cancelledAt: new Date() } }
+    );
+
+    const activeDelivery =
+      await Delivery.findOne({
+        order: order._id,
+        status: { $in: ["accepted", "picked_up", "out_for_delivery"] },
+      }).lean();
+
+    if (activeDelivery) {
+      const error = new Error("A rider already accepted this delivery, so it can no longer be cancelled. Use Report a problem instead.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const needsRefund = order.paymentMethod === "paymongo" && order.paymentStatus === "paid";
+
+    order.orderStatus = "cancelled";
+    order.cancelledAt = new Date();
+    order.cancellationReason = `Cancelled by the shop: ${cleanReason}`.slice(0, 500);
+    await order.save();
+
+    await createNotificationSafely({
+      recipient: order.customer,
+      role: "customer",
+      type: "order_cancelled",
+      title: "Order Cancelled by the Shop",
+      message: needsRefund
+        ? `The shop cancelled your order. Reason: ${cleanReason}. Your online payment will be refunded by FLOGRAM.`
+        : `The shop cancelled your order. Reason: ${cleanReason}`,
+      order: order._id,
+      metadata: { screen: "order", orderStatus: "cancelled", needsRefund },
+    });
+
+    if (needsRefund) {
+      const admins = await User.find({ role: "admin", accountStatus: "active" }).select("_id").lean();
+
+      await Promise.all(
+        admins.map((admin) =>
+          createNotificationSafely({
+            recipient: admin._id,
+            role: "admin",
+            type: "order_cancelled",
+            title: "Refund needed",
+            message: `A shop cancelled a paid online order (${order.productName || "order"}). Refund ₱${Number(order.totalAmount || 0).toFixed(2)} to the customer.`,
+            order: order._id,
+            metadata: { needsRefund: true },
+          })
+        )
+      );
+    }
 
     return order;
   };

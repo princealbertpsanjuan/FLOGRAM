@@ -7,6 +7,7 @@ import {
   adminBuyingPatterns,
   adminSentiment,
   alsoBought,
+  searchSuggestions,
   sellerBuyingPatterns,
   sellerSentiment,
 } from "./analytics.controller.js";
@@ -33,5 +34,10 @@ analyticsRouter.get("/seller/sentiment", authenticate, authorize("seller"), sell
 analyticsRouter.get("/seller/buying-patterns", authenticate, authorize("seller"), sellerBuyingPatterns);
 
 analyticsRouter.get("/flowers/:flowerId/also-bought", alsoBought);
+
+/*
+ * Customer search box: popular (FP-Growth) bouquets, bought-together pairs, keywords.
+ */
+analyticsRouter.get("/search-suggestions", searchSuggestions);
 
 export default analyticsRouter;

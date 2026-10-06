@@ -7,19 +7,24 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import { useLocalSearchParams } from 'expo-router';
 
 import {
+  cancelOrderAsSeller,
   getSellerOrders,
+  markPickupOrderCollected,
   updateSellerOrderStatus,
   type CustomerOrder,
   type CustomerOrderStatus,
@@ -448,6 +453,13 @@ export default function SellerOrdersScreen() {
     );
 
   /*
+   * Seller cancel / decline dialog.
+   */
+  const [cancelTarget, setCancelTarget] = useState<CustomerOrder | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  /*
    * =======================================================
    * LOAD ORDERS
    * =======================================================
@@ -660,7 +672,7 @@ useEffect(() => {
               ) =>
                 currentOrder._id ===
                 updatedOrder._id
-                  ? updatedOrder
+                  ? { ...currentOrder, ...updatedOrder }
                   : currentOrder
             )
         );
@@ -716,6 +728,72 @@ useEffect(() => {
         ]
       );
     };
+
+  /*
+   * =======================================================
+   * PICKUP HANDOVER
+   * =======================================================
+   */
+
+  const handlePickedUp = (order: CustomerOrder) => {
+    const cashNote =
+      order.paymentMethod === 'cash_on_pickup' && order.paymentStatus !== 'paid'
+        ? ` Collect ${formatCurrency(order.totalAmount ?? 0)} in cash first.`
+        : '';
+
+    Alert.alert(
+      'Mark as Picked Up',
+      `Confirm the customer has collected this bouquet.${cashNote}`,
+      [
+        { text: 'Not yet', style: 'cancel' },
+        {
+          text: 'Picked Up',
+          onPress: async () => {
+            try {
+              setUpdatingOrderId(order._id);
+              const updated = await markPickupOrderCollected(order._id);
+              setOrders(current =>
+                current.map(item => (item._id === updated._id ? { ...item, ...updated } : item))
+              );
+            } catch (err: unknown) {
+              Alert.alert('Unable to Update', err instanceof Error ? err.message : 'Please try again.');
+            } finally {
+              setUpdatingOrderId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  /*
+   * =======================================================
+   * SELLER CANCEL / DECLINE
+   * =======================================================
+   */
+
+  const submitCancel = async () => {
+    if (!cancelTarget) return;
+
+    if (cancelReason.trim().length < 5) {
+      Alert.alert('Reason needed', 'Tell the customer why (at least 5 characters).');
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      const updated = await cancelOrderAsSeller(cancelTarget._id, cancelReason);
+      setOrders(current =>
+        current.map(item => (item._id === updated._id ? { ...item, ...updated, delivery: null } : item))
+      );
+      setCancelTarget(null);
+      setCancelReason('');
+    } catch (err: unknown) {
+      Alert.alert('Unable to Cancel', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   /*
    * =======================================================
@@ -1210,6 +1288,13 @@ useEffect(() => {
                         order
                       )
                     }
+                    onPickedUp={() =>
+                      handlePickedUp(order)
+                    }
+                    onCancel={() => {
+                      setCancelReason('');
+                      setCancelTarget(order);
+                    }}
                   />
                 )
               )
@@ -1219,6 +1304,59 @@ useEffect(() => {
 
         {/* BOTTOM NAVIGATION */}
         <SellerBottomNav active="orders" />
+
+        {/* CANCEL / DECLINE DIALOG */}
+        <Modal
+          visible={cancelTarget !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCancelTarget(null)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>
+                {cancelTarget?.orderStatus === 'pending' ? 'Decline Order' : 'Cancel Order'}
+              </Text>
+              <Text style={styles.modalText}>
+                The customer will see this reason.
+                {cancelTarget?.paymentMethod === 'paymongo' && cancelTarget?.paymentStatus === 'paid'
+                  ? ' This order was paid online, so FLOGRAM Admin will refund the customer.'
+                  : ''}
+              </Text>
+              <TextInput
+                value={cancelReason}
+                onChangeText={setCancelReason}
+                placeholder="e.g. Flowers out of stock today"
+                placeholderTextColor="#9AA59F"
+                multiline
+                maxLength={300}
+                style={styles.modalInput}
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  disabled={cancelling}
+                  onPress={() => setCancelTarget(null)}
+                  style={[styles.modalButton, styles.modalButtonGhost]}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#5E9874' }]}>Keep Order</Text>
+                </Pressable>
+                <Pressable
+                  disabled={cancelling}
+                  onPress={() => void submitCancel()}
+                  style={[styles.modalButton, styles.modalButtonDanger, cancelling && { opacity: 0.6 }]}
+                >
+                  {cancelling ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalButtonText}>
+                      {cancelTarget?.orderStatus === 'pending' ? 'Decline' : 'Cancel Order'}
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -1253,6 +1391,12 @@ type OrderCardProps = {
 
   onRelease:
     () => void;
+
+  onPickedUp:
+    () => void;
+
+  onCancel:
+    () => void;
 };
 
 function OrderCard({
@@ -1261,6 +1405,8 @@ function OrderCard({
   releasing,
   onStatusUpdate,
   onRelease,
+  onPickedUp,
+  onCancel,
 }: OrderCardProps) {
   const statusColors =
     getStatusColors(
@@ -1275,6 +1421,22 @@ function OrderCard({
   const isBusy =
     updating ||
     releasing;
+
+  const deliveryStatus =
+    order.delivery?.status ?? null;
+
+  const riderAssigned =
+    deliveryStatus === 'accepted' ||
+    deliveryStatus === 'picked_up' ||
+    deliveryStatus === 'out_for_delivery';
+
+  /*
+   * The shop can cancel/decline until a rider accepts.
+   */
+  const canSellerCancel =
+    ['pending', 'confirmed', 'preparing', 'ready_for_pickup', 'ready_for_delivery'].includes(order.orderStatus) &&
+    !riderAssigned &&
+    !isAwaitingOnlinePayment(order);
 
   const productName =
     order.productName ||
@@ -1374,9 +1536,13 @@ function OrderCard({
               },
             ]}
           >
-            {getOrderStatusLabel(
-              order.orderStatus
-            )}
+            {order.orderStatus === 'ready_for_delivery' && deliveryStatus === 'available'
+              ? 'Waiting for Rider'
+              : order.orderStatus === 'ready_for_delivery' && riderAssigned
+                ? 'Rider Assigned'
+                : getOrderStatusLabel(
+                    order.orderStatus
+                  )}
           </Text>
         </View>
       </View>
@@ -1819,6 +1985,19 @@ function OrderCard({
               shop.
             </Text>
           </View>
+
+          <ActionButton
+            label="Mark as Picked Up"
+            loading={
+              updating
+            }
+            disabled={
+              isBusy
+            }
+            onPress={
+              onPickedUp
+            }
+          />
         </View>
       ) : null}
 
@@ -1833,45 +2012,78 @@ function OrderCard({
             styles.actionSection
           }
         >
-          <View
-            style={
-              styles.successNotice
-            }
-          >
-            <Text
-              style={
-                styles.successNoticeTitle
-              }
-            >
-              ✓ Ready for rider
-              delivery
-            </Text>
+          {deliveryStatus === 'available' ? (
+            <>
+              <View style={styles.deliveryNotice}>
+                <Text style={styles.deliveryNoticeTitle}>
+                  ⏳ Released – waiting for a rider
+                </Text>
+                <Text style={styles.deliveryNoticeText}>
+                  Riders on shift can now see this delivery. You will be notified when one accepts it.
+                </Text>
+              </View>
 
-            <Text
-              style={
-                styles.successNoticeText
-              }
-            >
-              The bouquet is
-              prepared. Release
-              this order so an
-              available rider can
-              accept the delivery.
-            </Text>
-          </View>
+              <ActionButton
+                label="Released for Delivery"
+                disabled
+                onPress={() => undefined}
+              />
+            </>
+          ) : riderAssigned ? (
+            <View style={styles.deliveryNotice}>
+              <Text style={styles.deliveryNoticeTitle}>
+                🛵 Rider assigned
+                {order.delivery?.rider?.firstName ? ` – ${order.delivery.rider.firstName} ${order.delivery.rider.lastName || ''}` : ''}
+              </Text>
+              <Text style={styles.deliveryNoticeText}>
+                {order.delivery?.status === 'accepted'
+                  ? 'The rider is on the way to your shop to pick up the bouquet.'
+                  : 'The rider has picked up the bouquet.'}
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View
+                style={
+                  styles.successNotice
+                }
+              >
+                <Text
+                  style={
+                    styles.successNoticeTitle
+                  }
+                >
+                  ✓ Ready for rider
+                  delivery
+                </Text>
 
-          <ActionButton
-            label="Release for Delivery"
-            loading={
-              releasing
-            }
-            disabled={
-              isBusy
-            }
-            onPress={
-              onRelease
-            }
-          />
+                <Text
+                  style={
+                    styles.successNoticeText
+                  }
+                >
+                  The bouquet is
+                  prepared. Release
+                  this order so an
+                  available rider can
+                  accept the delivery.
+                </Text>
+              </View>
+
+              <ActionButton
+                label="Release for Delivery"
+                loading={
+                  releasing
+                }
+                disabled={
+                  isBusy
+                }
+                onPress={
+                  onRelease
+                }
+              />
+            </>
+          )}
         </View>
       ) : null}
 
@@ -2012,6 +2224,19 @@ function OrderCard({
             </Text>
           </View>
         </View>
+      ) : null}
+
+      {canSellerCancel ? (
+        <Pressable
+          accessibilityRole="button"
+          disabled={isBusy}
+          onPress={onCancel}
+          style={({ pressed }) => [styles.cancelOrderButton, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.cancelOrderText}>
+            {order.orderStatus === 'pending' ? 'Decline Order' : 'Cancel Order'}
+          </Text>
+        </Pressable>
       ) : null}
 
       {order.orderStatus !== 'pending' ? (
@@ -2245,6 +2470,93 @@ function DetailRow({
 
 const styles =
   StyleSheet.create({
+    cancelOrderButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: 44,
+      marginTop: 10,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: '#E5A3A3',
+      backgroundColor: '#FFF6F6',
+    },
+
+    cancelOrderText: {
+      color: '#C2413B',
+      fontSize: 14,
+      fontWeight: '800',
+    },
+
+    modalBackdrop: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+
+    modalCard: {
+      width: '100%',
+      maxWidth: 420,
+      padding: 20,
+      borderRadius: 20,
+      backgroundColor: '#FFFFFF',
+    },
+
+    modalTitle: {
+      color: '#2F3A33',
+      fontSize: 18,
+      fontWeight: '800',
+    },
+
+    modalText: {
+      marginTop: 6,
+      color: '#6F7A73',
+      fontSize: 13,
+      lineHeight: 19,
+    },
+
+    modalInput: {
+      minHeight: 90,
+      marginTop: 14,
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#E3EAE5',
+      color: '#2F3A33',
+      fontSize: 14,
+      textAlignVertical: 'top',
+    },
+
+    modalActions: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 16,
+    },
+
+    modalButton: {
+      flex: 1,
+      height: 46,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    modalButtonGhost: {
+      borderWidth: 1.5,
+      borderColor: '#5E9874',
+    },
+
+    modalButtonDanger: {
+      backgroundColor: '#C2413B',
+    },
+
+    modalButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '800',
+    },
+
     safeArea: {
       flex: 1,
       backgroundColor:

@@ -3,12 +3,13 @@ import { useCallback, useState } from "react";
 import {
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -32,6 +33,7 @@ import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 import InboxBell from '../../components/ui/inbox-bell';
+import { useDesktopWeb } from '../../hooks/use-desktop-web';
 
 /*
  * =========================================================
@@ -208,6 +210,26 @@ const getActivityColor = (
     case "order":
       return "#E56391";
 
+    case "account":
+      return "#4C8DD6";
+
+    case "dispute":
+    case "violation":
+      return "#D04A5F";
+
+    case "shift_request":
+      return "#C49317";
+
+    case "payout":
+      return "#3E9B62";
+
+    case "review":
+      return "#E0A31A";
+
+    case "custom_request":
+    case "product":
+      return "#DF628F";
+
     default:
       return "#777777";
   }
@@ -228,6 +250,30 @@ const getActivityIcon = (
 
     case "order":
       return "receipt-outline";
+
+    case "account":
+      return "person-add-outline";
+
+    case "dispute":
+      return "flag-outline";
+
+    case "violation":
+      return "warning-outline";
+
+    case "shift_request":
+      return "calendar-outline";
+
+    case "payout":
+      return "wallet-outline";
+
+    case "review":
+      return "star-outline";
+
+    case "custom_request":
+      return "color-wand-outline";
+
+    case "product":
+      return "flower-outline";
 
     default:
       return "ellipse-outline";
@@ -251,7 +297,7 @@ const getActivityTitle = (
       return "Order activity";
 
     default:
-      return "System activity";
+      return item.heading || "System activity";
   }
 };
 
@@ -300,7 +346,7 @@ const getActivitySubtitle = (
       )}`;
 
     default:
-      return "";
+      return item.description || "";
   }
 };
 
@@ -311,6 +357,8 @@ const getActivitySubtitle = (
  */
 
 export default function AdminDashboardScreen() {
+  const desktop = useDesktopWeb();
+
   const [user, setUser] =
     useState<AuthUser | null>(
       null
@@ -615,7 +663,7 @@ export default function AdminDashboardScreen() {
             style={styles.summaryGrid}
           >
             <Pressable
-              style={styles.summaryCard}
+              style={[styles.summaryCard, desktop && styles.summaryCardWide]}
               onPress={
                 openTodayReport
               }
@@ -650,7 +698,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
 
             <Pressable
-              style={styles.summaryCard}
+              style={[styles.summaryCard, desktop && styles.summaryCardWide]}
               onPress={() =>
                 router.push(
                   "/(admin)/admin-orders"
@@ -686,7 +734,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
 
             <Pressable
-              style={styles.summaryCard}
+              style={[styles.summaryCard, desktop && styles.summaryCardWide]}
               onPress={() =>
                 openUsers()
               }
@@ -719,7 +767,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
 
 <Pressable
-  style={styles.summaryCard}
+  style={[styles.summaryCard, desktop && styles.summaryCardWide]}
   onPress={() =>
     router.push(
       "/(admin)/admin-remittances"
@@ -2261,6 +2309,12 @@ borderBottomRightRadius: 26,
       justifyContent:
         "space-between",
       rowGap: 10,
+    },
+
+    summaryCardWide: {
+      width: "23.8%",
+      minHeight: 110,
+      padding: 18,
     },
 
     summaryCard: {

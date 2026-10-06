@@ -1,5 +1,54 @@
 import RiderShift from "./rider-shift.model.js";
 import Rider from "./rider.model.js";
+import RiderRemittance from "./rider-remittance.model.js";
+import Delivery from "../deliveries/delivery.model.js";
+import { notifyAdmins, notifyAllRiders, notifySafely } from "../notifications/notify-helpers.js";
+
+/*
+ * =========================================================
+ * UNREMITTED COD
+ * =========================================================
+ *
+ * Cash collected on delivered COD orders that is not yet in
+ * a submitted or verified remittance. A Rider with unremitted
+ * COD cannot reserve another shift.
+ */
+export const getUnremittedCod = async (riderUserId) => {
+  const deliveries = await Delivery.find({ riderUser: riderUserId, status: "delivered" })
+    .select("order deliveredAt")
+    .populate("order", "paymentMethod paymentStatus totalAmount")
+    .lean();
+
+  /*
+   * Same rule the wallet uses to build remittances.
+   */
+  const codDeliveries = deliveries.filter(
+    (delivery) =>
+      delivery.deliveredAt &&
+      delivery.order?.paymentMethod === "cash_on_delivery" &&
+      delivery.order?.paymentStatus === "paid"
+  );
+
+  if (!codDeliveries.length) {
+    return { count: 0, amount: 0 };
+  }
+
+  const remitted = await RiderRemittance.find({
+    riderUser: riderUserId,
+    status: { $in: ["submitted", "verified"] },
+  })
+    .select("items.order")
+    .lean();
+
+  const remittedOrders = new Set(remitted.flatMap((entry) => (entry.items || []).map((item) => String(item.order))));
+
+  const outstanding = codDeliveries.filter((delivery) => !remittedOrders.has(String(delivery.order._id)));
+
+  return {
+    count: outstanding.length,
+    amount: outstanding.reduce((sum, delivery) => sum + Number(delivery.order.totalAmount || 0), 0),
+  };
+};
 
 /*
  * =========================================================
@@ -327,6 +376,22 @@ export const createRiderShift =
         updatedBy:
           adminUserId,
       });
+
+    const startLabel = new Date(startAt).toLocaleString("en-PH", {
+      timeZone: "Asia/Manila",
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+    await notifyAllRiders({
+      type: "shift_update",
+      title: "New work shift posted",
+      message: `A shift on ${startLabel} has ${slotLimit} slot${slotLimit === 1 ? "" : "s"}. Request it in Work Shifts.`,
+      metadata: { screen: "shifts", shiftId: String(shift._id) },
+    });
 
     return formatShift(
       shift
@@ -707,6 +772,19 @@ export const requestRiderShift =
         userId
       );
 
+    /*
+     * Remit collected COD before taking a new shift.
+     */
+    const unremitted =
+      await getUnremittedCod(userId);
+
+    if (unremitted.count > 0) {
+      throw createError(
+        `Please remit your COD collections first (₱${unremitted.amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })} from ${unremitted.count} deliver${unremitted.count === 1 ? "y" : "ies"}) in Wallet before requesting a new shift.`,
+        409
+      );
+    }
+
     const shift =
       await RiderShift.findById(
         shiftId
@@ -822,6 +900,13 @@ export const requestRiderShift =
         "This Rider shift could not be reserved. You may have already requested it, or it is now full or closed."
       );
     }
+
+    await notifyAdmins({
+      type: "shift_update",
+      title: "Shift request",
+      message: `A rider requested the shift on ${new Date(updatedShift.startAt).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric" })}. Review it in Work Shifts.`,
+      metadata: { screen: "shifts", shiftId: String(updatedShift._id) },
+    });
 
     return formatShift(
       updatedShift,
@@ -1002,6 +1087,18 @@ export const reviewRiderShiftRequest =
           : "This Rider shift request could not be rejected because it was already reviewed."
       );
     }
+
+    await notifySafely({
+      recipient: reservation.riderUser,
+      role: "rider",
+      type: "shift_update",
+      title: decision === "approved" ? "Shift request approved" : "Shift request not approved",
+      message:
+        decision === "approved"
+          ? `You're scheduled on ${new Date(updatedShift.startAt).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}. Go Online during the shift to accept deliveries.`
+          : "Admin did not approve your shift request. Check Work Shifts for other open shifts.",
+      metadata: { screen: "shifts", shiftId: String(updatedShift._id) },
+    });
 
     return formatShift(
       updatedShift
