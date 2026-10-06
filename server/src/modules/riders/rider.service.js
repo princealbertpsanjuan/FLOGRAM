@@ -319,7 +319,31 @@ export const getRiderById = async (
     throw error;
   }
 
-  return rider;
+  /*
+   * Attach the uploaded requirement photos for Admin review.
+   */
+  const verification =
+    await Verification.findOne({
+      user: rider.owner?._id || rider.owner,
+      role: "rider",
+    })
+      .select("riderDocuments status remarks createdAt updatedAt")
+      .lean();
+
+  return {
+    ...rider.toObject(),
+    documents: verification
+      ? {
+          status: verification.status,
+          submittedAt: verification.updatedAt || verification.createdAt,
+          files: [
+            { key: "driverLicense", label: "Driver's license", path: verification.riderDocuments?.driverLicense || null },
+            { key: "orcr", label: "Vehicle OR/CR", path: verification.riderDocuments?.orcr || null },
+            { key: "policeClearance", label: "Police clearance", path: verification.riderDocuments?.policeClearance || null },
+          ].filter((file) => file.path),
+        }
+      : null,
+  };
 };
 
 /*

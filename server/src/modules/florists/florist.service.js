@@ -337,7 +337,36 @@ export const getFloristById =
       throw error;
     }
 
-    return florist;
+    /*
+     * Attach the uploaded requirement photos for Admin
+     * review.
+     */
+    const verification =
+      await Verification.findOne({
+        user: florist.owner?._id || florist.owner,
+        role: "seller",
+      })
+        .select("sellerDocuments status remarks createdAt updatedAt")
+        .lean();
+
+    const docs = verification?.sellerDocuments || {};
+
+    return {
+      ...florist.toObject(),
+      documents: verification
+        ? {
+            status: verification.status,
+            submittedAt: verification.updatedAt || verification.createdAt,
+            files: [
+              { key: "validId", label: "Valid government ID", path: docs.validId || null },
+              { key: "dtiRegistration", label: "DTI business registration", path: docs.dtiRegistration || null },
+              { key: "birDocument", label: "BIR registration", path: docs.birDocument || null },
+              { key: "bankProof", label: "Bank account proof", path: docs.bankProof || null },
+              { key: "shopLogo", label: "Shop logo", path: docs.shopLogo || null },
+            ].filter((file) => file.path),
+          }
+        : null,
+    };
   };
 
 /*

@@ -21,6 +21,7 @@ import {
 import {
   AdminManagedUser,
   AdminUserAccountStatus,
+  getAdminDisplayStatus,
   getAdminUserById,
   updateAdminUserStatus,
 } from "../../services/admin";
@@ -627,10 +628,23 @@ export default function AdminUserDetailsScreen() {
     );
   }
 
+  /*
+   * Same status as the Users list (unapproved Sellers /
+   * Riders show as pending).
+   */
+  const displayStatus =
+    getAdminDisplayStatus(user);
+
   const statusStyle =
-    getStatusStyle(
-      user.accountStatus
-    );
+    displayStatus === "pending" || displayStatus === "rejected"
+      ? {
+          backgroundColor: "#FFF4DA",
+          textColor: "#B7801E",
+          icon: "time-outline" as const,
+        }
+      : getStatusStyle(
+          user.accountStatus
+        );
 
   const roleStyle =
     getRoleStyle(
@@ -869,7 +883,7 @@ export default function AdminUserDetailsScreen() {
                     ]}
                   >
                     {formatText(
-                      user.accountStatus
+                      displayStatus
                     )}
                   </Text>
                 </View>

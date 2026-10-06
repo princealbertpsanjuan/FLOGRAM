@@ -61,6 +61,83 @@ const FILTERS: {
   },
 ];
 
+type DateRange =
+  | "all"
+  | "today"
+  | "yesterday"
+  | "week"
+  | "month";
+
+const DATE_RANGES: {
+  label: string;
+  value: DateRange;
+}[] = [
+  { label: "All dates", value: "all" },
+  { label: "Today", value: "today" },
+  { label: "Yesterday", value: "yesterday" },
+  { label: "Last 7 days", value: "week" },
+  { label: "This month", value: "month" },
+];
+
+const ACTIVE_STATUSES = [
+  "pending",
+  "confirmed",
+  "preparing",
+  "ready_for_pickup",
+  "ready_for_delivery",
+  "out_for_delivery",
+];
+
+/*
+ * Calendar day in Philippine time (YYYY-MM-DD).
+ */
+const manilaDay = (value?: string | Date | null) =>
+  value
+    ? new Date(value).toLocaleDateString("en-CA", {
+        timeZone: "Asia/Manila",
+      })
+    : "";
+
+const isInDateRange = (
+  value: string | undefined,
+  range: DateRange
+) => {
+  if (range === "all") return true;
+  if (!value) return false;
+
+  const day = manilaDay(value);
+  const today = manilaDay(new Date());
+
+  if (range === "today") return day === today;
+
+  if (range === "yesterday") {
+    return day === manilaDay(new Date(Date.now() - 86400000));
+  }
+
+  if (range === "week") {
+    return day >= manilaDay(new Date(Date.now() - 6 * 86400000)) && day <= today;
+  }
+
+  return day.slice(0, 7) === today.slice(0, 7);
+};
+
+const getDayLabel = (value?: string) => {
+  if (!value) return "Unknown date";
+
+  const day = manilaDay(value);
+
+  if (day === manilaDay(new Date())) return "Today";
+  if (day === manilaDay(new Date(Date.now() - 86400000))) return "Yesterday";
+
+  return new Date(value).toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 const COLORS = {
   purple: "#312E81",
   purpleAccent: "#5B4FCF",
@@ -294,6 +371,14 @@ export default function AdminOrdersScreen() {
       "all"
     );
 
+  const [
+    dateRange,
+    setDateRange,
+  ] =
+    useState<DateRange>(
+      "all"
+    );
+
   const loadOrders =
     useCallback(
       async (
@@ -379,13 +464,28 @@ export default function AdminOrdersScreen() {
           .trim()
           .toLowerCase();
 
-      return orders.filter(
+      return [...orders]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime()
+        )
+        .filter(
         (order) => {
           if (
             filter !==
               "all" &&
             order.orderStatus !==
               filter
+          ) {
+            return false;
+          }
+
+          if (
+            !isInDateRange(
+              order.createdAt,
+              dateRange
+            )
           ) {
             return false;
           }
@@ -434,15 +534,18 @@ export default function AdminOrdersScreen() {
       orders,
       filter,
       search,
+      dateRange,
     ]);
 
+  /*
+   * Same definitions as the Admin Dashboard:
+   * active = not yet delivered; completed = delivered or
+   * confirmed received.
+   */
   const activeCount =
     orders.filter(
       (order) =>
-        ![
-          "completed",
-          "cancelled",
-        ].includes(
+        ACTIVE_STATUSES.includes(
           order.orderStatus ||
             ""
         )
@@ -452,7 +555,9 @@ export default function AdminOrdersScreen() {
     orders.filter(
       (order) =>
         order.orderStatus ===
-        "completed"
+          "completed" ||
+        order.orderStatus ===
+          "delivered"
     ).length;
 
   const totalSales =
@@ -946,6 +1051,56 @@ export default function AdminOrdersScreen() {
             )}
           </ScrollView>
 
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={
+              false
+            }
+            contentContainerStyle={[
+              styles.filters,
+              { paddingTop: 0 },
+            ]}
+          >
+            {DATE_RANGES.map((item) => {
+              const selected =
+                dateRange === item.value;
+
+              return (
+                <Pressable
+                  key={item.value}
+                  style={[
+                    styles.dateChip,
+                    selected &&
+                      styles.dateChipActive,
+                  ]}
+                  onPress={() =>
+                    setDateRange(item.value)
+                  }
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={13}
+                    color={
+                      selected
+                        ? "#FFFFFF"
+                        : COLORS.purpleAccent
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.dateChipText,
+                      selected && {
+                        color: "#FFFFFF",
+                      },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
           <View
             style={
               styles.sectionHeader
@@ -1112,11 +1267,24 @@ export default function AdminOrdersScreen() {
               }
             >
               {filteredOrders.map(
-                (order) => {
+                (order, index) => {
                   const id =
                     getOrderId(
                       order
                     );
+
+                  const dayLabel =
+                    getDayLabel(
+                      order.createdAt
+                    );
+
+                  const showDay =
+                    index === 0 ||
+                    dayLabel !==
+                      getDayLabel(
+                        filteredOrders[index - 1]
+                          .createdAt
+                      );
 
                   const colors =
                     getStatusColors(
@@ -1124,8 +1292,13 @@ export default function AdminOrdersScreen() {
                     );
 
                   return (
+                    <React.Fragment key={id}>
+                    {showDay ? (
+                      <Text style={styles.dayHeader}>
+                        {dayLabel}
+                      </Text>
+                    ) : null}
                     <Pressable
-                      key={id}
                       style={({
                         pressed,
                       }) => [
@@ -1352,6 +1525,7 @@ export default function AdminOrdersScreen() {
                         </View>
                       </View>
                     </Pressable>
+                    </React.Fragment>
                   );
                 }
               )}
@@ -1410,6 +1584,39 @@ const styles =
 
     scroll: {
       flex: 1,
+    },
+
+    dateChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: "#D9D6F5",
+      backgroundColor: "#FFFFFF",
+    },
+
+    dateChipActive: {
+      borderColor: COLORS.purpleAccent,
+      backgroundColor: COLORS.purpleAccent,
+    },
+
+    dateChipText: {
+      color: COLORS.purpleAccent,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+
+    dayHeader: {
+      marginTop: 6,
+      marginBottom: 2,
+      color: COLORS.secondaryText,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
     },
 
     content: {

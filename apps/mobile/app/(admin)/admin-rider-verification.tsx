@@ -19,9 +19,12 @@ import {
 import {
   AdminRiderVerification,
   approveAdminRider,
+  getAdminRiderById,
   getPendingRiders,
   rejectAdminRider,
 } from "../../services/admin";
+
+import RequirementDocumentsView from "../../components/admin/requirement-documents";
 
 const COLORS = {
   purple: "#312E81",
@@ -253,9 +256,24 @@ export default function AdminRiderVerificationScreen() {
     [riders]
   );
 
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+
   const openDetails = useCallback((rider: AdminRiderVerification) => {
     setSelectedRider(rider);
     setDetailsVisible(true);
+
+    /*
+     * Load the full record (with uploaded requirements).
+     */
+    const riderId = getRiderId(rider);
+
+    if (!riderId) return;
+
+    setDocumentsLoading(true);
+    getAdminRiderById(riderId)
+      .then(full => setSelectedRider(current => (current && getRiderId(current) === riderId ? { ...current, ...full } : current)))
+      .catch(() => undefined)
+      .finally(() => setDocumentsLoading(false));
   }, []);
 
   const approveRider = useCallback((rider: AdminRiderVerification) => {
@@ -921,6 +939,11 @@ export default function AdminRiderVerificationScreen() {
                     last
                   />
                 </View>
+
+                <RequirementDocumentsView
+                  documents={selectedRider.documents}
+                  loading={documentsLoading}
+                />
               </ScrollView>
 
               <View style={styles.modalActions}>
