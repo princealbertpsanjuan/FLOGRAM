@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 
+import { readStoredUpload } from "./cloudStorage.service.js";
+
 const AI_SERVICE_URL =
   process.env.AI_SERVICE_URL ||
   "http://localhost:8000";
@@ -83,12 +85,16 @@ const sendImageToEmbeddingService = async (
 export const generateImageEmbedding = async (
   relativeImagePath
 ) => {
-  const absolutePath = path.join(
-    process.cwd(),
-    relativeImagePath
-  );
+  /*
+   * Local disk first, Cloudinary copy second
+   * (the server disk is temporary on Render).
+   */
+  const fileBuffer =
+    await readStoredUpload(
+      relativeImagePath
+    );
 
-  if (!fs.existsSync(absolutePath)) {
+  if (!fileBuffer) {
     const error = new Error(
       "Bouquet image file was not found."
     );
@@ -96,13 +102,10 @@ export const generateImageEmbedding = async (
     throw error;
   }
 
-  const fileBuffer =
-    fs.readFileSync(absolutePath);
-
   return sendImageToEmbeddingService(
     fileBuffer,
-    path.basename(absolutePath),
-    getMimeType(absolutePath)
+    path.basename(String(relativeImagePath)),
+    getMimeType(String(relativeImagePath))
   );
 };
 

@@ -1,17 +1,19 @@
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, useImperativeHandle, type ReactNode } from 'react';
 
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 
 /*
  * =========================================================
- * react-native-maps stub for the web build
+ * react-native-maps stub
  * =========================================================
  *
- * The web build of FLOGRAM is the Admin portal only. Map
- * screens belong to Customers and Riders (mobile app), but
- * Expo Router bundles every route, so this stub keeps the
- * web bundle building. metro.config.js points
- * "react-native-maps" here when platform === "web".
+ * Used by metro.config.js for:
+ * - the web build (Admin portal only; map screens are
+ *   Customer/Rider mobile screens), and
+ * - an Android APK built without GOOGLE_MAPS_API_KEY, which
+ *   would otherwise crash when a map opens.
+ *
+ * Map methods called through refs are no-ops.
  * =========================================================
  */
 
@@ -19,13 +21,30 @@ export type LatLng = { latitude: number; longitude: number };
 
 type AnyProps = { children?: ReactNode; style?: unknown } & Record<string, unknown>;
 
-const MapView = forwardRef<View, AnyProps>(function MapView({ style }, ref) {
+const noop = () => undefined;
+
+const MapView = forwardRef<unknown, AnyProps>(function MapView({ style }, ref) {
+  useImperativeHandle(ref, () => ({
+    animateToRegion: noop,
+    animateCamera: noop,
+    fitToCoordinates: noop,
+    fitToElements: noop,
+    fitToSuppliedMarkers: noop,
+    setCamera: noop,
+  }));
+
   return (
     <View
-      ref={ref}
-      style={[{ alignItems: 'center', justifyContent: 'center', backgroundColor: '#EEF0F3' }, style as object]}
+      style={[
+        { alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: '#EEF0F3' },
+        style as object,
+      ]}
     >
-      <Text style={{ color: '#6B7280', fontSize: 13 }}>Map is available in the FLOGRAM mobile app.</Text>
+      <Text style={{ color: '#6B7280', fontSize: 13, textAlign: 'center' }}>
+        {Platform.OS === 'web'
+          ? 'Map is available in the FLOGRAM mobile app.'
+          : 'Map preview is unavailable in this build. Addresses and delivery updates still work.'}
+      </Text>
     </View>
   );
 });

@@ -11,8 +11,17 @@ const config = getDefaultConfig(__dirname);
  */
 const defaultResolveRequest = config.resolver.resolveRequest;
 
+/*
+ * An Android APK built on EAS without GOOGLE_MAPS_API_KEY
+ * would crash when a map opens, so that build also uses the
+ * stub (a "map unavailable" box). Expo Go is not affected.
+ */
+const mapsMissingInApk = process.env.EAS_BUILD === 'true' && !process.env.GOOGLE_MAPS_API_KEY;
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (platform === 'web' && (moduleName === 'react-native-maps' || moduleName.startsWith('react-native-maps/'))) {
+  const useStub = platform === 'web' || (platform === 'android' && mapsMissingInApk);
+
+  if (useStub && (moduleName === 'react-native-maps' || moduleName.startsWith('react-native-maps/'))) {
     return {
       type: 'sourceFile',
       filePath: path.resolve(__dirname, 'web-shims/react-native-maps.tsx'),
