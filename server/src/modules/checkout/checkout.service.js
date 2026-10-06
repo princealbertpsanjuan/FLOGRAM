@@ -24,6 +24,7 @@ import {
   verifyPayMongoWebhookSignature,
 } from "../payments/paymongo.service.js";
 import { resolveAddOnSelections } from "../addons/addon.service.js";
+import GiftAddOn from "../addons/addon.model.js";
 
 /*
  * =========================================================
@@ -555,20 +556,54 @@ const resolveCartItems =
        * Gift add-ons chosen for this bouquet, priced
        * from the database.
        */
+      /*
+       * Skip add-ons the shop has since hidden or removed
+       * (the cart screen already hides them), instead of
+       * failing the whole checkout.
+       */
+      const requestedAddOnIds =
+        (cartItem.addOns || []).map(
+          (entry) =>
+            getId(entry.addOn)
+        );
+
+      const stillOffered =
+        requestedAddOnIds.length
+          ? new Set(
+              (
+                await GiftAddOn.find({
+                  _id: {
+                    $in: requestedAddOnIds,
+                  },
+                  florist:
+                    florist._id,
+                  isActive: true,
+                  isAvailable: true,
+                }).distinct("_id")
+              ).map(String)
+            )
+          : new Set();
+
       const {
         addOns,
         addOnsTotal,
       } =
         await resolveAddOnSelections(
           florist._id,
-          (cartItem.addOns || []).map(
-            (entry) => ({
-              addOnId:
-                getId(entry.addOn),
-              quantity:
-                entry.quantity,
-            })
-          )
+          (cartItem.addOns || [])
+            .filter((entry) =>
+              stillOffered.has(
+                String(getId(entry.addOn))
+              )
+            )
+            .map(
+              (entry) => ({
+                addOnId:
+                  getId(entry.addOn),
+                quantity:
+                  entry.quantity,
+              })
+            )
         );
 
       const subtotal =
