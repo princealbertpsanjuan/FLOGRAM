@@ -12,13 +12,14 @@ import {
   Image,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import SafeAreaView from '../../components/ui/top-safe-area-view';
 
 import {
   router,
