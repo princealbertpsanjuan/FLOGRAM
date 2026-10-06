@@ -1431,11 +1431,11 @@ function OrderCard({
     deliveryStatus === 'out_for_delivery';
 
   /*
-   * The shop can cancel/decline until a rider accepts.
+   * The shop can decline a new order or cancel an accepted
+   * one, but not after preparation starts.
    */
   const canSellerCancel =
-    ['pending', 'confirmed', 'preparing', 'ready_for_pickup', 'ready_for_delivery'].includes(order.orderStatus) &&
-    !riderAssigned &&
+    ['pending', 'confirmed'].includes(order.orderStatus) &&
     !isAwaitingOnlinePayment(order);
 
   const productName =

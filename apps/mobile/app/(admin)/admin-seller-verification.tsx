@@ -24,6 +24,8 @@ import {
   rejectFlorist,
 } from "../../services/admin";
 
+import RequirementDocumentsView from "../../components/admin/requirement-documents";
+
 const COLORS = {
   purple: "#312E81",
   purpleAccent: "#5B4FCF",
@@ -1035,6 +1037,11 @@ export default function AdminSellerVerificationScreen() {
                         "No shop description was provided."}
                     </Text>
                   </View>
+
+                  <RequirementDocumentsView
+                    documents={selectedFlorist.documents}
+                    loading={detailsLoading}
+                  />
                 </ScrollView>
               )}
 

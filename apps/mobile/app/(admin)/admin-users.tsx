@@ -23,6 +23,7 @@ import {
 import {
   AdminManagedUser,
   AdminUserRole,
+  getAdminDisplayStatus,
   getAdminUsers,
 } from "../../services/admin";
 
@@ -740,7 +741,7 @@ const handleHeaderRefresh = useCallback(async () => {
       () =>
         users.filter(
           (user) =>
-            user.accountStatus ===
+            getAdminDisplayStatus(user) ===
             "active"
         ).length,
       [users]
@@ -1257,11 +1258,12 @@ const handleHeaderRefresh = useCallback(async () => {
                * Sellers/Riders not yet approved show as
                * pending, whatever their login status.
                */
+              const displayStatus =
+                getAdminDisplayStatus(user);
+
               const awaitingVerification =
-                (user.role === "seller" ||
-                  user.role === "rider") &&
-                user.accountStatus === "active" &&
-                user.verificationStatus !== "approved";
+                displayStatus === "pending" ||
+                displayStatus === "rejected";
 
               const statusStyle =
                 awaitingVerification
@@ -1429,11 +1431,7 @@ const handleHeaderRefresh = useCallback(async () => {
                           },
                         ]}
                       >
-                        {awaitingVerification
-                          ? user.verificationStatus === "rejected"
-                            ? "rejected"
-                            : "pending"
-                          : user.accountStatus}
+                        {displayStatus}
                       </Text>
                     </View>
                   </View>

@@ -2159,8 +2159,8 @@ export const completePickupOrder =
  * CANCEL / DECLINE ORDER
  * =========================================================
  *
- * Allowed until a rider accepts the delivery. A request
- * that is still waiting for riders is withdrawn.
+ * Allowed while the order is new (pending) or accepted
+ * (confirmed) — before preparation starts.
  * Paid online orders are flagged for refund by FLOGRAM.
  */
 export const cancelSellerOrder =
@@ -2176,10 +2176,14 @@ export const cancelSellerOrder =
     const order =
       await getSellerOwnedOrder(orderId, sellerId);
 
-    const cancellable = ["pending", "confirmed", "preparing", "ready_for_pickup", "ready_for_delivery"];
+    /*
+     * Once the shop starts preparing the bouquet it can no
+     * longer cancel (flowers are already being used).
+     */
+    const cancellable = ["pending", "confirmed"];
 
     if (!cancellable.includes(order.orderStatus)) {
-      const error = new Error("This order can no longer be cancelled.");
+      const error = new Error("Orders that are already being prepared can no longer be cancelled. Use Report a problem if needed.");
       error.statusCode = 400;
       throw error;
     }

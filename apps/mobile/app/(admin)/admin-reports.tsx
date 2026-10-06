@@ -716,7 +716,7 @@ function TopShopRow({
             styles.shopValueLabel
           }
         >
-          order value
+          product sales
         </Text>
       </View>
     </View>
@@ -756,7 +756,7 @@ export default function AdminReportsScreen() {
         item.value === requestedPeriod
     )
       ? (requestedPeriod as AdminReportPeriod)
-      : "30d";
+      : "today";
 
   const [
     selectedPeriod,
@@ -1288,7 +1288,7 @@ export default function AdminReportsScreen() {
           <SectionHeader
             eyebrow="FINANCIAL PERFORMANCE"
             title="Sales & Revenue"
-            subtitle="Recognized marketplace transactions based on successful online payments and verified COD remittances."
+            subtitle="Money actually received: confirmed online payments, Cash on Pickup handovers and Admin-verified COD remittances (Philippine time)."
           />
 
           <View
@@ -1316,7 +1316,7 @@ export default function AdminReportsScreen() {
                   styles.financeHeroLabel
                 }
               >
-                TOTAL RECOGNIZED SALES
+                TOTAL COLLECTED
               </Text>
             </View>
 
@@ -1343,7 +1343,7 @@ export default function AdminReportsScreen() {
             style={styles.contentCard}
           >
             <InfoRow
-              label="Online Payments"
+              label="Online payments (PayMongo)"
               value={formatCurrency(
                 report.sales.online
               )}
@@ -1351,7 +1351,7 @@ export default function AdminReportsScreen() {
             />
 
             <InfoRow
-              label="Verified COD"
+              label="Cash on Delivery (verified remittances)"
               value={formatCurrency(
                 report.sales.cod
               )}
@@ -1361,7 +1361,29 @@ export default function AdminReportsScreen() {
             />
 
             <InfoRow
-              label={`FLOGRAM Commission (${report.sales.commissionPercentage}%)`}
+              label="Cash on Pickup (collected by shops)"
+              value={formatCurrency(
+                report.sales.pickup ?? 0
+              )}
+            />
+
+            <InfoRow
+              label="Less: delivery fees (Rider income)"
+              value={`− ${formatCurrency(
+                report.sales.deliveryFees ?? 0
+              )}`}
+            />
+
+            <InfoRow
+              label="Product sales"
+              value={formatCurrency(
+                report.sales.productSales ??
+                  report.sales.total
+              )}
+            />
+
+            <InfoRow
+              label={`FLOGRAM commission (${report.sales.commissionPercentage}% of product sales)`}
               value={formatCurrency(
                 report.sales
                   .commission
@@ -1372,7 +1394,7 @@ export default function AdminReportsScreen() {
             />
 
             <InfoRow
-              label="Seller Share"
+              label="Seller share"
               value={formatCurrency(
                 report.sales
                   .sellerShare
@@ -1905,7 +1927,7 @@ export default function AdminReportsScreen() {
           <SectionHeader
             eyebrow="MARKETPLACE PERFORMANCE"
             title="Top Shops"
-            subtitle="Completed order performance for the selected report period."
+            subtitle="Shops ranked by product sales received in the selected period."
           />
 
           <View

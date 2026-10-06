@@ -45,7 +45,9 @@ import {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
-import { formatAddOnsLine, type OrderAddOn } from '../../services/addons';
+import { setCartItemAddOns, type AddOnSelection, type OrderAddOn } from '../../services/addons';
+
+import AddOnPicker from '../../components/customer/addon-picker';
 
 /* =========================================================
  * TYPES
@@ -1297,6 +1299,56 @@ export default function CustomerCheckoutScreen() {
         );
       },
       []
+    );
+
+  /* =======================================================
+   * GIFT ADD-ONS (chosen at checkout)
+   * ===================================================== */
+
+  const [
+    savingAddOnsFor,
+    setSavingAddOnsFor,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const handleAddOnsChange =
+    useCallback(
+      async (
+        cartItemId: string,
+        next: AddOnSelection[]
+      ) => {
+        try {
+          setSavingAddOnsFor(
+            cartItemId
+          );
+
+          await setCartItemAddOns(
+            cartItemId,
+            next
+          );
+
+          /*
+           * Reloading the cart re-runs the server quote,
+           * so the total includes the add-ons.
+           */
+          await loadCart();
+        } catch (error) {
+          Alert.alert(
+            "Could not update gift",
+            getErrorMessage(
+              error,
+              "Please try again."
+            )
+          );
+        } finally {
+          setSavingAddOnsFor(
+            null
+          );
+        }
+      },
+      [loadCart]
     );
 
   /* =======================================================
@@ -2981,19 +3033,32 @@ export default function CustomerCheckoutScreen() {
                       flower?.price ??
                       0;
 
+                    const itemFloristId =
+                      flower?.florist &&
+                      typeof flower.florist ===
+                        "object"
+                        ? flower.florist._id
+                        : typeof flower?.florist ===
+                            "string"
+                          ? flower.florist
+                          : null;
+
                     return (
                       <View
                         key={
                           item._id
                         }
-                        style={[
-                          styles.cartProductCard,
-
+                        style={
                           index !==
                             cartItems.length -
                               1 &&
-                            styles.cartProductCardSpacing,
-                        ]}
+                          styles.cartProductCardSpacing
+                        }
+                      >
+                      <View
+                        style={
+                          styles.cartProductCard
+                        }
                       >
                         {imageUrl ? (
                           <Image
@@ -3087,14 +3152,6 @@ export default function CustomerCheckoutScreen() {
                             }
                           </Text>
 
-                          {item.addOns?.length ? (
-                            <Text
-                              numberOfLines={2}
-                              style={styles.addOnsLine}
-                            >
-                              + {formatAddOnsLine(item.addOns)}
-                            </Text>
-                          ) : null}
                         </View>
 
                         <View
@@ -3124,6 +3181,41 @@ export default function CustomerCheckoutScreen() {
                             )}
                           </Text>
                         </View>
+                      </View>
+
+                      {/*
+                       * Gift add-ons are chosen here, so the
+                       * price is always part of the server's
+                       * checkout total.
+                       */}
+                      <AddOnPicker
+                        compact
+                        floristId={itemFloristId}
+                        disabled={
+                          savingAddOnsFor ===
+                          item._id
+                        }
+                        value={(item.addOns || [])
+                          .map((addOn) => ({
+                            addOnId: String(
+                              addOn.addOn ??
+                                addOn.addOnId ??
+                                ""
+                            ),
+                            quantity:
+                              addOn.quantity,
+                          }))
+                          .filter(
+                            (selection) =>
+                              selection.addOnId
+                          )}
+                        onChange={(next) =>
+                          void handleAddOnsChange(
+                            item._id,
+                            next
+                          )
+                        }
+                      />
                       </View>
                     );
                   }
@@ -5385,12 +5477,6 @@ const styles =
         COLORS.primary,
     },
 
-    addOnsLine: {
-      marginTop: 3,
-      color: "#B5476F",
-      fontSize: 12,
-      fontWeight: "600",
-    },
 
     quantityText: {
       marginTop: 2,

@@ -208,6 +208,13 @@ export const getAdminSellerBalances = async () => {
           : null,
         unpaidOrderCount: eligible.length,
         grossSales: sum(eligible, "grossAmount"),
+        /*
+         * Sales whose money FLOGRAM holds (online + remitted
+         * COD) vs Cash on Pickup the shop already received.
+         */
+        heldSales: sum(eligible.filter((item) => !item.collectedBySeller), "grossAmount"),
+        pickupSales: sum(eligible.filter((item) => item.collectedBySeller), "grossAmount"),
+        commissionRate: eligible[0]?.commissionRate ?? null,
         commission: sum(eligible, "commission"),
         amountOwed: roundMoney(sum(eligible, "netAmount")),
         awaitingCodOrders: awaitingCod.length,

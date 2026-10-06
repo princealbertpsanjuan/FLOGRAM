@@ -245,8 +245,21 @@ const formatShift = (
         )
       : null;
 
+  /*
+   * A shift that already started (or ended) can no longer
+   * be reserved, so it is reported as closed.
+   */
+  const startedAlready =
+    source.startAt &&
+    new Date(source.startAt).getTime() <= Date.now();
+
   return {
     ...source,
+
+    status:
+      source.status === "open" && startedAlready
+        ? "closed"
+        : source.status,
 
     approvedCount,
 

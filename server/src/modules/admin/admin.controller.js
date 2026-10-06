@@ -65,7 +65,7 @@ export const getReports =
   async (req, res, next) => {
     try {
       const {
-        period = "30d",
+        period = "today",
       } = req.query;
 
       const reports =

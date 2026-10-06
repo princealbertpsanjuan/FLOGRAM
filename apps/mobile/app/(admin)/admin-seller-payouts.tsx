@@ -249,6 +249,11 @@ export default function AdminSellerPayoutsScreen() {
               <View style={styles.summary}>
                 <Text style={styles.summaryLabel}>Total owed to sellers</Text>
                 <Text style={styles.summaryValue}>{peso(owedTotal)}</Text>
+                <Text style={styles.summaryNote}>
+                  From {peso(balances.reduce((sum, balance) => sum + balance.grossSales, 0))} in sales, less{' '}
+                  {peso(balances.reduce((sum, balance) => sum + balance.commission, 0))} FLOGRAM commission and cash the
+                  shops already collected on pickup
+                </Text>
               </View>
 
               {balances.filter(balance => balance.unpaidOrderCount > 0 || balance.awaitingCodOrders > 0).length === 0 ? (
@@ -270,9 +275,25 @@ export default function AdminSellerPayoutsScreen() {
                           {peso(balance.amountOwed)}
                         </Text>
                       </View>
-                      <Text style={styles.meta}>
-                        {balance.unpaidOrderCount} unpaid order(s) · sales {peso(balance.grossSales)} · commission {peso(balance.commission)}
-                      </Text>
+                      <Text style={styles.meta}>{balance.unpaidOrderCount} unpaid order(s)</Text>
+
+                      <View style={styles.breakdown}>
+                        <BreakdownRow label="Total product sales" value={peso(balance.grossSales)} />
+                        {Number(balance.pickupSales || 0) > 0 ? (
+                          <BreakdownRow
+                            label="Less: Cash on Pickup (shop already has it)"
+                            value={`− ${peso(balance.pickupSales)}`}
+                          />
+                        ) : null}
+                        <BreakdownRow
+                          label={`Less: FLOGRAM commission${
+                            balance.commissionRate != null ? ` (${(balance.commissionRate * 100).toFixed(0)}%)` : ''
+                          }`}
+                          value={`− ${peso(balance.commission)}`}
+                          tone="red"
+                        />
+                        <BreakdownRow label="Owed to seller" value={peso(balance.amountOwed)} strong />
+                      </View>
                       {balance.oldestUnpaidAt ? (
                         <Text style={styles.meta}>
                           {shortDate(balance.oldestUnpaidAt)} – {shortDate(balance.latestUnpaidAt)}
@@ -318,9 +339,19 @@ export default function AdminSellerPayoutsScreen() {
                 <Text style={styles.meta}>
                   {shortDate(payout.periodStart)} – {shortDate(payout.periodEnd)} · {payout.items?.length ?? 0} order(s)
                 </Text>
-                <Text style={styles.meta}>
-                  Sales {peso(payout.grossSales)} − commission {peso(payout.totalCommission)}
-                </Text>
+                <View style={styles.breakdown}>
+                  <BreakdownRow label="Total product sales" value={peso(payout.grossSales)} />
+                  {(() => {
+                    const pickup = (payout.items || [])
+                      .filter(item => item.collectedBySeller)
+                      .reduce((total, item) => total + item.grossAmount, 0);
+                    return pickup > 0 ? (
+                      <BreakdownRow label="Less: Cash on Pickup (shop already has it)" value={`− ${peso(pickup)}`} />
+                    ) : null;
+                  })()}
+                  <BreakdownRow label="Less: FLOGRAM commission" value={`− ${peso(payout.totalCommission)}`} tone="red" />
+                  <BreakdownRow label="Payout to seller" value={peso(payout.totalAmount)} strong />
+                </View>
 
                 {(payout.items || []).slice(0, 6).map(item => (
                   <Text key={item.order} style={styles.item} numberOfLines={1}>
@@ -417,7 +448,39 @@ export default function AdminSellerPayoutsScreen() {
   );
 }
 
+function BreakdownRow({
+  label,
+  value,
+  strong,
+  tone,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  tone?: 'red';
+}) {
+  return (
+    <View style={[styles.breakdownRow, strong && styles.breakdownTotal]}>
+      <Text style={[styles.breakdownLabel, strong && { color: TEXT, fontWeight: '800' }]}>{label}</Text>
+      <Text
+        style={[
+          styles.breakdownValue,
+          tone === 'red' && { color: '#D04A5F' },
+          strong && { color: '#3E9B62', fontSize: 15, fontWeight: '900' },
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  breakdown: { marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: '#F7F7FB' },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3, gap: 10 },
+  breakdownTotal: { marginTop: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E4E3EE' },
+  breakdownLabel: { flex: 1, color: MUTED, fontSize: 12 },
+  breakdownValue: { color: TEXT, fontSize: 13, fontWeight: '700' },
   screen: { flex: 1, backgroundColor: '#F5F5F8' },
   tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
   tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14, borderWidth: 1, borderColor: ACCENT },
@@ -427,6 +490,7 @@ const styles = StyleSheet.create({
   summary: { padding: 16, borderRadius: 18, backgroundColor: '#24245D' },
   summaryLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700' },
   summaryValue: { marginTop: 4, color: '#FFFFFF', fontSize: 26, fontWeight: '900' },
+  summaryNote: { marginTop: 4, color: 'rgba(255,255,255,0.75)', fontSize: 12 },
   card: { padding: 14, borderRadius: 16, borderWidth: 1, borderColor: BORDER, backgroundColor: '#FFFFFF' },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   row: { flexDirection: 'row', gap: 8, marginTop: 10 },

@@ -49,6 +49,15 @@ export type AdminFlorist = {
   _id?: string;
   id?: string;
 
+  /*
+   * Uploaded requirement photos (detail endpoint only).
+   */
+  documents?: {
+    status?: string;
+    submittedAt?: string;
+    files: { key: string; label: string; path: string }[];
+  } | null;
+
   owner?:
     | AdminUser
     | string
@@ -562,11 +571,28 @@ export type AdminSalesTrendItem = {
 };
 
 export type AdminReportSales = {
+  /*
+   * Everything customers paid (products + delivery fees).
+   */
   total: number;
+
+  orders?: number;
 
   online: number;
 
   cod: number;
+
+  pickup?: number;
+
+  /*
+   * Delivery fees belong to Riders.
+   */
+  deliveryFees?: number;
+
+  /*
+   * total − delivery fees; commission is taken from this.
+   */
+  productSales?: number;
 
   commissionRate: number;
 
@@ -1127,6 +1153,15 @@ export async function rejectAdminRemittance(
  */
 
 export type AdminRiderVerification = {
+
+  /*
+   * Uploaded requirement photos (detail endpoint only).
+   */
+  documents?: {
+    status?: string;
+    submittedAt?: string;
+    files: { key: string; label: string; path: string }[];
+  } | null;
   _id?: string;
   id?: string;
 
@@ -2203,4 +2238,36 @@ export async function cancelAdminRiderPayout(
   );
 
   return response.data.payout;
+}
+
+/*
+ * =========================================================
+ * USER STATUS SHOWN TO ADMIN
+ * =========================================================
+ *
+ * Sellers and Riders who are not yet approved are shown as
+ * "pending" (or "rejected") even though they can log in to
+ * finish their application. Used by the Users list, its
+ * Active count and User Details so they always agree.
+ */
+export type AdminDisplayStatus =
+  | "active"
+  | "pending"
+  | "rejected"
+  | "inactive"
+  | "suspended"
+  | "banned";
+
+export function getAdminDisplayStatus(
+  user: Pick<AdminManagedUser, "role" | "accountStatus" | "verificationStatus">
+): AdminDisplayStatus {
+  if (
+    user.accountStatus === "active" &&
+    (user.role === "seller" || user.role === "rider") &&
+    user.verificationStatus !== "approved"
+  ) {
+    return user.verificationStatus === "rejected" ? "rejected" : "pending";
+  }
+
+  return user.accountStatus as AdminDisplayStatus;
 }

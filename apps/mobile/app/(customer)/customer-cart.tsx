@@ -1577,7 +1577,7 @@ const handleCheckout =
          * =================================================
          */}
 
-        <CustomerBottomNav active="cart" />
+        <CustomerBottomNav active="cart" cartCount={cart?.itemCount ?? 0} />
       </View>
     </SafeAreaView>
   );

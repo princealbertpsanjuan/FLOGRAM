@@ -611,7 +611,7 @@ export default function AdminRiderShiftsScreen() {
                       ))
                     )}
 
-                    {shift.timeStatus !== 'ended' && shift.status !== 'cancelled' ? (
+                    {shift.timeStatus === 'upcoming' && shift.status !== 'cancelled' ? (
                       <View style={styles.shiftActions}>
                         {shift.status === 'open' ? (
                           <SmallButton

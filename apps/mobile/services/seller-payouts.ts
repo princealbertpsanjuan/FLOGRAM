@@ -61,6 +61,9 @@ export type SellerBalance = {
   seller: { id: string; firstName: string; lastName: string; email: string; phoneNumber: string } | null;
   unpaidOrderCount: number;
   grossSales: number;
+  heldSales?: number;
+  pickupSales?: number;
+  commissionRate?: number | null;
   commission: number;
   amountOwed: number;
   awaitingCodOrders: number;
