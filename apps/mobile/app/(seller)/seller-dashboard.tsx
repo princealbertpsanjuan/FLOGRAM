@@ -975,7 +975,11 @@ export default function SellerDashboardScreen() {
                   styles.greetingLabel
                 }
               >
-                Good morning
+                {new Date().getHours() < 12
+                  ? 'Good morning'
+                  : new Date().getHours() < 18
+                    ? 'Good afternoon'
+                    : 'Good evening'}
               </Text>
 
               <Text

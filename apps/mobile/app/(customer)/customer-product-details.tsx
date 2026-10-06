@@ -30,6 +30,7 @@ import {
 import { ScreenLoader } from '../../components/ui/state-views';
 import AlsoBoughtRow from '../../components/customer/also-bought-row';
 import ListingComments from '../../components/customer/listing-comments';
+import GiftHint from '../../components/customer/gift-hint';
 import FollowShopButton from '../../components/customer/follow-shop-button';
 
 /*
@@ -1441,6 +1442,8 @@ export default function CustomerProductDetailsScreen() {
               order is confirmed.
             </Text>
           </View>
+
+          <GiftHint floristId={florist?._id} />
 
           <ListingComments flowerId={flower._id} />
 

@@ -1,6 +1,6 @@
 # FLOGRAM
 
-AI-powered floral marketplace for Butuan City: Customers, Sellers (florist shops), Riders and Admin.
+AI-powered floral marketplace for Naga City: Customers, Sellers (florist shops), Riders and Admin.
 
 ```
 apps/mobile   Expo (React Native) app — Customer, Seller, Rider, Admin

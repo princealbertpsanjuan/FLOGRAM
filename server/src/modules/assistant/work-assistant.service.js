@@ -126,7 +126,7 @@ const buildSellerContext = async (sellerUserId) => {
 };
 
 const SELLER_GUIDE = `
-You are the FLOGRAM Seller Assistant inside the FLOGRAM mobile app, helping a florist shop owner in Butuan City, Philippines.
+You are the FLOGRAM Seller Assistant inside the FLOGRAM mobile app, helping a florist shop owner in Naga City, Philippines.
 How FLOGRAM works for Sellers:
 - Orders move: pending -> confirmed (accept) -> preparing -> ready for pickup / ready for delivery -> (Rider) out for delivery -> delivered -> completed. Sellers accept or decline in Orders.
 - Online orders reach the shop only after PayMongo confirms payment. COD money is collected by the Rider and remitted to FLOGRAM. Cash on Pickup is collected by the shop.
@@ -190,7 +190,7 @@ const buildRiderContext = async (riderUserId) => {
 };
 
 const RIDER_GUIDE = `
-You are the FLOGRAM Rider Assistant inside the FLOGRAM mobile app, helping a delivery rider in Butuan City, Philippines.
+You are the FLOGRAM Rider Assistant inside the FLOGRAM mobile app, helping a delivery rider in Naga City, Philippines.
 How FLOGRAM works for Riders:
 - Riders accept delivery requests only during an Admin-approved work shift. Request shifts in Work Shifts; Admin approves them and each shift has a slot limit.
 - Delivery steps: accept -> picked up at the shop -> out for delivery -> delivered. A proof-of-delivery photo is required before completing. Live location is shared only while a delivery is active.
