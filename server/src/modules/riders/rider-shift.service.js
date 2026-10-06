@@ -15,11 +15,19 @@ import { notifyAdmins, notifyAllRiders, notifySafely } from "../notifications/no
  */
 export const getUnremittedCod = async (riderUserId) => {
   const deliveries = await Delivery.find({ riderUser: riderUserId, status: "delivered" })
-    .select("order")
-    .populate("order", "paymentMethod totalAmount")
+    .select("order deliveredAt")
+    .populate("order", "paymentMethod paymentStatus totalAmount")
     .lean();
 
-  const codDeliveries = deliveries.filter((delivery) => delivery.order?.paymentMethod === "cash_on_delivery");
+  /*
+   * Same rule the wallet uses to build remittances.
+   */
+  const codDeliveries = deliveries.filter(
+    (delivery) =>
+      delivery.deliveredAt &&
+      delivery.order?.paymentMethod === "cash_on_delivery" &&
+      delivery.order?.paymentStatus === "paid"
+  );
 
   if (!codDeliveries.length) {
     return { count: 0, amount: 0 };

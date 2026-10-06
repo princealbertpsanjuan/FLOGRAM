@@ -320,9 +320,11 @@ const createNotificationSafely =
     notificationData
   ) => {
     try {
-      return await createNotification(
-        notificationData
-      );
+      return await createNotification({
+        ...notificationData,
+        title: String(notificationData?.title || "").slice(0, 120),
+        message: String(notificationData?.message || "").slice(0, 500),
+      });
     } catch (error) {
       console.error(
         "Order notification creation failed:",
@@ -2163,7 +2165,7 @@ export const completePickupOrder =
  */
 export const cancelSellerOrder =
   async (orderId, sellerId, reason) => {
-    const cleanReason = String(reason || "").trim();
+    const cleanReason = String(reason || "").trim().slice(0, 300);
 
     if (cleanReason.length < 5) {
       const error = new Error("Please give the customer a reason (at least 5 characters).");
@@ -2182,6 +2184,22 @@ export const cancelSellerOrder =
       throw error;
     }
 
+    if (order.paymentMethod === "paymongo" && order.paymentStatus === "pending") {
+      const error = new Error("The customer is completing online payment for this order. Try again in a few minutes.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    /*
+     * Withdraw the open delivery request first, then check
+     * whether a rider had already accepted it, so a rider
+     * cannot accept in between.
+     */
+    await Delivery.updateMany(
+      { order: order._id, status: "available" },
+      { $set: { status: "cancelled", cancelledAt: new Date() } }
+    );
+
     const activeDelivery =
       await Delivery.findOne({
         order: order._id,
@@ -2193,11 +2211,6 @@ export const cancelSellerOrder =
       error.statusCode = 409;
       throw error;
     }
-
-    await Delivery.updateMany(
-      { order: order._id, status: "available" },
-      { $set: { status: "cancelled", cancelledAt: new Date() } }
-    );
 
     const needsRefund = order.paymentMethod === "paymongo" && order.paymentStatus === "paid";
 

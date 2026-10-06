@@ -538,7 +538,7 @@ export const rejectRider = async (
     role: "rider",
     type: "verification_rejected",
     title: "Rider application needs changes",
-    message: remarks ? `Admin's remarks: ${remarks}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
+    message: remarks ? `Admin's remarks: ${String(remarks).slice(0, 300)}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
   });
 
   return rider;
@@ -1447,10 +1447,24 @@ export const getRiderWallet =
      * =====================================================
      */
 
+    /*
+     * Process days oldest first. COD collected after a day
+     * was already submitted/verified is carried to the next
+     * day's remittance so it can still be remitted.
+     */
+    const orderedKeys =
+      [...shiftGroups.keys()].sort();
+
     for (
-      const group
-      of shiftGroups.values()
+      let keyIndex = 0;
+      keyIndex < orderedKeys.length;
+      keyIndex += 1
     ) {
+      const group =
+        shiftGroups.get(
+          orderedKeys[keyIndex]
+        );
+
       const existing =
         await RiderRemittance.findOne({
           rider:
@@ -1495,6 +1509,49 @@ export const getRiderWallet =
           existing.status
         )
       ) {
+        const included =
+          new Set(
+            (existing.items || []).map(
+              (item) =>
+                String(item.delivery)
+            )
+          );
+
+        const leftovers =
+          group.items.filter(
+            (item) =>
+              !included.has(
+                String(item.delivery)
+              )
+          );
+
+        if (leftovers.length) {
+          const nextDate =
+            new Date(
+              group.shiftDate.getTime() +
+                24 * 60 * 60 * 1000
+            );
+
+          const nextKey =
+            nextDate
+              .toISOString()
+              .slice(0, 10);
+
+          if (!shiftGroups.has(nextKey)) {
+            shiftGroups.set(nextKey, {
+              shiftDate: nextDate,
+              items: [],
+            });
+
+            orderedKeys.push(nextKey);
+            orderedKeys.sort();
+          }
+
+          shiftGroups
+            .get(nextKey)
+            .items.push(...leftovers);
+        }
+
         continue;
       }
 
@@ -3134,7 +3191,7 @@ export const rejectRiderRemittance =
       type: "remittance_rejected",
       title: "COD remittance rejected",
       message: cleanRemarks
-        ? `Admin's remarks: ${cleanRemarks}. Please submit again with the correct proof.`
+        ? `Admin's remarks: ${String(cleanRemarks).slice(0, 300)}. Please submit again with the correct proof.`
         : "Please check the amount and proof, then submit again.",
       remittance: remittance._id,
     });

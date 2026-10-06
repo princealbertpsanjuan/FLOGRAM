@@ -574,7 +574,7 @@ export const rejectFlorist =
       role: "seller",
       type: "verification_rejected",
       title: "Shop application needs changes",
-      message: remarks ? `Admin's remarks: ${remarks}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
+      message: remarks ? `Admin's remarks: ${String(remarks).slice(0, 300)}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
     });
 
     return florist;

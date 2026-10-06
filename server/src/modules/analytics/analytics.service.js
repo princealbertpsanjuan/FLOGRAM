@@ -419,7 +419,13 @@ export const getSearchSuggestions = async ({ limit = 8 } = {}) => {
       shopName: flower.florist?.shopName || "",
       timesBought: countById.get(String(flower._id)) || 0,
     })),
-    boughtTogether: rules.slice(0, 4).map((rule) => ({
+    boughtTogether: rules
+      .filter((rule, index, all) => {
+        const key = [...rule.antecedent, ...rule.consequent].sort().join("|");
+        return all.findIndex((other) => [...other.antecedent, ...other.consequent].sort().join("|") === key) === index;
+      })
+      .slice(0, 4)
+      .map((rule) => ({
       items: [...rule.antecedent, ...rule.consequent].map(describe).map((item) => ({ id: item.id, name: item.name, type: item.type })),
       confidence: Number(rule.confidence.toFixed(2)),
     })),

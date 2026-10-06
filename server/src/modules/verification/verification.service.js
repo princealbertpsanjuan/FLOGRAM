@@ -88,6 +88,14 @@ export const saveRiderVerification = async (
     throw error;
   }
 
+  if (riderProfile.verificationStatus === "approved") {
+    const error = new Error(
+      "Your account is already approved."
+    );
+    error.statusCode = 409;
+    throw error;
+  }
+
   const verification =
     await Verification.findOneAndUpdate(
       {
@@ -216,6 +224,14 @@ export const saveSellerVerification = async (
       "Complete your shop details before uploading documents."
     );
     error.statusCode = 400;
+    throw error;
+  }
+
+  if (floristProfile.verificationStatus === "approved") {
+    const error = new Error(
+      "Your account is already approved."
+    );
+    error.statusCode = 409;
     throw error;
   }
 

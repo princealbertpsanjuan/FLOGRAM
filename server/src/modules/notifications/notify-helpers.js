@@ -14,7 +14,11 @@ import { createNotification } from "./notification.service.js";
 export const notifySafely = async (payload) => {
   try {
     if (!payload?.recipient) return null;
-    return await createNotification(payload);
+    return await createNotification({
+      ...payload,
+      title: String(payload.title || "").slice(0, 120),
+      message: String(payload.message || "").slice(0, 500),
+    });
   } catch (error) {
     console.error(`Notification (${payload?.type}) failed:`, error.message);
     return null;
