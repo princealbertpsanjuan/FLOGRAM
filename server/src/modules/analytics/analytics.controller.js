@@ -3,6 +3,7 @@ import {
   getBuyingPatterns,
   getFloristForSeller,
   getReviewSentiment,
+  getSearchSuggestions,
 } from "./analytics.service.js";
 
 const send = (res, message, data) =>
@@ -82,6 +83,16 @@ export const alsoBought = async (req, res, next) => {
       "Related bouquets retrieved successfully.",
       await getAlsoBought(req.params.flowerId)
     );
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+export const searchSuggestions = async (req, res, next) => {
+  try {
+    const data = await getSearchSuggestions();
+    res.status(200).json({ success: true, message: "Search suggestions retrieved.", data });
   } catch (error) {
     next(error);
   }

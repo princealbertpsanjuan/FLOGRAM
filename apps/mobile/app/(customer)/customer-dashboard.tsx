@@ -42,6 +42,7 @@ import {
 } from "../../services/orders";
 
 import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
+import SearchSuggestions from '../../components/customer/search-suggestions';
 
 /*
  * =========================================================
@@ -927,6 +928,8 @@ export default function CustomerDashboardScreen() {
     setSearch,
   ] =
     useState("");
+
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const [
     selectedFlowerType,
@@ -2248,6 +2251,8 @@ const handleOrdersPress =
                   onSubmitEditing={() =>
                     void handleSearch()
                   }
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
                 />
 
                 {search.length >
@@ -2298,6 +2303,16 @@ const handleOrdersPress =
                 />
               </Pressable>
             </View>
+          </View>
+
+          <View style={{ marginTop: 12 }}>
+            <SearchSuggestions
+              visible={searchFocused && search.trim().length === 0}
+              onPickKeyword={keyword => {
+                setSearchFocused(false);
+                setSearch(keyword);
+              }}
+            />
           </View>
 
           {/*

@@ -336,6 +336,30 @@ const formatAddress = (
  * =========================================================
  */
 
+/*
+ * Orders from the same shop in one checkout share one
+ * delivery, so they are shown together.
+ */
+const groupOrdersByShop = (
+  orders: CustomerOrder[]
+) => {
+  const groups = new Map<string, { key: string; shopName: string; orders: CustomerOrder[] }>();
+
+  orders.forEach((order) => {
+    const florist = order.florist;
+    const key =
+      florist && typeof florist === "object"
+        ? String(florist._id || florist.shopName)
+        : String(florist || order._id);
+
+    const group = groups.get(key) || { key, shopName: getFloristName(order), orders: [] };
+    group.orders.push(order);
+    groups.set(key, group);
+  });
+
+  return [...groups.values()];
+};
+
 const getFloristName = (
   order: CustomerOrder
 ) => {
@@ -382,12 +406,20 @@ const canTrackDelivery = (
   order: CustomerOrder,
   delivery?: Delivery
 ) => {
+  /*
+   * Live tracking only matters while the bouquet is on its
+   * way. Once delivered / confirmed received it is hidden.
+   */
   return Boolean(
     order.fulfillmentType ===
       "delivery" &&
       delivery &&
-      delivery.status !==
-        "cancelled"
+      !["cancelled", "delivered"].includes(
+        delivery.status
+      ) &&
+      !["delivered", "completed", "cancelled"].includes(
+        order.orderStatus
+      )
   );
 };
 
@@ -1847,10 +1879,26 @@ function CheckoutDetails({
             }
           />
 
-          {checkout.orders.map(
+          {groupOrdersByShop(
+            checkout.orders
+          ).map((group) => (
+            <View key={group.key}>
+              {checkout.orders.length > 1 ? (
+                <View style={styles.shopGroupHeader}>
+                  <Ionicons name="storefront-outline" size={15} color="#D45B77" />
+                  <Text style={styles.shopGroupTitle}>{group.shopName}</Text>
+                  <Text style={styles.shopGroupMeta}>
+                    {group.orders.length} item{group.orders.length === 1 ? '' : 's'}
+                    {group.orders.length > 1 && checkout.fulfillmentType === 'delivery'
+                      ? ' · one delivery fee'
+                      : ''}
+                  </Text>
+                </View>
+              ) : null}
+
+          {group.orders.map(
             (
-              order,
-              index
+              order
             ) => (
               <ChildOrderCard
                 key={
@@ -1860,7 +1908,7 @@ function CheckoutDetails({
                   order
                 }
                 number={
-                  index + 1
+                  checkout.orders.indexOf(order) + 1
                 }
                 loading={
                   actionOrderId ===
@@ -1889,6 +1937,8 @@ function CheckoutDetails({
               />
             )
           )}
+            </View>
+          ))}
 
           <SectionCard
             title={
@@ -3305,23 +3355,27 @@ function ChildOrderCard({
             />
           ) : null}
 
-          <InfoRow
-            label="Delivery Fee"
-            value={
-              formatMoney(
-                order.deliveryFee
-              )
-            }
-          />
+          {order.fulfillmentType === "delivery" ? (
+            <InfoRow
+              label="Delivery Fee"
+              value={
+                Number(order.deliveryFee || 0) > 0
+                  ? formatMoney(order.deliveryFee)
+                  : "Included in this shop's delivery fee"
+              }
+            />
+          ) : null}
 
-          <InfoRow
-            label="Pre-order Fee"
-            value={
-              formatMoney(
-                order.preOrderFee
-              )
-            }
-          />
+          {Number(order.preOrderFee || 0) > 0 ? (
+            <InfoRow
+              label="Pre-order Fee"
+              value={
+                formatMoney(
+                  order.preOrderFee
+                )
+              }
+            />
+          ) : null}
 
           <InfoRow
             label="Payment"
@@ -3868,6 +3922,26 @@ function PriceRow({
 
 const styles =
   StyleSheet.create({
+    shopGroupHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 6,
+      marginBottom: 8,
+      paddingHorizontal: 4,
+    },
+
+    shopGroupTitle: {
+      color: "#3B3438",
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
+    shopGroupMeta: {
+      color: "#8A8287",
+      fontSize: 12,
+    },
+
     safeArea: {
       flex: 1,
 

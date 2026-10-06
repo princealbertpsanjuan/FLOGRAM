@@ -1278,9 +1278,9 @@ export default function RiderDashboardScreen() {
                           }
                           accessibilityLabel="Delivery fee"
                         >
-                          {formatCurrency(
-                            order?.deliveryFee
-                          )}
+                          {Number(order?.deliveryFee || 0) > 0
+                            ? formatCurrency(order?.deliveryFee)
+                            : 'Shared fee'}
                         </Text>
                       </View>
 

@@ -24,6 +24,8 @@ import {
   View,
 } from 'react-native';
 
+import { Ionicons } from '@expo/vector-icons';
+
 import MapView, {
   Marker,
   Polyline,
@@ -2556,9 +2558,9 @@ setLocationError(null);
               }
             />
 
-            <DetailRow
+            <CallRow
               label="Phone"
-              value={
+              phone={
                 delivery
                   .recipientPhoneNumber
               }
@@ -3218,6 +3220,47 @@ function NavigationStat({
         {label}
       </Text>
     </View>
+  );
+}
+
+/*
+ * Tap to call (recipient), same as the customer calling
+ * the rider from tracking.
+ */
+function CallRow({
+  label,
+  phone,
+}: {
+  label: string;
+  phone?: string | null;
+}) {
+  const cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
+
+  if (!cleanPhone) {
+    return <DetailRow label={label} value="—" />;
+  }
+
+  const call = () => {
+    Linking.openURL(`tel:${cleanPhone}`).catch(() =>
+      Alert.alert('Unable to call', `Please dial ${cleanPhone} manually.`)
+    );
+  };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Call ${cleanPhone}`}
+      onPress={call}
+      style={({ pressed }) => [styles.detailRow, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={styles.detailLabel}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={[styles.detailValue, { color: '#C49317', textDecorationLine: 'underline' }]}>{phone}</Text>
+        <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#C49317' }}>
+          <Ionicons name="call" size={15} color="#FFFFFF" />
+        </View>
+      </View>
+    </Pressable>
   );
 }
 

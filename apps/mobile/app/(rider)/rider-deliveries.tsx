@@ -688,25 +688,39 @@ export default function RiderDeliveriesScreen() {
                   description="Successfully completed deliveries will appear here."
                 />
               ) : (
-                completedDeliveries.map(
-                  (
-                    delivery
-                  ) => (
-                    <CompletedDeliveryCard
-                      key={
-                        delivery._id
-                      }
-                      delivery={
+                groupCompletedByDay(
+                  completedDeliveries
+                ).map((group) => (
+                  <View key={group.key}>
+                    <View style={styles.dayHeader}>
+                      <Text style={styles.dayTitle}>{group.label}</Text>
+                      <Text style={styles.dayMeta}>
+                        {group.items.length} deliver{group.items.length === 1 ? 'y' : 'ies'} ·{' '}
+                        {formatMoney(group.fees)}
+                      </Text>
+                    </View>
+
+                    {group.items.map(
+                      (
                         delivery
-                      }
-                      onOpen={() =>
-                        handleContinueDelivery(
-                          delivery
-                        )
-                      }
-                    />
-                  )
-                )
+                      ) => (
+                        <CompletedDeliveryCard
+                          key={
+                            delivery._id
+                          }
+                          delivery={
+                            delivery
+                          }
+                          onOpen={() =>
+                            handleContinueDelivery(
+                              delivery
+                            )
+                          }
+                        />
+                      )
+                    )}
+                  </View>
+                ))
               )}
             </>
           )}
@@ -1110,6 +1124,54 @@ function ActiveDeliveryCard({
  * =========================================================
  */
 
+/*
+ * =========================================================
+ * GROUP COMPLETED DELIVERIES BY DAY (Philippine time)
+ * =========================================================
+ */
+
+const manilaDayKey = (value?: string | null) => {
+  if (!value) return 'unknown';
+  return new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+};
+
+function groupCompletedByDay<T extends { deliveredAt?: string | null; updatedAt?: string | null; order?: unknown }>(
+  items: T[]
+) {
+  const todayKey = manilaDayKey(new Date().toISOString());
+  const yesterdayKey = manilaDayKey(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  const groups = new Map<string, { key: string; label: string; items: T[]; fees: number }>();
+
+  items.forEach((item) => {
+    const when = item.deliveredAt ?? item.updatedAt ?? null;
+    const key = manilaDayKey(when);
+    const label =
+      key === todayKey
+        ? 'Today'
+        : key === yesterdayKey
+          ? 'Yesterday'
+          : when
+            ? new Date(when).toLocaleDateString('en-PH', {
+                timeZone: 'Asia/Manila',
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : 'Earlier';
+
+    const order = item.order as { deliveryFee?: number } | string | null | undefined;
+    const fee = typeof order === 'object' && order ? Number(order.deliveryFee || 0) : 0;
+
+    const group = groups.get(key) || { key, label, items: [], fees: 0 };
+    group.items.push(item);
+    group.fees += fee;
+    groups.set(key, group);
+  });
+
+  return [...groups.values()];
+}
+
 function CompletedDeliveryCard({
   delivery,
   onOpen,
@@ -1256,9 +1318,9 @@ function CompletedDeliveryCard({
               styles.completedAmount
             }
           >
-            {formatMoney(
-              order?.deliveryFee
-            )}
+            {Number(order?.deliveryFee || 0) > 0
+              ? formatMoney(order?.deliveryFee)
+              : 'Shared fee'}
           </Text>
         </View>
 
@@ -2312,6 +2374,27 @@ const styles =
     /*
      * COMPLETED CARD
      */
+
+    dayHeader: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      marginTop: 8,
+      marginBottom: 8,
+      paddingHorizontal: 2,
+    },
+
+    dayTitle: {
+      color: '#3B3428',
+      fontSize: 15,
+      fontWeight: '800',
+    },
+
+    dayMeta: {
+      color: '#8A7F6A',
+      fontSize: 12,
+      fontWeight: '700',
+    },
 
     completedCard: {
       backgroundColor:
