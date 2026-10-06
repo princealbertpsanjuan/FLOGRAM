@@ -3,6 +3,7 @@ import Order from "../orders/order.model.js";
 import Florist from "../florists/florist.model.js";
 import Rider from "../riders/rider.model.js";
 import RiderRemittance from "../riders/rider-remittance.model.js";
+import { getRevenueSummary, startOfManilaDay } from "./revenue.service.js";
 import RiderShift from "../riders/rider-shift.model.js";
 import RiderPayout from "../riders/rider-payout.model.js";
 import SellerPayout from "../sellerPayouts/seller-payout.model.js";
@@ -36,127 +37,8 @@ const COMPLETED_ORDER_STATUSES = [
   "completed",
 ];
 
-/*
- * =========================================================
- * DATE HELPERS
- * =========================================================
- */
 
-const getStartOfToday = () => {
-  const now = new Date();
 
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
-};
-
-const getStartOfTomorrow = () => {
-  const start = getStartOfToday();
-
-  const tomorrow = new Date(start);
-
-  tomorrow.setDate(
-    tomorrow.getDate() + 1
-  );
-
-  return tomorrow;
-};
-
-/*
- * =========================================================
- * ONLINE PAYMENT SALES
- * =========================================================
- *
- * COD orders are intentionally excluded here.
- *
- * COD money is only recognized after:
- *
- * 1. Rider collects the COD payment
- * 2. Rider submits the remittance
- * 3. Admin verifies the remittance
- *
- * This prevents COD money that is still
- * with the rider from being counted as
- * recognized platform sales.
- * =========================================================
- */
-
-const getOnlinePaymentSales = async (
-  additionalMatch = {}
-) => {
-  const result = await Order.aggregate([
-    {
-      $match: {
-        paymentStatus: "paid",
-
-        paymentMethod: {
-          $ne: "cash_on_delivery",
-        },
-
-        orderStatus: {
-          $ne: "cancelled",
-        },
-
-        ...additionalMatch,
-      },
-    },
-
-    {
-      $group: {
-        _id: null,
-
-        total: {
-          $sum: "$totalAmount",
-        },
-      },
-    },
-  ]);
-
-  return result[0]?.total || 0;
-};
-
-/*
- * =========================================================
- * VERIFIED COD SALES
- * =========================================================
- *
- * A COD transaction becomes recognized only
- * after the Admin verifies the rider remittance.
- *
- * RiderRemittance.totalAmount is used because
- * this is the actual amount submitted and
- * verified through the COD remittance process.
- * =========================================================
- */
-
-const getVerifiedCodSales = async (
-  additionalMatch = {}
-) => {
-  const result =
-    await RiderRemittance.aggregate([
-      {
-        $match: {
-          status: "verified",
-
-          ...additionalMatch,
-        },
-      },
-
-      {
-        $group: {
-          _id: null,
-
-          total: {
-            $sum: "$totalAmount",
-          },
-        },
-      },
-    ]);
-
-  return result[0]?.total || 0;
-};
 
 /*
  * =========================================================
@@ -588,12 +470,6 @@ const getRecentRemittances =
 
 export const getAdminDashboard =
   async () => {
-    const startOfToday =
-      getStartOfToday();
-
-    const startOfTomorrow =
-      getStartOfTomorrow();
-
     /*
      * =====================================================
      * LOAD DASHBOARD DATA
@@ -618,11 +494,8 @@ export const getAdminDashboard =
       completedOrders,
       cancelledOrders,
 
-      totalOnlineSales,
-      todayOnlineSales,
-
-      totalVerifiedCodSales,
-      todayVerifiedCodSales,
+      allRevenue,
+      todayRevenue,
 
       pendingSellers,
       pendingRiders,
@@ -696,32 +569,17 @@ export const getAdminDashboard =
        * COD is excluded.
        */
 
-      getOnlinePaymentSales(),
-
-      getOnlinePaymentSales({
-        paidAt: {
-          $gte:
-            startOfToday,
-
-          $lt:
-            startOfTomorrow,
-        },
-      }),
-
       /*
-       * VERIFIED COD SALES
+       * RECOGNIZED REVENUE (same rules as Reports)
        */
 
-      getVerifiedCodSales(),
+      getRevenueSummary(),
 
-      getVerifiedCodSales({
-        verifiedAt: {
-          $gte:
-            startOfToday,
-
-          $lt:
-            startOfTomorrow,
-        },
+      getRevenueSummary({
+        startDate:
+          startOfManilaDay(),
+        endDate:
+          new Date(),
       }),
 
       /*
@@ -783,49 +641,39 @@ export const getAdminDashboard =
      * =====================================================
      */
 
+    /*
+     * Gross = what customers paid. Commission applies to
+     * product sales only (delivery fees go to Riders).
+     */
     const totalSales =
-      totalOnlineSales +
-      totalVerifiedCodSales;
+      allRevenue.gross;
 
     const todaySales =
-      todayOnlineSales +
-      todayVerifiedCodSales;
+      todayRevenue.gross;
 
-    /*
-     * =====================================================
-     * FLOGRAM COMMISSION
-     * =====================================================
-     *
-     * The commission rate is now loaded from
-     * Admin Settings instead of being hardcoded.
-     * =====================================================
-     */
+    const totalOnlineSales =
+      allRevenue.online + allRevenue.pickup;
+
+    const todayOnlineSales =
+      todayRevenue.online + todayRevenue.pickup;
+
+    const totalVerifiedCodSales =
+      allRevenue.cod;
+
+    const todayVerifiedCodSales =
+      todayRevenue.cod;
 
     const totalCommission =
-      totalSales *
-      platformCommissionRate;
+      allRevenue.commission;
 
     const todayCommission =
-      todaySales *
-      platformCommissionRate;
-
-    /*
-     * =====================================================
-     * SELLER SHARE
-     * =====================================================
-     *
-     * Amount remaining after FLOGRAM's
-     * configured platform commission.
-     * =====================================================
-     */
+      todayRevenue.commission;
 
     const totalSellerShare =
-      totalSales -
-      totalCommission;
+      allRevenue.sellerShare;
 
     const todaySellerShare =
-      todaySales -
-      todayCommission;
+      todayRevenue.sellerShare;
 
     /*
      * =====================================================

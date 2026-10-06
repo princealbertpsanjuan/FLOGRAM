@@ -571,11 +571,28 @@ export type AdminSalesTrendItem = {
 };
 
 export type AdminReportSales = {
+  /*
+   * Everything customers paid (products + delivery fees).
+   */
   total: number;
+
+  orders?: number;
 
   online: number;
 
   cod: number;
+
+  pickup?: number;
+
+  /*
+   * Delivery fees belong to Riders.
+   */
+  deliveryFees?: number;
+
+  /*
+   * total − delivery fees; commission is taken from this.
+   */
+  productSales?: number;
 
   commissionRate: number;
 

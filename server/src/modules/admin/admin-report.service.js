@@ -4,8 +4,10 @@ import Florist from "../florists/florist.model.js";
 import RiderRemittance from "../riders/rider-remittance.model.js";
 
 import {
-  getPlatformCommissionRate,
-} from "./admin-settings.service.js";
+  endOfManilaDay,
+  getRevenueSummary,
+  startOfManilaDay,
+} from "./revenue.service.js";
 
 /*
  * =========================================================
@@ -32,34 +34,12 @@ const REPORT_PERIODS = {
  * =========================================================
  */
 
-const getStartOfDay = (date) => {
-  const result = new Date(date);
-
-  result.setHours(
-    0,
-    0,
-    0,
-    0
-  );
-
-  return result;
-};
-
-const getEndOfDay = (date) => {
-  const result = new Date(date);
-
-  result.setHours(
-    23,
-    59,
-    59,
-    999
-  );
-
-  return result;
-};
-
+/*
+ * Report periods are Philippine calendar days.
+ * "today" = 00:00 Manila today until now.
+ */
 const getPeriodRange = (
-  period = "30d"
+  period = "today"
 ) => {
   const normalizedPeriod =
     Object.prototype.hasOwnProperty.call(
@@ -67,12 +47,12 @@ const getPeriodRange = (
       period
     ) || period === "all"
       ? period
-      : "30d";
+      : "today";
 
   const now = new Date();
 
   const endDate =
-    getEndOfDay(now);
+    endOfManilaDay(now);
 
   if (normalizedPeriod === "all") {
     return {
@@ -88,12 +68,14 @@ const getPeriodRange = (
     ];
 
   const startDate =
-    getStartOfDay(now);
-
-  startDate.setDate(
-    startDate.getDate() -
-      (days - 1)
-  );
+    new Date(
+      startOfManilaDay(now).getTime() -
+        (days - 1) *
+          24 *
+          60 *
+          60 *
+          1000
+    );
 
   return {
     key: normalizedPeriod,
@@ -190,310 +172,6 @@ const getMongoDateFormat = (
  * paidAt
  * =========================================================
  */
-
-const getOnlineSalesReport =
-  async ({
-    startDate,
-    endDate,
-    granularity,
-  }) => {
-    const dateMatch =
-      buildDateMatch(
-        "paidAt",
-        startDate,
-        endDate
-      );
-
-    const result =
-      await Order.aggregate([
-        {
-          $match: {
-            paymentStatus:
-              "paid",
-
-            paymentMethod: {
-              $ne:
-                "cash_on_delivery",
-            },
-
-            orderStatus: {
-              $ne:
-                "cancelled",
-            },
-
-            ...dateMatch,
-          },
-        },
-
-        {
-          $facet: {
-            total: [
-              {
-                $group: {
-                  _id: null,
-
-                  amount: {
-                    $sum:
-                      "$totalAmount",
-                  },
-                },
-              },
-            ],
-
-            trend: [
-              {
-                $group: {
-                  _id: {
-                    $dateToString: {
-                      format:
-                        getMongoDateFormat(
-                          granularity
-                        ),
-
-                      date:
-                        "$paidAt",
-                    },
-                  },
-
-                  amount: {
-                    $sum:
-                      "$totalAmount",
-                  },
-
-                  orders: {
-                    $sum: 1,
-                  },
-                },
-              },
-
-              {
-                $sort: {
-                  _id: 1,
-                },
-              },
-            ],
-          },
-        },
-      ]);
-
-    const data =
-      result[0] || {};
-
-    return {
-      total:
-        safeNumber(
-          data.total?.[0]
-            ?.amount
-        ),
-
-      trend:
-        data.trend || [],
-    };
-  };
-
-/*
- * =========================================================
- * VERIFIED COD SALES
- * =========================================================
- *
- * COD revenue is recognized only after
- * Admin verifies the Rider remittance.
- *
- * Revenue date:
- * verifiedAt
- * =========================================================
- */
-
-const getVerifiedCodSalesReport =
-  async ({
-    startDate,
-    endDate,
-    granularity,
-  }) => {
-    const dateMatch =
-      buildDateMatch(
-        "verifiedAt",
-        startDate,
-        endDate
-      );
-
-    const result =
-      await RiderRemittance.aggregate(
-        [
-          {
-            $match: {
-              status:
-                "verified",
-
-              ...dateMatch,
-            },
-          },
-
-          {
-            $facet: {
-              total: [
-                {
-                  $group: {
-                    _id: null,
-
-                    amount: {
-                      $sum:
-                        "$totalAmount",
-                    },
-                  },
-                },
-              ],
-
-              trend: [
-                {
-                  $group: {
-                    _id: {
-                      $dateToString:
-                        {
-                          format:
-                            getMongoDateFormat(
-                              granularity
-                            ),
-
-                          date:
-                            "$verifiedAt",
-                        },
-                    },
-
-                    amount: {
-                      $sum:
-                        "$totalAmount",
-                    },
-
-                    remittances: {
-                      $sum: 1,
-                    },
-                  },
-                },
-
-                {
-                  $sort: {
-                    _id: 1,
-                  },
-                },
-              ],
-            },
-          },
-        ]
-      );
-
-    const data =
-      result[0] || {};
-
-    return {
-      total:
-        safeNumber(
-          data.total?.[0]
-            ?.amount
-        ),
-
-      trend:
-        data.trend || [],
-    };
-  };
-
-/*
- * =========================================================
- * MERGE SALES TRENDS
- * =========================================================
- */
-
-const mergeSalesTrends = (
-  onlineTrend,
-  codTrend
-) => {
-  const map = new Map();
-
-  for (
-    const item of
-      onlineTrend
-  ) {
-    const key =
-      item._id;
-
-    map.set(key, {
-      period: key,
-
-      online:
-        safeNumber(
-          item.amount
-        ),
-
-      cod: 0,
-
-      total:
-        safeNumber(
-          item.amount
-        ),
-    });
-  }
-
-  for (
-    const item of
-      codTrend
-  ) {
-    const key =
-      item._id;
-
-    const existing =
-      map.get(key) || {
-        period: key,
-        online: 0,
-        cod: 0,
-        total: 0,
-      };
-
-    existing.cod =
-      safeNumber(
-        item.amount
-      );
-
-    existing.total =
-      existing.online +
-      existing.cod;
-
-    map.set(
-      key,
-      existing
-    );
-  }
-
-  return Array.from(
-    map.values()
-  )
-    .sort((a, b) =>
-      String(
-        a.period
-      ).localeCompare(
-        String(
-          b.period
-        )
-      )
-    )
-    .map((item) => ({
-      ...item,
-
-      online:
-        roundMoney(
-          item.online
-        ),
-
-      cod:
-        roundMoney(
-          item.cod
-        ),
-
-      total:
-        roundMoney(
-          item.total
-        ),
-    }));
-};
 
 /*
  * =========================================================
@@ -678,6 +356,8 @@ const getOrderAnalytics =
                         getMongoDateFormat(
                           granularity
                         ),
+
+                      timezone: "Asia/Manila",
 
                       date:
                         "$createdAt",
@@ -865,6 +545,8 @@ const getUserAnalytics =
                             getMongoDateFormat(
                               granularity
                             ),
+
+                      timezone: "Asia/Manila",
 
                           date:
                             "$createdAt",
@@ -1215,153 +897,48 @@ const getRemittanceAnalytics =
  * TOP SHOPS
  * =========================================================
  *
- * This is marketplace performance,
- * not recognized financial revenue.
- * =========================================================
+ * Ranked by recognized product sales in the period (same
+ * money the Sales section counts), not by order totals that
+ * still include Rider delivery fees.
  */
+const getTopShops = async (entries) => {
+  const byShop = new Map();
 
-const getTopShops =
-  async ({
-    startDate,
-    endDate,
-  }) => {
-    const dateMatch =
-      buildDateMatch(
-        "createdAt",
-        startDate,
-        endDate
-      );
+  entries.forEach((entry) => {
+    if (!entry.florist) return;
+    const current = byShop.get(entry.florist) || { orders: 0, productSales: 0 };
+    current.orders += 1;
+    current.productSales += entry.productSales;
+    byShop.set(entry.florist, current);
+  });
 
-    const results =
-      await Order.aggregate([
-        {
-          $match: {
-            ...dateMatch,
+  const ranked = [...byShop.entries()]
+    .sort((a, b) => b[1].productSales - a[1].productSales || b[1].orders - a[1].orders)
+    .slice(0, 10);
 
-            orderStatus: {
-              $in:
-                COMPLETED_ORDER_STATUSES,
-            },
-          },
-        },
+  if (!ranked.length) return [];
 
-        {
-          $group: {
-            _id:
-              "$florist",
+  const florists = await Florist.find({ _id: { $in: ranked.map(([id]) => id) } })
+    .select("_id shopName owner verificationStatus")
+    .populate("owner", "firstName lastName email")
+    .lean();
 
-            orders: {
-              $sum: 1,
-            },
+  const floristMap = new Map(florists.map((florist) => [String(florist._id), florist]));
 
-            orderValue: {
-              $sum:
-                "$totalAmount",
-            },
-          },
-        },
+  return ranked.map(([floristId, stats], index) => {
+    const florist = floristMap.get(floristId) || null;
 
-        {
-          $sort: {
-            orderValue: -1,
-            orders: -1,
-          },
-        },
-
-        {
-          $limit: 10,
-        },
-      ]);
-
-    if (
-      results.length === 0
-    ) {
-      return [];
-    }
-
-    const floristIds =
-      results
-        .map(
-          (item) =>
-            item._id
-        )
-        .filter(Boolean);
-
-    const florists =
-      await Florist.find({
-        _id: {
-          $in:
-            floristIds,
-        },
-      })
-        .select(
-          "_id shopName owner verificationStatus"
-        )
-        .populate(
-          "owner",
-          "firstName lastName email"
-        )
-        .lean();
-
-    const floristMap =
-      new Map(
-        florists.map(
-          (florist) => [
-            String(
-              florist._id
-            ),
-            florist,
-          ]
-        )
-      );
-
-    return results.map(
-      (
-        item,
-        index
-      ) => {
-        const florist =
-          floristMap.get(
-            String(
-              item._id
-            )
-          ) || null;
-
-        return {
-          rank:
-            index + 1,
-
-          floristId:
-            item._id,
-
-          shopName:
-            florist
-              ?.shopName ||
-            "Unknown Shop",
-
-          owner:
-            florist
-              ?.owner ||
-            null,
-
-          verificationStatus:
-            florist
-              ?.verificationStatus ||
-            null,
-
-          orders:
-            safeNumber(
-              item.orders
-            ),
-
-          orderValue:
-            roundMoney(
-              item.orderValue
-            ),
-        };
-      }
-    );
-  };
+    return {
+      rank: index + 1,
+      floristId,
+      shopName: florist?.shopName || "Unknown Shop",
+      owner: florist?.owner || null,
+      verificationStatus: florist?.verificationStatus || null,
+      orders: stats.orders,
+      orderValue: roundMoney(stats.productSales),
+    };
+  });
+};
 
 /*
  * =========================================================
@@ -1371,7 +948,7 @@ const getTopShops =
 
 export const getAdminReports =
   async (
-    period = "30d"
+    period = "today"
   ) => {
     const {
       key,
@@ -1387,30 +964,15 @@ export const getAdminReports =
         key
       );
 
-    /*
-     * Commission comes from Admin Settings.
-     */
-
-    const platformCommissionRate =
-      await getPlatformCommissionRate();
-
     const [
-      onlineSales,
-      codSales,
+      revenue,
       orderAnalytics,
       userAnalytics,
       platformUsers,
       remittances,
-      topShops,
     ] =
       await Promise.all([
-        getOnlineSalesReport({
-          startDate,
-          endDate,
-          granularity,
-        }),
-
-        getVerifiedCodSalesReport({
+        getRevenueSummary({
           startDate,
           endDate,
           granularity,
@@ -1434,215 +996,137 @@ export const getAdminReports =
           startDate,
           endDate,
         }),
-
-        getTopShops({
-          startDate,
-          endDate,
-        }),
       ]);
 
-    /*
-     * =====================================================
-     * RECOGNIZED SALES
-     * =====================================================
-     */
-
-    const recognizedSales =
-      roundMoney(
-        onlineSales.total +
-          codSales.total
-      );
-
-    const totalCommission =
-      roundMoney(
-        recognizedSales *
-          platformCommissionRate
-      );
-
-    const sellerShare =
-      roundMoney(
-        recognizedSales -
-          totalCommission
-      );
-
-    const salesTrend =
-      mergeSalesTrends(
-        onlineSales.trend,
-        codSales.trend
-      ).map(
-        (item) => {
-          const commission =
-            roundMoney(
-              item.total *
-                platformCommissionRate
-            );
-
-          return {
-            ...item,
-
-            commission,
-
-            sellerShare:
-              roundMoney(
-                item.total -
-                  commission
-              ),
-          };
-        }
+    const topShops =
+      await getTopShops(
+        revenue.entries
       );
 
     /*
-     * =====================================================
-     * ORDER RATES
-     * =====================================================
+     * Rates use orders that reached an outcome
+     * (completed or cancelled), so orders still in
+     * progress do not lower the completion rate.
      */
+    const finished =
+      orderAnalytics.completed +
+      orderAnalytics.cancelled;
 
     const completionRate =
-      orderAnalytics.total >
-      0
+      finished > 0
         ? roundMoney(
-            (orderAnalytics
-              .completed /
-              orderAnalytics
-                .total) *
+            (orderAnalytics.completed /
+              finished) *
               100
           )
         : 0;
 
     const cancellationRate =
-      orderAnalytics.total >
-      0
+      finished > 0
         ? roundMoney(
-            (orderAnalytics
-              .cancelled /
-              orderAnalytics
-                .total) *
+            (orderAnalytics.cancelled /
+              finished) *
               100
           )
         : 0;
 
-    /*
-     * =====================================================
-     * RESPONSE
-     * =====================================================
-     */
+    const commissionPercentage =
+      Math.round(
+        revenue.commissionRate *
+          10000
+      ) / 100;
 
     return {
       period: {
         key,
-
         startDate:
           startDate
             ? startDate.toISOString()
             : null,
-
         endDate:
           endDate.toISOString(),
-
         granularity,
+        timezone: "Asia/Manila",
       },
 
       overview: {
         totalUsers:
           platformUsers.total,
-
         totalCustomers:
           platformUsers.customers,
-
         totalSellers:
           platformUsers.sellers,
-
         totalRiders:
           platformUsers.riders,
-
         totalOrders:
           orderAnalytics.total,
-
         completedOrders:
           orderAnalytics.completed,
-
         cancelledOrders:
           orderAnalytics.cancelled,
-
         completionRate,
-
         cancellationRate,
-
-        recognizedSales,
-
+        recognizedSales:
+          revenue.gross,
+        productSales:
+          revenue.productSales,
         commission:
-          totalCommission,
-
-        sellerShare,
+          revenue.commission,
+        sellerShare:
+          revenue.sellerShare,
       },
 
       sales: {
+        /*
+         * total = everything customers paid
+         * (products + delivery fees).
+         */
         total:
-          recognizedSales,
-
+          revenue.gross,
+        orders:
+          revenue.orders,
         online:
-          roundMoney(
-            onlineSales.total
-          ),
-
+          revenue.online,
         cod:
-          roundMoney(
-            codSales.total
-          ),
-
+          revenue.cod,
+        pickup:
+          revenue.pickup,
+        deliveryFees:
+          revenue.deliveryFees,
+        productSales:
+          revenue.productSales,
         commissionRate:
-          platformCommissionRate,
-
-        commissionPercentage:
-          Math.round(
-            platformCommissionRate *
-              10000
-          ) / 100,
-
+          revenue.commissionRate,
+        commissionPercentage,
         commission:
-          totalCommission,
-
-        sellerShare,
-
+          revenue.commission,
+        sellerShare:
+          revenue.sellerShare,
         trend:
-          salesTrend,
+          revenue.trend,
       },
 
       orders: {
         total:
           orderAnalytics.total,
-
         completed:
           orderAnalytics.completed,
-
         cancelled:
           orderAnalytics.cancelled,
-
         preOrders:
           orderAnalytics.preOrders,
-
         completionRate,
-
         cancellationRate,
-
         byStatus:
           orderAnalytics.byStatus,
-
         byFulfillment:
-          orderAnalytics
-            .byFulfillment,
-
+          orderAnalytics.byFulfillment,
         byPaymentMethod:
-          orderAnalytics
-            .byPaymentMethod,
-
+          orderAnalytics.byPaymentMethod,
         byPaymentStatus:
-          orderAnalytics
-            .byPaymentStatus,
-
+          orderAnalytics.byPaymentStatus,
         bySource:
           orderAnalytics.bySource,
-
         trend:
           orderAnalytics.trend,
       },
@@ -1650,31 +1134,20 @@ export const getAdminReports =
       users: {
         total:
           platformUsers.total,
-
         customers:
           platformUsers.customers,
-
         sellers:
           platformUsers.sellers,
-
         riders:
           platformUsers.riders,
-
         newUsers:
           userAnalytics.newUsers,
-
         newCustomers:
-          userAnalytics
-            .newCustomers,
-
+          userAnalytics.newCustomers,
         newSellers:
-          userAnalytics
-            .newSellers,
-
+          userAnalytics.newSellers,
         newRiders:
-          userAnalytics
-            .newRiders,
-
+          userAnalytics.newRiders,
         growth:
           userAnalytics.growth,
       },
