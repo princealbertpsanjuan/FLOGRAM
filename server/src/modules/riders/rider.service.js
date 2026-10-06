@@ -1,5 +1,5 @@
 import Rider from "./rider.model.js";
-import { notifySafely } from "../notifications/notify-helpers.js";
+import { notifyAdmins, notifySafely } from "../notifications/notify-helpers.js";
 import User from "../auth/auth.model.js";
 import Verification from "../verification/verification.model.js";
 import Delivery from "../deliveries/delivery.model.js";
@@ -2454,6 +2454,13 @@ export const submitRiderRemittance =
 
     await remittance.save();
 
+    await notifyAdmins({
+      type: "remittance_submitted",
+      title: "COD remittance submitted",
+      message: `A rider submitted ₱${Number(remittance.totalAmount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })} (ref ${remittance.referenceNumber || "—"}) for verification.`,
+      remittance: remittance._id,
+    });
+
     return {
       id:
         String(
@@ -3019,6 +3026,15 @@ export const verifyRiderRemittance =
 
     await remittance.save();
 
+    await notifySafely({
+      recipient: remittance.riderUser,
+      role: "rider",
+      type: "remittance_verified",
+      title: "COD remittance verified",
+      message: `Admin verified your remittance of ₱${Number(remittance.totalAmount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}. Thank you!`,
+      remittance: remittance._id,
+    });
+
     return getAdminRiderRemittanceById(
       remittance._id
     );
@@ -3111,6 +3127,17 @@ export const rejectRiderRemittance =
       cleanRemarks;
 
     await remittance.save();
+
+    await notifySafely({
+      recipient: remittance.riderUser,
+      role: "rider",
+      type: "remittance_rejected",
+      title: "COD remittance rejected",
+      message: cleanRemarks
+        ? `Admin's remarks: ${cleanRemarks}. Please submit again with the correct proof.`
+        : "Please check the amount and proof, then submit again.",
+      remittance: remittance._id,
+    });
 
     return getAdminRiderRemittanceById(
       remittance._id
@@ -3690,6 +3717,15 @@ export const createAdminRiderPayout = async (
 
   await payout.save();
 
+  await notifySafely({
+    recipient: rider.owner,
+    role: "rider",
+    type: "payout_update",
+    title: "Payout being prepared",
+    message: `FLOGRAM is preparing your delivery-fee payout of ₱${Number(payout.totalAmount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}.`,
+    metadata: { riderPayoutId: String(payout._id) },
+  });
+
   return getAdminRiderPayoutById(
     payout._id
   );
@@ -4144,6 +4180,15 @@ export const markRiderPayoutPaid = async (
     "paid";
 
   await payout.save();
+
+  await notifySafely({
+    recipient: payout.riderUser,
+    role: "rider",
+    type: "payout_update",
+    title: "Payout sent",
+    message: `Admin sent your payout of ₱${Number(payout.totalAmount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })} (ref ${payout.referenceNumber || "—"}).`,
+    metadata: { riderPayoutId: String(payout._id) },
+  });
 
   return getAdminRiderPayoutById(
     payout._id

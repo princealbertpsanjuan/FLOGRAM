@@ -208,6 +208,26 @@ const getActivityColor = (
     case "order":
       return "#E56391";
 
+    case "account":
+      return "#4C8DD6";
+
+    case "dispute":
+    case "violation":
+      return "#D04A5F";
+
+    case "shift_request":
+      return "#C49317";
+
+    case "payout":
+      return "#3E9B62";
+
+    case "review":
+      return "#E0A31A";
+
+    case "custom_request":
+    case "product":
+      return "#DF628F";
+
     default:
       return "#777777";
   }
@@ -228,6 +248,30 @@ const getActivityIcon = (
 
     case "order":
       return "receipt-outline";
+
+    case "account":
+      return "person-add-outline";
+
+    case "dispute":
+      return "flag-outline";
+
+    case "violation":
+      return "warning-outline";
+
+    case "shift_request":
+      return "calendar-outline";
+
+    case "payout":
+      return "wallet-outline";
+
+    case "review":
+      return "star-outline";
+
+    case "custom_request":
+      return "color-wand-outline";
+
+    case "product":
+      return "flower-outline";
 
     default:
       return "ellipse-outline";
@@ -251,7 +295,7 @@ const getActivityTitle = (
       return "Order activity";
 
     default:
-      return "System activity";
+      return item.heading || "System activity";
   }
 };
 
@@ -300,7 +344,7 @@ const getActivitySubtitle = (
       )}`;
 
     default:
-      return "";
+      return item.description || "";
   }
 };
 
