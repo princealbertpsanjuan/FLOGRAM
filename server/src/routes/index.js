@@ -34,6 +34,7 @@ import disputeRouter from "../modules/disputes/dispute.routes.js";
 import violationRouter from "../modules/violations/violation.routes.js";
 import sellerPayoutRouter from "../modules/sellerPayouts/seller-payout.routes.js";
 import workAssistantRouter from "../modules/assistant/work-assistant.routes.js";
+import listingCommentRouter from "../modules/flowerComments/flower-comment.routes.js";
 
 const apiRouter = Router();
 
@@ -325,6 +326,15 @@ apiRouter.use(
 apiRouter.use(
   "/assistant",
   workAssistantRouter
+);
+
+/*
+ * BOUQUET LISTING REVIEWS & COMMENTS
+ */
+
+apiRouter.use(
+  "/listing-comments",
+  listingCommentRouter
 );
 
 export default apiRouter;

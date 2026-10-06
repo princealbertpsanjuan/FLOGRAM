@@ -33,11 +33,18 @@ export default function AddOnPicker({
   value,
   onChange,
   onAddOnsLoaded,
+  compact = false,
+  disabled = false,
 }: {
   floristId?: string | null;
   value: AddOnSelection[];
   onChange: (next: AddOnSelection[]) => void;
   onAddOnsLoaded?: (addOns: GiftAddOn[]) => void;
+  /*
+   * Checkout: smaller card inside the order summary.
+   */
+  compact?: boolean;
+  disabled?: boolean;
 }) {
   const [addOns, setAddOns] = useState<GiftAddOn[]>([]);
 
@@ -73,14 +80,16 @@ export default function AddOnPicker({
   const quantityOf = (id: string) => value.find(item => item.addOnId === id)?.quantity ?? 0;
 
   const setQuantity = (id: string, quantity: number) => {
+    if (disabled) return;
+
     const rest = value.filter(item => item.addOnId !== id);
     onChange(quantity > 0 ? [...rest, { addOnId: id, quantity: Math.min(10, quantity) }] : rest);
   };
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>Add a gift</Text>
-      <Text style={styles.caption}>Optional extras from this shop, delivered with your bouquet.</Text>
+    <View style={[styles.card, compact && styles.compactCard, disabled && { opacity: 0.6 }]}>
+      <Text style={[styles.title, compact && { fontSize: 14 }]}>Add a gift</Text>
+      <Text style={styles.caption}>Optional extras from this shop, delivered with this bouquet.</Text>
 
       {addOns.map(addOn => {
         const quantity = quantityOf(addOn._id);
@@ -163,6 +172,15 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 20,
     backgroundColor: '#FFFFFF',
+  },
+  compactCard: {
+    marginHorizontal: 0,
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F3E3EA',
+    backgroundColor: '#FFFBFD',
   },
   title: { color: TEXT, fontSize: 16, fontWeight: '800' },
   caption: { marginTop: 3, marginBottom: 6, color: MUTED, fontSize: 13 },

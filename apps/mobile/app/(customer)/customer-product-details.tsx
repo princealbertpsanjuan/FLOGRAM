@@ -28,10 +28,9 @@ import {
 } from "../../services/api";
 
 import { ScreenLoader } from '../../components/ui/state-views';
-import AddOnPicker from '../../components/customer/addon-picker';
 import AlsoBoughtRow from '../../components/customer/also-bought-row';
+import ListingComments from '../../components/customer/listing-comments';
 import FollowShopButton from '../../components/customer/follow-shop-button';
-import type { AddOnSelection, GiftAddOn } from '../../services/addons';
 
 /*
  * =========================================================
@@ -310,13 +309,6 @@ export default function CustomerProductDetailsScreen() {
     useState(false);
 
   /*
-   * Gift add-ons chosen on this page (sent with Add to Cart).
-   */
-  const [selectedAddOns, setSelectedAddOns] = useState<AddOnSelection[]>([]);
-
-  const [shopAddOns, setShopAddOns] = useState<GiftAddOn[]>([]);
-
-  /*
    * =======================================================
    * LOAD PRODUCT
    * =======================================================
@@ -459,15 +451,9 @@ export default function CustomerProductDetailsScreen() {
       ? flower.florist
       : null;
 
-  const addOnsTotal = selectedAddOns.reduce((sum, selection) => {
-    const addOn = shopAddOns.find(item => item._id === selection.addOnId);
-    return sum + (addOn ? Number(addOn.price || 0) * selection.quantity : 0);
-  }, 0);
-
   const totalPrice =
     (flower?.price ?? 0) *
-    quantity +
-    addOnsTotal;
+    quantity;
 
   /*
    * =======================================================
@@ -539,9 +525,6 @@ export default function CustomerProductDetailsScreen() {
                       flower._id,
 
                     quantity,
-
-                    addOns:
-                      selectedAddOns,
                   }
                 ),
               }
@@ -1459,12 +1442,7 @@ export default function CustomerProductDetailsScreen() {
             </Text>
           </View>
 
-          <AddOnPicker
-            floristId={florist?._id}
-            value={selectedAddOns}
-            onChange={setSelectedAddOns}
-            onAddOnsLoaded={setShopAddOns}
-          />
+          <ListingComments flowerId={flower._id} />
 
           <AlsoBoughtRow flowerId={flower._id} />
 
