@@ -31,27 +31,15 @@ export default function RootLayout() {
   }
 
   /*
-   * Desktop browsers: keep the Admin screens at a readable
-   * width, centered on a neutral background.
+   * Web: full browser width. The Admin layout adds the
+   * desktop sidebar; login is centered on its own.
    */
-  return (
-    <View style={styles.webBackground}>
-      <View style={styles.webFrame}>{stack}</View>
-    </View>
-  );
+  return <View style={styles.webBackground}>{stack}</View>;
 }
 
 const styles = StyleSheet.create({
   webBackground: {
     flex: 1,
-    alignItems: 'center',
-    backgroundColor: '#E9E9F1',
-  },
-  webFrame: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 1100,
-    backgroundColor: '#F5F5F8',
-    overflow: 'hidden',
+    backgroundColor: '#EEEEF4',
   },
 });

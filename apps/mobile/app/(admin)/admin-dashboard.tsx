@@ -33,6 +33,7 @@ import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 import InboxBell from '../../components/ui/inbox-bell';
+import { useDesktopWeb } from '../../hooks/use-desktop-web';
 
 /*
  * =========================================================
@@ -356,6 +357,8 @@ const getActivitySubtitle = (
  */
 
 export default function AdminDashboardScreen() {
+  const desktop = useDesktopWeb();
+
   const [user, setUser] =
     useState<AuthUser | null>(
       null
@@ -660,7 +663,7 @@ export default function AdminDashboardScreen() {
             style={styles.summaryGrid}
           >
             <Pressable
-              style={styles.summaryCard}
+              style={[styles.summaryCard, desktop && styles.summaryCardWide]}
               onPress={
                 openTodayReport
               }
@@ -695,7 +698,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
 
             <Pressable
-              style={styles.summaryCard}
+              style={[styles.summaryCard, desktop && styles.summaryCardWide]}
               onPress={() =>
                 router.push(
                   "/(admin)/admin-orders"
@@ -731,7 +734,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
 
             <Pressable
-              style={styles.summaryCard}
+              style={[styles.summaryCard, desktop && styles.summaryCardWide]}
               onPress={() =>
                 openUsers()
               }
@@ -764,7 +767,7 @@ export default function AdminDashboardScreen() {
             </Pressable>
 
 <Pressable
-  style={styles.summaryCard}
+  style={[styles.summaryCard, desktop && styles.summaryCardWide]}
   onPress={() =>
     router.push(
       "/(admin)/admin-remittances"
@@ -2306,6 +2309,12 @@ borderBottomRightRadius: 26,
       justifyContent:
         "space-between",
       rowGap: 10,
+    },
+
+    summaryCardWide: {
+      width: "23.8%",
+      minHeight: 110,
+      padding: 18,
     },
 
     summaryCard: {
