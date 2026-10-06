@@ -1,3 +1,9 @@
+import { useCallback, useState } from 'react';
+
+import { useFocusEffect } from 'expo-router';
+
+import { getNotifications } from '../../services/notification';
+
 import BottomNavBar, {
   BOTTOM_NAV_HEIGHT,
   useBottomNavExtraInset,
@@ -46,11 +52,35 @@ type Props = {
   onReselect?: () => void;
 };
 
-export default function RiderBottomNav({ active, alertCount = 0, onReselect }: Props) {
+export default function RiderBottomNav({ active, alertCount, onReselect }: Props) {
+  /*
+   * Every Rider tab shows the unread Alerts count, not only
+   * the Alerts screen. It refreshes whenever a tab opens.
+   */
+  const [unread, setUnread] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+
+      getNotifications()
+        .then(data => {
+          if (mounted) setUnread(Number(data?.unreadCount) || 0);
+        })
+        .catch(() => undefined);
+
+      return () => {
+        mounted = false;
+      };
+    }, [])
+  );
+
+  const badge = typeof alertCount === 'number' ? alertCount : unread;
+
   return (
     <BottomNavBar
       floating
-      items={ITEMS.map(item => (item.key === 'alerts' ? { ...item, badge: alertCount } : item))}
+      items={ITEMS.map(item => (item.key === 'alerts' ? { ...item, badge } : item))}
       active={active}
       accent={RIDER_GOLD_DARK}
       accentLight={RIDER_GOLD_LIGHT}

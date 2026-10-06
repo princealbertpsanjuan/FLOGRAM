@@ -160,7 +160,9 @@ export default function RiderEarningsPanel({ refreshKey }: Props) {
         <StatCard
           icon="hourglass-outline"
           label="Awaiting Payment"
-          value={formatPeso(summary?.pendingPayout)}
+          value={formatPeso(
+            Number(summary?.unpaid || 0) + Number(summary?.pendingPayout || 0)
+          )}
         />
         <StatCard
           icon="checkmark-circle-outline"

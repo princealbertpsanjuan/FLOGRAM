@@ -1,3 +1,9 @@
+import { useCallback, useState } from 'react';
+
+import { useFocusEffect } from 'expo-router';
+
+import { apiRequest } from '../../services/api';
+
 import BottomNavBar, { type BottomNavItem } from '../ui/bottom-nav-bar';
 
 /*
@@ -37,10 +43,36 @@ type Props = {
   onReselect?: () => void;
 };
 
-export default function CustomerBottomNav({ active, cartCount = 0, onReselect }: Props) {
+export default function CustomerBottomNav({ active, cartCount, onReselect }: Props) {
+  /*
+   * Cart badge on every Customer tab (bouquets in cart).
+   */
+  const [count, setCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+
+      apiRequest<{ data?: { cart?: { totalQuantity?: number; itemCount?: number } } }>('/cart', {
+        method: 'GET',
+        authenticated: true,
+      })
+        .then(response => {
+          if (mounted) setCount(Number(response?.data?.cart?.itemCount) || 0);
+        })
+        .catch(() => undefined);
+
+      return () => {
+        mounted = false;
+      };
+    }, [])
+  );
+
+  const badge = typeof cartCount === 'number' ? cartCount : count;
+
   return (
     <BottomNavBar
-      items={ITEMS.map(item => (item.key === 'cart' ? { ...item, badge: cartCount } : item))}
+      items={ITEMS.map(item => (item.key === 'cart' ? { ...item, badge } : item))}
       active={active}
       accent={CUSTOMER_PINK}
       accentLight={CUSTOMER_PINK_LIGHT}
