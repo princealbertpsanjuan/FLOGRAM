@@ -65,6 +65,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dd2ec8bd-b1c0-40ab-aeda-9653aa9b294d"
+      }
+    },
+    "owner": "flogram"
   }
 }
