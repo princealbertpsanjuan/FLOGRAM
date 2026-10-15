@@ -342,22 +342,44 @@ Do not commit Admin credentials or `.env` files to GitHub.
 
 ---
 
-## 7. Delivery Routing
+## 7. Maps and Delivery Routing
 
-FLOGRAM uses **OpenRouteService** for its routing functionality.
+FLOGRAM uses two different services for maps. Both are needed:
 
-The routing API key is configured on the backend as:
+| What | Service | Key | Where the key lives |
+| --- | --- | --- | --- |
+| The map itself (tiles, pins) in checkout, order tracking and rider delivery | **Google Maps SDK for Android** | `GOOGLE_MAPS_API_KEY` | EAS environment variable (built into the APK) |
+| Route line, distance and ETA | **OpenRouteService** | `OPENROUTESERVICE_API_KEY` | Render `flogram-api` environment (server only) |
 
-```text
-OPENROUTESERVICE_API_KEY
+### 7a. Google Maps key (APK)
+
+Expo Go has its own Google Maps key, but the APK needs yours. Without it,
+the APK would crash when a map opens, so FLOGRAM shows a
+"Map preview is unavailable" box instead.
+
+1. Google Cloud Console → your project → **APIs & Services → Library** →
+   enable **Maps SDK for Android**.
+2. **Credentials** → your API key → **Application restrictions: Android apps**
+   → add package `com.flogram.app` with the SHA-1 shown by
+   `eas credentials -p android` (keystore → SHA1 Fingerprint).
+   **API restrictions:** Maps SDK for Android.
+   (Restrictions are recommended but optional. If the map shows only a grey
+   grid, the package/SHA-1 does not match. Remove the app restriction to test.)
+3. Save the key in EAS (not in GitHub):
+
+```powershell
+cd apps/mobile
+eas env:create --name GOOGLE_MAPS_API_KEY --value "YOUR_KEY" --environment preview --visibility sensitive
+eas env:list --environment preview
 ```
 
-The key is stored in the Render `flogram-api` environment variables.
+4. Rebuild the APK (section 8d). The build log shows a
+   `GOOGLE_MAPS_API_KEY is not set` warning if the key was not picked up.
 
-It should remain server-side and should not be placed inside the Android APK.
+### 7b. OpenRouteService key (server)
 
-The current FLOGRAM deployment does not require the old
-`GOOGLE_MAPS_API_KEY` EAS setup described in earlier deployment instructions.
+`OPENROUTESERVICE_API_KEY` stays in the Render `flogram-api` environment
+variables. It must not be placed inside the Android APK.
 
 ---
 
