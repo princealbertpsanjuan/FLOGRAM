@@ -4,13 +4,7 @@
     "slug": "flogram",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "flogram",
-    "userInterfaceStyle": "automatic",
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.flogram.app"
-    },
+    "icon": "./assets/images/icon.png",  
     "android": {
       "package": "com.flogram.app",
       "versionCode": 1,
