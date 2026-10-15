@@ -30,6 +30,7 @@ import {
   getAdminRiderShifts,
   getRiderAvailableShifts,
   getRiderShiftHistory,
+  getUnremittedCod,
   requestRiderShift,
   reviewRiderShiftRequest,
   updateRiderShift,
@@ -378,9 +379,19 @@ export const getAvailableShifts = async (
   next
 ) => {
   try {
-    const shifts = await getRiderAvailableShifts(
-      req.user.userId
-    );
+    const [shifts, codStatus] = await Promise.all([
+      getRiderAvailableShifts(
+        req.user.userId
+      ),
+
+      /*
+       * Lets the app warn about unremitted COD before the
+       * Rider taps "Request Shift".
+       */
+      getUnremittedCod(
+        req.user.userId
+      ),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -390,6 +401,7 @@ export const getAvailableShifts = async (
 
       data: {
         shifts,
+        codStatus,
       },
     });
   } catch (error) {

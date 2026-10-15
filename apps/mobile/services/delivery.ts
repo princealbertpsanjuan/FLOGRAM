@@ -2031,6 +2031,72 @@ export const getRiderAvailableShifts =
   };
 
 /*
+ * Unremitted COD summary returned with the available
+ * shifts. "blocked" means shift requests are refused
+ * until the Rider submits (or resubmits) the remittance.
+ * Submitted remittances awaiting Admin never block.
+ */
+export type RiderCodStatus = {
+  count: number;
+
+  amount: number;
+
+  blocked: boolean;
+
+  message: string;
+
+  rejected: {
+    id: string;
+    shiftDate: string;
+    reason: string;
+  } | null;
+
+  pendingVerification: {
+    count: number;
+    amount: number;
+  };
+};
+
+type RiderShiftOverviewResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    shifts: RiderShift[];
+
+    codStatus?: RiderCodStatus | null;
+  };
+};
+
+/*
+ * GET /api/v1/riders/me/shifts/available
+ * (shifts + unremitted COD status)
+ */
+
+export const getRiderShiftOverview =
+  async () => {
+    const response =
+      await apiRequest<RiderShiftOverviewResponse>(
+        '/riders/me/shifts/available',
+        {
+          method: 'GET',
+
+          authenticated: true,
+        }
+      );
+
+    return {
+      shifts:
+        response.data.shifts,
+
+      codStatus:
+        response.data.codStatus ??
+        null,
+    };
+  };
+
+/*
  * GET /api/v1/riders/me/shifts
  */
 

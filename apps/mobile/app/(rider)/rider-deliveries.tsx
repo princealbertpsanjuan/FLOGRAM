@@ -35,6 +35,8 @@ import RiderBottomNav, {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 /*
  * =========================================================
  * TYPES
@@ -288,6 +290,84 @@ export default function RiderDeliveriesScreen() {
     }, [
       deliveries,
     ]);
+
+  /*
+   * =========================================================
+   * SHOW 5 + SEE ALL
+   * =========================================================
+   *
+   * Completed deliveries are grouped by day. "See all"
+   * applies to the deliveries across ALL days (newest
+   * first); a day header is shown only when at least one
+   * of its deliveries is visible.
+   */
+
+  const completedGroups =
+    useMemo(
+      () =>
+        groupCompletedByDay(
+          completedDeliveries
+        ),
+      [completedDeliveries]
+    );
+
+  const completedSequence =
+    useMemo(
+      () =>
+        completedGroups.flatMap(
+          (group) => group.items
+        ),
+      [completedGroups]
+    );
+
+  const completedSeeAll =
+    useSeeAll(
+      completedSequence,
+      {
+        resetKey:
+          activeTab,
+      }
+    );
+
+  const visibleCompletedGroups =
+    useMemo(() => {
+      const visibleIds =
+        new Set(
+          completedSeeAll.visible.map(
+            (delivery) =>
+              delivery._id
+          )
+        );
+
+      return completedGroups
+        .map((group) => ({
+          ...group,
+          visibleItems:
+            group.items.filter(
+              (delivery) =>
+                visibleIds.has(
+                  delivery._id
+                )
+            ),
+        }))
+        .filter(
+          (group) =>
+            group.visibleItems
+              .length > 0
+        );
+    }, [
+      completedGroups,
+      completedSeeAll.visible,
+    ]);
+
+  const activeSeeAll =
+    useSeeAll(
+      activeDeliveries,
+      {
+        resetKey:
+          activeTab,
+      }
+    );
 
   /*
    * =========================================================
@@ -649,29 +729,38 @@ export default function RiderDeliveriesScreen() {
                   description="Accepted delivery jobs will appear here."
                 />
               ) : (
-                activeDeliveries.map(
-                  (
-                    delivery,
-                    index
-                  ) => (
-                    <ActiveDeliveryCard
-                      key={
-                        delivery._id
-                      }
-                      delivery={
-                        delivery
-                      }
-                      isCurrent={
-                        index === 0
-                      }
-                      onContinue={() =>
-                        handleContinueDelivery(
+                <>
+                  {activeSeeAll.visible.map(
+                    (
+                      delivery,
+                      index
+                    ) => (
+                      <ActiveDeliveryCard
+                        key={
+                          delivery._id
+                        }
+                        delivery={
                           delivery
-                        )
-                      }
-                    />
-                  )
-                )
+                        }
+                        isCurrent={
+                          index === 0
+                        }
+                        onContinue={() =>
+                          handleContinueDelivery(
+                            delivery
+                          )
+                        }
+                      />
+                    )
+                  )}
+
+                  <SeeAllButton
+                    state={
+                      activeSeeAll
+                    }
+                    role="rider"
+                  />
+                </>
               )}
             </>
           )}
@@ -689,9 +778,8 @@ export default function RiderDeliveriesScreen() {
                   description="Successfully completed deliveries will appear here."
                 />
               ) : (
-                groupCompletedByDay(
-                  completedDeliveries
-                ).map((group) => (
+                <>
+                {visibleCompletedGroups.map((group) => (
                   <View key={group.key}>
                     <View style={styles.dayHeader}>
                       <Text style={styles.dayTitle}>{group.label}</Text>
@@ -701,7 +789,7 @@ export default function RiderDeliveriesScreen() {
                       </Text>
                     </View>
 
-                    {group.items.map(
+                    {group.visibleItems.map(
                       (
                         delivery
                       ) => (
@@ -721,7 +809,15 @@ export default function RiderDeliveriesScreen() {
                       )
                     )}
                   </View>
-                ))
+                ))}
+
+                <SeeAllButton
+                  state={
+                    completedSeeAll
+                  }
+                  role="rider"
+                />
+                </>
               )}
             </>
           )}
