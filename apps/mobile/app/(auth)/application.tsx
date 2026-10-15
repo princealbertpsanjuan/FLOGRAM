@@ -24,6 +24,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import ShopLocationPicker, { type ShopCoordinate } from '../../components/seller/shop-location-picker';
 import {
   RIDER_DOCUMENTS,
   SELLER_DOCUMENTS,
@@ -38,6 +39,7 @@ import {
   type VerificationRecord,
 } from '../../services/application';
 import { getCurrentUser, getStoredUser, logout } from '../../services/auth';
+import { replaceHistory } from '../../services/navigation';
 
 /*
  * =========================================================
@@ -97,6 +99,10 @@ export default function ApplicationScreen() {
     postalCode: '',
   });
 
+  // Seller shop map pin (needed for delivery checkout)
+  const [shopLocation, setShopLocation] = useState<ShopCoordinate | null>(null);
+  const [shopLocationError, setShopLocationError] = useState<string | null>(null);
+
   // Step 2 files
   const [files, setFiles] = useState<Record<string, string>>({});
 
@@ -111,7 +117,7 @@ export default function ApplicationScreen() {
       }
 
       if (user.verificationStatus === 'approved') {
-        router.replace(user.role === 'seller' ? '/(seller)/seller-dashboard' : '/(rider)/rider-dashboard');
+        replaceHistory(user.role === 'seller' ? '/(seller)/seller-dashboard' : '/(rider)/rider-dashboard');
         return;
       }
 
@@ -188,6 +194,12 @@ export default function ApplicationScreen() {
         if (!form.shopName.trim()) throw new Error('Enter your shop name.');
         if (!PH_PHONE.test(form.contactNumber.trim())) throw new Error('Enter a valid shop contact number (09XXXXXXXXX).');
         if (!/^\S+@\S+\.\S+$/.test(form.businessEmail.trim())) throw new Error('Enter a valid business email.');
+        if (!shopLocation) {
+          setShopLocationError('Place your shop pin on the map so customers can order with delivery.');
+          throw new Error(
+            "Pin your shop on the map (tap the map or use your current location). Customers need it to order with delivery."
+          );
+        }
 
         await createSellerProfile({
           shopName: form.shopName.trim(),
@@ -195,6 +207,7 @@ export default function ApplicationScreen() {
           contactNumber: form.contactNumber.trim(),
           businessEmail: form.businessEmail.trim(),
           address,
+          location: shopLocation,
         });
       } else {
         if (!form.driverLicenseNumber.trim()) throw new Error("Enter your driver's license number.");
@@ -269,7 +282,7 @@ export default function ApplicationScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
     >
       <View style={[styles.screen]}>
         <View style={[styles.header, { paddingTop: insets.top + 14, backgroundColor: accent }]}>
@@ -401,6 +414,21 @@ export default function ApplicationScreen() {
                 onChangeText={set('postalCode')}
                 keyboardType="number-pad"
               />
+
+              {role === 'seller' ? (
+                <>
+                  <Text style={[styles.cardTitle, { marginTop: 18 }]}>Shop map pin</Text>
+                  <ShopLocationPicker
+                    value={shopLocation}
+                    onChange={next => {
+                      setShopLocation(next);
+                      setShopLocationError(null);
+                    }}
+                    disabled={saving}
+                    error={shopLocationError}
+                  />
+                </>
+              ) : null}
 
               <PrimaryButton color={accent} loading={saving} label="Next: Upload requirements" onPress={saveDetails} />
             </View>

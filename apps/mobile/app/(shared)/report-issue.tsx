@@ -20,6 +20,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import ScreenHeader from '../../components/ui/screen-header';
 import { ROLE_ACCENT, ScreenLoader } from '../../components/ui/state-views';
 import { getStoredUser } from '../../services/auth';
@@ -145,108 +146,111 @@ export default function ReportIssueScreen() {
         subtitle={productName ? `Order: ${productName}` : 'Sent to FLOGRAM Admin'}
       />
 
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.card}>
-          <Text style={styles.label}>Who is this about?</Text>
-          <View style={styles.chips}>
-            {PARTIES_BY_ROLE[role].map(party => {
-              const active = against === party;
-              return (
-                <Pressable
-                  key={party}
-                  onPress={() => setAgainst(party)}
-                  style={[styles.chip, { borderColor: accent }, active && { backgroundColor: accent }]}
-                >
-                  <Text style={[styles.chipText, { color: active ? '#FFFFFF' : accent }]}>
-                    {DISPUTE_PARTY_LABELS[party]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+      {/* Inputs scroll above the keyboard. */}
+      <KeyboardSafeView>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <Text style={styles.label}>Who is this about?</Text>
+            <View style={styles.chips}>
+              {PARTIES_BY_ROLE[role].map(party => {
+                const active = against === party;
+                return (
+                  <Pressable
+                    key={party}
+                    onPress={() => setAgainst(party)}
+                    style={[styles.chip, { borderColor: accent }, active && { backgroundColor: accent }]}
+                  >
+                    <Text style={[styles.chipText, { color: active ? '#FFFFFF' : accent }]}>
+                      {DISPUTE_PARTY_LABELS[party]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-          <Text style={styles.label}>Reason</Text>
-          <View style={styles.chips}>
-            {REASONS_BY_ROLE[role].map(item => {
-              const active = reason === item;
-              return (
-                <Pressable
-                  key={item}
-                  onPress={() => setReason(item)}
-                  style={[styles.chip, { borderColor: accent }, active && { backgroundColor: accent }]}
-                >
-                  <Text style={[styles.chipText, { color: active ? '#FFFFFF' : accent }]}>
-                    {DISPUTE_REASON_LABELS[item]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+            <Text style={styles.label}>Reason</Text>
+            <View style={styles.chips}>
+              {REASONS_BY_ROLE[role].map(item => {
+                const active = reason === item;
+                return (
+                  <Pressable
+                    key={item}
+                    onPress={() => setReason(item)}
+                    style={[styles.chip, { borderColor: accent }, active && { backgroundColor: accent }]}
+                  >
+                    <Text style={[styles.chipText, { color: active ? '#FFFFFF' : accent }]}>
+                      {DISPUTE_REASON_LABELS[item]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-          <Text style={styles.label}>What happened?</Text>
-          <TextInput
-            value={details}
-            onChangeText={setDetails}
-            placeholder="Describe the problem, including times and what you expected."
-            placeholderTextColor="#A9A3AA"
-            multiline
-            maxLength={2000}
-            style={styles.input}
-          />
-          <Text style={styles.counter}>{details.length}/2000</Text>
+            <Text style={styles.label}>What happened?</Text>
+            <TextInput
+              value={details}
+              onChangeText={setDetails}
+              placeholder="Describe the problem, including times and what you expected."
+              placeholderTextColor="#A9A3AA"
+              multiline
+              maxLength={2000}
+              style={styles.input}
+            />
+            <Text style={styles.counter}>{details.length}/2000</Text>
 
-          <Text style={styles.label}>Photos (optional, up to 3)</Text>
-          <View style={styles.photos}>
-            {images.map(uri => (
-              <View key={uri}>
-                <Image
-                  source={{ uri }}
-                  style={styles.photo}
-                />
+            <Text style={styles.label}>Photos (optional, up to 3)</Text>
+            <View style={styles.photos}>
+              {images.map(uri => (
+                <View key={uri}>
+                  <Image
+                    source={{ uri }}
+                    style={styles.photo}
+                  />
+                  <Pressable
+                    accessibilityLabel="Remove photo"
+                    onPress={() => setImages(current => current.filter(item => item !== uri))}
+                    style={styles.removePhoto}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={14}
+                      color="#FFFFFF"
+                    />
+                  </Pressable>
+                </View>
+              ))}
+
+              {images.length < 3 ? (
                 <Pressable
-                  accessibilityLabel="Remove photo"
-                  onPress={() => setImages(current => current.filter(item => item !== uri))}
-                  style={styles.removePhoto}
+                  onPress={pickImages}
+                  style={[styles.photo, styles.addPhoto, { borderColor: accent }]}
                 >
                   <Ionicons
-                    name="close"
-                    size={14}
-                    color="#FFFFFF"
+                    name="camera-outline"
+                    size={24}
+                    color={accent}
                   />
                 </Pressable>
-              </View>
-            ))}
-
-            {images.length < 3 ? (
-              <Pressable
-                onPress={pickImages}
-                style={[styles.photo, styles.addPhoto, { borderColor: accent }]}
-              >
-                <Ionicons
-                  name="camera-outline"
-                  size={24}
-                  color={accent}
-                />
-              </Pressable>
-            ) : null}
+              ) : null}
+            </View>
           </View>
-        </View>
 
-        <Pressable
-          disabled={submitting}
-          onPress={submit}
-          style={[styles.submit, { backgroundColor: accent }, submitting && { opacity: 0.6 }]}
-        >
-          {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>Send Report</Text>}
-        </Pressable>
+          <Pressable
+            disabled={submitting}
+            onPress={submit}
+            style={[styles.submit, { backgroundColor: accent }, submitting && { opacity: 0.6 }]}
+          >
+            {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>Send Report</Text>}
+          </Pressable>
 
-        <Text style={styles.note}>
-          False or abusive reports may count as a policy violation. Admin may contact both sides before deciding.
-        </Text>
-      </ScrollView>
+          <Text style={styles.note}>
+            False or abusive reports may count as a policy violation. Admin may contact both sides before deciding.
+          </Text>
+        </ScrollView>
+      </KeyboardSafeView>
     </View>
   );
 }

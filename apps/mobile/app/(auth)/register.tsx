@@ -20,6 +20,8 @@ import {
   type UserRole,
 } from "../../services/auth";
 
+import { replaceHistory } from "../../services/navigation";
+
 type RegistrationRole = Exclude<
   UserRole,
   "admin"
@@ -350,7 +352,7 @@ export default function RegisterScreen() {
                 text: "Continue",
 
                 onPress: () => {
-                  router.replace(
+                  replaceHistory(
                     "/(customer)/customer-dashboard"
                   );
                 },
@@ -385,8 +387,8 @@ export default function RegisterScreen() {
            * Their account stays pending until Admin
            * approves it.
            */
-          router.replace(
-            "/(auth)/application" as never
+          replaceHistory(
+            "/(auth)/application"
           );
 
           return;
@@ -426,11 +428,7 @@ export default function RegisterScreen() {
     >
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         <ScrollView
           style={styles.container}
@@ -1014,9 +1012,13 @@ export default function RegisterScreen() {
                 styles.backButton
               }
               disabled={loading}
-              onPress={() =>
-                router.back()
-              }
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace("/");
+                }
+              }}
             >
               <Text
                 style={

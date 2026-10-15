@@ -167,9 +167,12 @@ XAI_API_KEY
 PAYMONGO_SECRET_KEY
 PAYMONGO_WEBHOOK_SECRET
 OPENROUTESERVICE_API_KEY
-EMAIL_USER
-EMAIL_PASSWORD
+BREVO_API_KEY
+EMAIL_FROM
 ```
+
+`EMAIL_USER` and `EMAIL_PASSWORD` (Gmail) are only a local-development
+fallback; on Render, password reset emails go through Brevo (section 4f).
 
 For the current deployment:
 
@@ -217,6 +220,34 @@ than a localhost address.
 >
 > Before the capstone defense, open the API health endpoint, Admin portal, and
 > other deployed services several minutes before presenting.
+
+### 4f. Password reset email (Brevo)
+
+Render's free plan blocks outgoing SMTP ports, so Gmail SMTP
+(`EMAIL_USER` + `EMAIL_PASSWORD`) cannot send from `flogram-api`: the
+"Forgot password" request would just time out. On Render the API sends the
+reset code through **Brevo's HTTPS API** instead (free plan: 300 emails/day).
+
+1. Create a free account at [brevo.com](https://www.brevo.com).
+2. **Senders, domains & dedicated IPs → Senders → Add a sender**: enter the
+   address the emails should come from (for example your Gmail) and click the
+   verification link Brevo emails to it.
+3. **SMTP & API → API keys → Generate a new API key**. Copy it (it is shown once).
+4. Render → `flogram-api` → **Environment**, add:
+
+```text
+BREVO_API_KEY=xkeysib-...
+EMAIL_FROM=the-verified-sender@gmail.com
+```
+
+5. Save and redeploy `flogram-api`.
+6. Test: in the app, **Forgot password** → enter a registered email → the
+   six-digit code should arrive within a minute (check Spam the first time).
+
+When `BREVO_API_KEY` is set the server always uses Brevo; without it, it falls
+back to Gmail SMTP, which works locally but not on Render free. If sending
+fails, the app shows "We couldn't send the email right now" and the real
+reason (for example an unverified sender) appears in the Render logs.
 
 ---
 
@@ -538,6 +569,7 @@ XAI_API_KEY
 PAYMONGO_SECRET_KEY
 PAYMONGO_WEBHOOK_SECRET
 OPENROUTESERVICE_API_KEY
+BREVO_API_KEY
 EMAIL_PASSWORD
 ```
 
@@ -581,6 +613,7 @@ Before considering the deployment complete, verify:
 - [ ] Complete a PayMongo Test Mode payment through the Customer app.
 - [ ] Confirm the paid order automatically updates after the PayMongo webhook.
 - [ ] Verify delivery/routing functionality from the deployed mobile app.
+- [ ] Request a password reset code and confirm the Brevo email arrives.
 
 ---
 

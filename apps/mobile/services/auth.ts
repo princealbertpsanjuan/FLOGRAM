@@ -317,15 +317,33 @@ export const getAccessToken =
 
 export const logout =
   async () => {
+    /*
+     * Logging out must always succeed on the phone, even
+     * when the server is asleep or offline: tell the server
+     * (max 5 s), ignore its errors, then clear the session.
+     */
+    const controller =
+      new AbortController();
+
+    const timer = setTimeout(
+      () => controller.abort(),
+      5000
+    );
+
     try {
       await apiRequest(
         '/auth/logout',
         {
           method: 'POST',
           authenticated: true,
+          signal: controller.signal,
         }
       );
+    } catch {
+      // Ignored: the local session is cleared below.
     } finally {
+      clearTimeout(timer);
+
       await SecureStore.deleteItem(
         TOKEN_KEY
       );
@@ -334,4 +352,139 @@ export const logout =
         USER_KEY
       );
     }
+  };
+
+/*
+ * =========================================================
+ * HOME ROUTE FOR A SIGNED-IN USER
+ * =========================================================
+ *
+ * Shared by Login and the Welcome screen (cold start with
+ * a saved session) so both send a user to the same place.
+ *
+ * Seller / Rider not yet approved
+ *   -> their application (upload requirements,
+ *      see review status or resubmit)
+ *
+ * Otherwise each role has its own dashboard.
+ *
+ * null = unknown role.
+ * =========================================================
+ */
+export const getHomeRouteForUser = (
+  user: Pick<
+    AuthUser,
+    'role' | 'verificationStatus'
+  >
+): string | null => {
+  if (
+    (
+      user.role === 'seller' ||
+      user.role === 'rider'
+    ) &&
+    user.verificationStatus !==
+      'approved'
+  ) {
+    return '/(auth)/application';
+  }
+
+  switch (user.role) {
+    case 'customer':
+      return '/(customer)/customer-dashboard';
+
+    case 'seller':
+      return '/(seller)/seller-dashboard';
+
+    case 'rider':
+      return '/(rider)/rider-dashboard';
+
+    case 'admin':
+      return '/(admin)/admin-dashboard';
+
+    default:
+      return null;
+  }
+};
+
+/*
+ * Reads the JWT "exp" claim without verifying it (the
+ * server does that). Returns true only when the token is
+ * readable AND already expired, so an unreadable token is
+ * left for the server to judge.
+ */
+const isTokenExpired = (
+  token: string
+) => {
+  try {
+    const decode = (
+      globalThis as {
+        atob?: (value: string) => string;
+      }
+    ).atob;
+
+    const payload =
+      token.split('.')[1];
+
+    if (!decode || !payload) {
+      return false;
+    }
+
+    const base64 = payload
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(
+        Math.ceil(payload.length / 4) * 4,
+        '='
+      );
+
+    const { exp } = JSON.parse(
+      decode(base64)
+    ) as { exp?: number };
+
+    return (
+      typeof exp === 'number' &&
+      exp * 1000 <= Date.now()
+    );
+  } catch {
+    return false;
+  }
+};
+
+/*
+ * =========================================================
+ * SAVED SESSION
+ * =========================================================
+ *
+ * Returns the stored user when a token is saved and has
+ * not expired. An expired session is cleared so the app
+ * starts signed out instead of on a dashboard whose
+ * requests all fail. No network call: this must be fast
+ * even while the free-plan server is still waking up.
+ * =========================================================
+ */
+export const getSignedInUser =
+  async () => {
+    const [token, user] =
+      await Promise.all([
+        getAccessToken(),
+        getStoredUser(),
+      ]);
+
+    if (!token || !user) {
+      return null;
+    }
+
+    if (isTokenExpired(token)) {
+      await SecureStore.deleteItem(
+        TOKEN_KEY
+      );
+
+      await SecureStore.deleteItem(
+        USER_KEY
+      );
+
+      return null;
+    }
+
+    return user;
   };

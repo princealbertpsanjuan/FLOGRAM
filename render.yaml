@@ -40,6 +40,12 @@ services:
         sync: false
       - key: OPENROUTESERVICE_API_KEY
         sync: false
+      # Password reset email via Brevo HTTPS API (Render
+      # free blocks Gmail SMTP). EMAIL_FROM = verified sender.
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASSWORD

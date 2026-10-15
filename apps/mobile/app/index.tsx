@@ -1,5 +1,7 @@
 import { Redirect, router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   SafeAreaView,
@@ -8,7 +10,88 @@ import {
   View,
 } from 'react-native';
 
+import {
+  getHomeRouteForUser,
+  getSignedInUser,
+} from '../services/auth';
+
+/*
+ * undefined = still reading the saved session
+ * null      = signed out (show Welcome / web login)
+ * string    = signed in: that user's home route
+ */
+type SessionRoute = string | null | undefined;
+
 export default function WelcomeScreen() {
+  const [homeRoute, setHomeRoute] =
+    useState<SessionRoute>(undefined);
+
+  /*
+   * =========================================================
+   * SAVED SESSION
+   * =========================================================
+   *
+   * Signing in saves the token + user. On a cold start (or
+   * if anything navigates back here) a signed-in user goes
+   * straight to their area instead of seeing Welcome,
+   * which looked like being logged out.
+   *
+   * Logout deletes both values, so a signed-out user
+   * stays on Welcome.
+   * =========================================================
+   */
+  useEffect(() => {
+    let active = true;
+
+    getSignedInUser()
+      .then(user => {
+        if (!active) {
+          return;
+        }
+
+        let route = user
+          ? getHomeRouteForUser(user)
+          : null;
+
+        /*
+         * The web build is the Admin portal: only Admin
+         * sessions skip the login page there.
+         */
+        if (
+          Platform.OS === 'web' &&
+          user?.role !== 'admin'
+        ) {
+          route = null;
+        }
+
+        setHomeRoute(route);
+      })
+      .catch(() => {
+        if (active) {
+          setHomeRoute(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (homeRoute === undefined) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator
+          size="large"
+          color="#E9588C"
+        />
+      </View>
+    );
+  }
+
+  if (homeRoute) {
+    return <Redirect href={homeRoute as never} />;
+  }
+
   /*
    * The web build is the Admin portal: go straight to login.
    */
@@ -92,6 +175,13 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  loader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF8FB',
+  },
+
   container: {
     flex: 1,
     backgroundColor: '#FFF8FB',
