@@ -15,6 +15,7 @@ import {
   adminUpdateUserStatusValidation,
   adminUserListValidation,
   changePasswordValidation,
+  updateAddressesValidation,
   updateProfileValidation,
   validateUserRequest,
 } from "./user.validation.js";
@@ -76,6 +77,8 @@ userRouter.get(
 
 userRouter.put(
   "/me/addresses",
+  updateAddressesValidation,
+  validateUserRequest,
   updateMyAddresses
 );
 

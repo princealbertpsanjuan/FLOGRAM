@@ -17,9 +17,14 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { router, useFocusEffect } from 'expo-router';
 
+import * as Location from 'expo-location';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
+import AddressAutocomplete from '../../components/ui/address-autocomplete';
+import { reverseGeocode, type AddressSuggestion } from '../../services/geo';
+import { PHONE_ERROR, isValidPhone, normalizePhone, sanitizePhoneInput } from '../../utils/validation';
 
 import {
   MAX_SAVED_ADDRESSES,
@@ -68,6 +73,7 @@ export default function CustomerAddressesScreen() {
   const [saving, setSaving] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [form, setForm] = useState<SavedAddress>(EMPTY);
+  const [locating, setLocating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -101,7 +107,59 @@ export default function CustomerAddressesScreen() {
 
   const openForm = (index: number | null) => {
     setEditingIndex(index === null ? -1 : index);
-    setForm(index === null ? { ...EMPTY, isDefault: addresses.length === 0 } : { ...addresses[index] });
+    setForm(
+      index === null
+        ? { ...EMPTY, isDefault: addresses.length === 0 }
+        : {
+            ...addresses[index],
+            // Stored +63 numbers → 09… so the 11-digit field can edit them
+            recipientPhoneNumber: addresses[index].recipientPhoneNumber
+              ? normalizePhone(addresses[index].recipientPhoneNumber)
+              : '',
+          }
+    );
+  };
+
+  /*
+   * Fill the form from a chosen suggestion or the phone's
+   * location. Empty parts never erase typed values; all
+   * fields stay editable.
+   */
+  const applySuggestion = (suggestion: AddressSuggestion, replaceStreet = false) =>
+    setForm(previous => ({
+      ...previous,
+      street: suggestion.street || (replaceStreet ? '' : previous.street),
+      barangay: suggestion.barangay || previous.barangay,
+      city: suggestion.city || previous.city,
+      province: suggestion.province || previous.province,
+      postalCode: suggestion.postalCode || previous.postalCode,
+    }));
+
+  const fillFromCurrentLocation = async () => {
+    setLocating(true);
+
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== 'granted') {
+        Alert.alert('Location needed', 'Allow location access to fill in the address, or type it below.');
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const address = await reverseGeocode(position.coords.latitude, position.coords.longitude);
+
+      if (!address) {
+        Alert.alert('Address not found', 'We could not find an address for your location. Please type it below.');
+        return;
+      }
+
+      applySuggestion(address);
+    } catch (error) {
+      Alert.alert('Location', getErrorMessage(error));
+    } finally {
+      setLocating(false);
+    }
   };
 
   const handleSave = async () => {
@@ -110,16 +168,26 @@ export default function CustomerAddressesScreen() {
       return;
     }
 
+    if (form.recipientPhoneNumber.trim() && !isValidPhone(form.recipientPhoneNumber)) {
+      Alert.alert('Invalid contact number', PHONE_ERROR);
+      return;
+    }
+
+    const cleaned: SavedAddress = {
+      ...form,
+      recipientPhoneNumber: form.recipientPhoneNumber.trim() ? normalizePhone(form.recipientPhoneNumber) : '',
+    };
+
     let next = [...addresses];
 
     if (editingIndex === -1 || editingIndex === null) {
-      next.push(form);
+      next.push(cleaned);
     } else {
-      next[editingIndex] = form;
+      next[editingIndex] = cleaned;
     }
 
-    if (form.isDefault) {
-      next = next.map(item => ({ ...item, isDefault: item === form }));
+    if (cleaned.isDefault) {
+      next = next.map(item => ({ ...item, isDefault: item === cleaned }));
     }
 
     if (await persist(next)) {
@@ -142,16 +210,41 @@ export default function CustomerAddressesScreen() {
     void persist(addresses.map((item, i) => ({ ...item, isDefault: i === index })));
 
   // Form inputs; only rendered inside the address sheet's KeyboardSafeView.
-  const field = (key: keyof SavedAddress, label: string, placeholder?: string) => (
+  const field = (key: keyof SavedAddress, label: string, placeholder?: string) => {
+    const isPhone = key === 'recipientPhoneNumber';
+    const phoneInvalid = isPhone && form.recipientPhoneNumber.length > 0 && !isValidPhone(form.recipientPhoneNumber);
+
+    return (
+      <View style={styles.field}>
+        <Text style={styles.label}>{label}</Text>
+        <TextInput
+          value={String(form[key] ?? '')}
+          onChangeText={value =>
+            setForm(previous => ({ ...previous, [key]: isPhone ? sanitizePhoneInput(value) : value }))
+          }
+          placeholder={placeholder}
+          placeholderTextColor="#B3ADB1"
+          style={[styles.input, phoneInvalid && styles.inputError]}
+          maxLength={isPhone ? 11 : undefined}
+          keyboardType={isPhone || key === 'postalCode' ? 'number-pad' : 'default'}
+        />
+        {phoneInvalid ? <Text style={styles.errorText}>{PHONE_ERROR}</Text> : null}
+      </View>
+    );
+  };
+
+  // Street / barangay: suggestions while typing (e.g. "TAB" → Tabuco).
+  const addressField = (key: 'street' | 'barangay', label: string, placeholder?: string) => (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        value={String(form[key] ?? '')}
+      <AddressAutocomplete
+        role="customer"
+        value={form[key]}
         onChangeText={value => setForm(previous => ({ ...previous, [key]: value }))}
+        onSelect={suggestion => applySuggestion(suggestion, key === 'street')}
         placeholder={placeholder}
         placeholderTextColor="#B3ADB1"
         style={styles.input}
-        keyboardType={key === 'recipientPhoneNumber' || key === 'postalCode' ? 'phone-pad' : 'default'}
       />
     </View>
   );
@@ -289,14 +382,37 @@ export default function CustomerAddressesScreen() {
               contentContainerStyle={{ padding: 16 }}
             >
               {field('label', 'Label', 'Home, Office, Mom’s house')}
-              {field('street', 'Street / House No. *')}
-              {field('barangay', 'Barangay *')}
+              <Pressable
+                accessibilityRole="button"
+                disabled={locating}
+                onPress={() => void fillFromCurrentLocation()}
+                style={[styles.locationButton, locating && { opacity: 0.6 }]}
+              >
+                {locating ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={PINK}
+                  />
+                ) : (
+                  <Ionicons
+                    name="locate-outline"
+                    size={18}
+                    color={PINK}
+                  />
+                )}
+                <Text style={styles.locationButtonText}>
+                  {locating ? 'Finding your address…' : 'Use my current location'}
+                </Text>
+              </Pressable>
+
+              {addressField('street', 'Street / House No. *', 'Type a street or barangay (e.g. Tabuco)')}
+              {addressField('barangay', 'Barangay *')}
               {field('city', 'City / Municipality *')}
               {field('province', 'Province *')}
               {field('postalCode', 'Postal Code')}
               {field('landmark', 'Landmark')}
               {field('recipientName', 'Default Recipient Name')}
-              {field('recipientPhoneNumber', 'Default Recipient Phone')}
+              {field('recipientPhoneNumber', 'Default Recipient Phone', '09171234567')}
 
               <Pressable
                 onPress={() => setForm(previous => ({ ...previous, isDefault: !previous.isDefault }))}
@@ -384,6 +500,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     backgroundColor: '#FCFAFB',
   },
+  inputError: { borderColor: '#C64262' },
+  errorText: { marginTop: 4, color: '#C64262', fontSize: 12 },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 44,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F3C7D8',
+    backgroundColor: '#FDF1F6',
+  },
+  locationButtonText: { color: PINK, fontSize: 14, fontWeight: '800' },
   defaultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 10 },
   defaultRowText: { color: TEXT, fontSize: 14 },
 });

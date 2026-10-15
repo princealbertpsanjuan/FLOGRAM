@@ -23,6 +23,7 @@ import {
   Text,
   View,
 } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 import {
   getCheckoutById,
@@ -31,9 +32,11 @@ import {
 } from "../../services/checkout";
 
 import {
+  canPayOrderOnline,
   cancelOrder,
   completeOrder,
   getOrderById,
+  payOrderOnline,
   type CustomerOrder,
 } from "../../services/orders";
 
@@ -52,6 +55,7 @@ import { ScreenLoader } from '../../components/ui/state-views';
 import { formatAddOnsLine } from '../../services/addons';
 
 import ReportProblemLink from '../../components/ui/report-problem-link';
+import ContactActions from '../../components/ui/contact-actions';
 
 /*
  * =========================================================
@@ -358,6 +362,23 @@ const groupOrdersByShop = (
   });
 
   return [...groups.values()];
+};
+
+/*
+ * Shop contact number (Call / Message / Copy).
+ */
+const getFloristPhone = (
+  order?: CustomerOrder
+) => {
+  const florist =
+    order?.florist;
+
+  return florist &&
+    typeof florist ===
+      "object"
+    ? florist.contactNumber ||
+        ""
+    : "";
 };
 
 const getFloristName = (
@@ -887,6 +908,11 @@ export default function CustomerOrderDetailsScreen() {
   ] = useState("");
 
   const [
+    payingNow,
+    setPayingNow,
+  ] = useState(false);
+
+  const [
     deliveryByOrderId,
     setDeliveryByOrderId,
   ] = useState<
@@ -1388,6 +1414,74 @@ export default function CustomerOrderDetailsScreen() {
 
   /*
    * =======================================================
+   * PAY NOW
+   * =======================================================
+   *
+   * Online payment was closed / cancelled at PayMongo.
+   * Opens the payment page again (same page while it is
+   * still open, a new one if it expired).
+   */
+
+  const handlePayNow =
+    useCallback(
+      async (
+        targetOrderId:
+          string
+      ) => {
+        try {
+          setPayingNow(
+            true
+          );
+
+          const result =
+            await payOrderOnline(
+              targetOrderId
+            );
+
+          if (
+            result.alreadyPaid ||
+            !result.checkoutUrl
+          ) {
+            await loadDetails(
+              false
+            );
+
+            Alert.alert(
+              "Already Paid",
+              "We already received your online payment for this order."
+            );
+
+            return;
+          }
+
+          await WebBrowser.openBrowserAsync(
+            result.checkoutUrl
+          );
+
+          await loadDetails(
+            false
+          );
+        } catch (
+          error
+        ) {
+          Alert.alert(
+            "Unable to open payment",
+            error instanceof
+              Error
+              ? error.message
+              : "Please try again."
+          );
+        } finally {
+          setPayingNow(
+            false
+          );
+        }
+      },
+      [loadDetails]
+    );
+
+  /*
+   * =======================================================
    * ORDERS
    * =======================================================
    */
@@ -1588,6 +1682,12 @@ export default function CustomerOrderDetailsScreen() {
         reviewByOrderId={
           reviewByOrderId
         }
+        payingNow={
+          payingNow
+        }
+        onPayNow={
+          handlePayNow
+        }
       />
     );
   }
@@ -1636,6 +1736,14 @@ export default function CustomerOrderDetailsScreen() {
             singleOrder._id
           ]
         }
+        payingNow={
+          payingNow
+        }
+        onPayNow={() =>
+          void handlePayNow(
+            singleOrder._id
+          )
+        }
       />
     );
   }
@@ -1665,9 +1773,19 @@ function CheckoutDetails({
   onComplete,
   deliveryByOrderId,
   reviewByOrderId,
+  payingNow,
+  onPayNow,
 }: {
   checkout:
     DetailedCheckout;
+
+  payingNow:
+    boolean;
+
+  onPayNow:
+    (
+      orderId: string
+    ) => void;
 
   refreshing:
     boolean;
@@ -1896,6 +2014,32 @@ function CheckoutDetails({
                 </View>
               ) : null}
 
+              {getFloristPhone(
+                group.orders[0]
+              ) ? (
+                <View
+                  style={
+                    styles.shopContactBox
+                  }
+                >
+                  <Text
+                    style={
+                      styles.infoLabel
+                    }
+                  >
+                    {group.shopName} contact
+                  </Text>
+
+                  <ContactActions
+                    phone={getFloristPhone(
+                      group.orders[0]
+                    )}
+                    role="customer"
+                    compact
+                  />
+                </View>
+              ) : null}
+
           {group.orders.map(
             (
               order
@@ -2113,6 +2257,34 @@ function CheckoutDetails({
                 last
               />
             )}
+
+            {checkout.paymentMethod ===
+              "paymongo" &&
+            checkout.paymentStatus !==
+              "paid" &&
+            checkout.checkoutStatus !==
+              "cancelled" &&
+            (checkout.orders || [])
+              .length > 0 &&
+            (checkout.orders || []).every(
+              (order) =>
+                canPayOrderOnline(
+                  order
+                )
+            ) ? (
+              <PayNowButton
+                loading={
+                  payingNow
+                }
+                onPress={() =>
+                  onPayNow(
+                    checkout
+                      .orders[0]
+                      ._id
+                  )
+                }
+              />
+            ) : null}
           </SectionCard>
 
           <SectionCard
@@ -2302,6 +2474,80 @@ function CheckoutDetails({
 
 /*
  * =========================================================
+ * PAY NOW BUTTON
+ * =========================================================
+ */
+
+function PayNowButton({
+  loading,
+  onPress,
+}: {
+  loading: boolean;
+
+  onPress: () => void;
+}) {
+  return (
+    <View
+      style={
+        styles.payNowBox
+      }
+    >
+      <Text
+        style={
+          styles.payNowHint
+        }
+      >
+        Your online payment was not finished. Pay now so the shop can start your order.
+      </Text>
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={
+          loading
+        }
+        onPress={
+          onPress
+        }
+        style={({
+          pressed,
+        }) => [
+          styles.payNowButton,
+
+          (pressed ||
+            loading) && {
+            opacity: 0.75,
+          },
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color="#FFFFFF"
+          />
+        ) : (
+          <>
+            <Ionicons
+              name="card-outline"
+              size={17}
+              color="#FFFFFF"
+            />
+
+            <Text
+              style={
+                styles.payNowText
+              }
+            >
+              Pay Now
+            </Text>
+          </>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+/*
+ * =========================================================
  * STANDALONE ORDER DETAILS
  * =========================================================
  */
@@ -2315,8 +2561,14 @@ function StandaloneOrderDetails({
   onComplete,
   delivery,
   reviewStatus,
+  payingNow,
+  onPayNow,
 }: {
   order: CustomerOrder;
+
+  payingNow: boolean;
+
+  onPayNow: () => void;
 
   refreshing: boolean;
 
@@ -2621,6 +2873,32 @@ function StandaloneOrderDetails({
               }
             />
 
+            {getFloristPhone(
+              order
+            ) ? (
+              <View
+                style={
+                  styles.shopContactBox
+                }
+              >
+                <Text
+                  style={
+                    styles.infoLabel
+                  }
+                >
+                  Shop Contact
+                </Text>
+
+                <ContactActions
+                  phone={getFloristPhone(
+                    order
+                  )}
+                  role="customer"
+                  compact
+                />
+              </View>
+            ) : null}
+
             {order.fulfillmentType !==
             "pickup" ? (
               <>
@@ -2744,6 +3022,19 @@ function StandaloneOrderDetails({
               }
               last
             />
+
+            {canPayOrderOnline(
+              order
+            ) ? (
+              <PayNowButton
+                loading={
+                  payingNow
+                }
+                onPress={
+                  onPayNow
+                }
+              />
+            ) : null}
           </SectionCard>
 
           <SectionCard
@@ -5418,5 +5709,63 @@ const styles =
 
       color:
         "#B64F62",
+    },
+
+    shopContactBox: {
+      marginBottom:
+        10,
+    },
+
+    payNowBox: {
+      marginTop:
+        12,
+
+      gap:
+        10,
+    },
+
+    payNowHint: {
+      fontSize:
+        12,
+
+      lineHeight:
+        17,
+
+      color:
+        "#8A5A12",
+    },
+
+    payNowButton: {
+      minHeight:
+        46,
+
+      borderRadius:
+        14,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap:
+        8,
+
+      backgroundColor:
+        "#DF628F",
+    },
+
+    payNowText: {
+      fontSize:
+        14,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#FFFFFF",
     },
   });

@@ -4,6 +4,12 @@ import {
   validationResult,
 } from "express-validator";
 
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+} from "../../utils/contactFormats.js";
+
 /*
  * =========================================================
  * SHARED CHECKOUT VALIDATION
@@ -62,11 +68,15 @@ const checkoutBodyValidation =
       .withMessage(
         "Recipient phone number is required."
       )
-      .matches(
-        /^(09|\+639)\d{9}$/
+      .bail()
+      .custom((value) =>
+        isValidPhone(value)
       )
       .withMessage(
-        "Enter a valid Philippine mobile number."
+        PHONE_ERROR
+      )
+      .customSanitizer(
+        normalizePhone
       ),
 
     /*
@@ -368,6 +378,34 @@ const checkoutBodyValidation =
 
 export const checkoutQuoteValidation =
   checkoutBodyValidation;
+
+/*
+ * =========================================================
+ * CUSTOM BOUQUET QUOTE
+ * =========================================================
+ *
+ * Same details as the cart quote + the accepted custom
+ * bouquet request.
+ * =========================================================
+ */
+
+export const customBouquetQuoteValidation =
+  [
+    ...checkoutBodyValidation,
+
+    body(
+      "customBouquetRequestId"
+    )
+      .notEmpty()
+      .withMessage(
+        "Custom bouquet request ID is required."
+      )
+      .bail()
+      .isMongoId()
+      .withMessage(
+        "Custom bouquet request ID is invalid."
+      ),
+  ];
 
 /*
  * =========================================================

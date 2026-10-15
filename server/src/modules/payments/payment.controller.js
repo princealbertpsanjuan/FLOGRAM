@@ -1,10 +1,288 @@
 import Order from "../orders/order.model.js";
+import Checkout from "../checkout/checkout.model.js";
+
+import {
+  createCheckoutPayMongoSession,
+} from "../checkout/checkout.service.js";
 
 import {
   createPayMongoCheckoutSession,
+  expirePayMongoCheckoutSession,
   parsePayMongoWebhook,
+  retrievePayMongoCheckoutSession,
   verifyPayMongoWebhookSignature,
 } from "./paymongo.service.js";
+
+/*
+ * =========================================================
+ * SINGLE ORDER PAYMONGO SESSION (create or pay again)
+ * =========================================================
+ *
+ * - no session yet          → create one
+ * - session still active    → reuse the same link
+ * - session already paid    → record it (webhook may be
+ *                             late), never charge twice
+ * - session expired         → create a new session; the
+ *                             old id is remembered so a
+ *                             late webhook still matches
+ * =========================================================
+ */
+const markSingleOrderPaid = async (
+  order,
+  session,
+  paidPayment
+) => {
+  if (
+    order.paymentStatus ===
+    "paid"
+  ) {
+    return;
+  }
+
+  const paymentAttributes =
+    paidPayment?.attributes ||
+    {};
+
+  order.paymentStatus =
+    "paid";
+
+  order.paymentProvider =
+    "paymongo";
+
+  order.paymongoCheckoutSessionId =
+    session?.id ||
+    order
+      .paymongoCheckoutSessionId;
+
+  order.paymongoPaymentId =
+    paidPayment?.id ||
+    order
+      .paymongoPaymentId;
+
+  order.paymentChannel =
+    paymentAttributes
+      ?.source
+      ?.type ||
+    paymentAttributes
+      ?.payment_method
+      ?.type ||
+    order
+      .paymentChannel ||
+    null;
+
+  order.paidAt =
+    Number.isFinite(
+      Number(
+        paymentAttributes
+          ?.paid_at
+      )
+    )
+      ? new Date(
+          Number(
+            paymentAttributes
+              .paid_at
+          ) * 1000
+        )
+      : new Date();
+
+  order.paymentFailedAt =
+    null;
+
+  await order.save();
+};
+
+const startSingleOrderPayment =
+  async (order) => {
+    let idempotencyKey =
+      null;
+
+    let previousSessionId =
+      null;
+
+    if (
+      order
+        .paymongoCheckoutSessionId
+    ) {
+      const existing =
+        await retrievePayMongoCheckoutSession(
+          order
+            .paymongoCheckoutSessionId
+        );
+
+      if (
+        existing?.paidPayment
+      ) {
+        await markSingleOrderPaid(
+          order,
+          existing.session,
+          existing.paidPayment
+        );
+
+        return {
+          status: 200,
+
+          message:
+            "This order has already been paid.",
+
+          data: {
+            orderId:
+              order._id,
+
+            checkoutSessionId:
+              existing.id,
+
+            checkoutUrl:
+              null,
+
+            alreadyPaid:
+              true,
+
+            paymentStatus:
+              "paid",
+          },
+        };
+      }
+
+      const reusableUrl =
+        existing?.checkoutUrl ||
+        order
+          .paymentCheckoutUrl;
+
+      if (
+        (!existing ||
+          existing.status ===
+            "active") &&
+        reusableUrl
+      ) {
+        if (
+          order.paymentStatus !==
+          "pending"
+        ) {
+          order.paymentStatus =
+            "pending";
+
+          await order.save();
+        }
+
+        return {
+          status: 200,
+
+          message:
+            "Existing PayMongo checkout session retrieved successfully.",
+
+          data: {
+            orderId:
+              order._id,
+
+            checkoutSessionId:
+              order
+                .paymongoCheckoutSessionId,
+
+            checkoutUrl:
+              reusableUrl,
+
+            paymentStatus:
+              order
+                .paymentStatus,
+          },
+        };
+      }
+
+      if (!existing) {
+        const error = new Error(
+          "Unable to reach PayMongo right now. Please try again."
+        );
+
+        error.statusCode = 502;
+
+        throw error;
+      }
+
+      if (
+        existing.status ===
+        "active"
+      ) {
+        await expirePayMongoCheckoutSession(
+          existing.id
+        );
+      }
+
+      previousSessionId =
+        order
+          .paymongoCheckoutSessionId;
+
+      idempotencyKey =
+        `flogram-order-${order._id}-${Date.now()}`;
+    }
+
+    const result =
+      await createPayMongoCheckoutSession({
+        order,
+
+        customer:
+          order.customer,
+
+        idempotencyKey,
+      });
+
+    if (
+      previousSessionId &&
+      previousSessionId !==
+        result.checkoutSessionId
+    ) {
+      order.previousPaymongoSessionIds =
+        [
+          ...(order
+            .previousPaymongoSessionIds ||
+            []),
+          previousSessionId,
+        ];
+    }
+
+    order.paymentProvider =
+      "paymongo";
+
+    order.paymentStatus =
+      "pending";
+
+    order.paymongoCheckoutSessionId =
+      result.checkoutSessionId;
+
+    order.paymentCheckoutUrl =
+      result.checkoutUrl;
+
+    order.paymentInitiatedAt =
+      new Date();
+
+    order.paymentFailedAt =
+      null;
+
+    await order.save();
+
+    return {
+      status: 201,
+
+      message:
+        "PayMongo checkout session created successfully.",
+
+      data: {
+        orderId:
+          order._id,
+
+        checkoutSessionId:
+          result
+            .checkoutSessionId,
+
+        checkoutUrl:
+          result
+            .checkoutUrl,
+
+        paymentStatus:
+          order
+            .paymentStatus,
+      },
+    };
+  };
 
 /*
  * =========================================================
@@ -79,97 +357,164 @@ export const createCheckout = async (
       throw error;
     }
 
-    /*
-     * Reuse an existing checkout URL
-     * instead of creating duplicates.
-     */
+    const result =
+      await startSingleOrderPayment(
+        order
+      );
+
+    return res
+      .status(result.status)
+      .json({
+        success: true,
+
+        message:
+          result.message,
+
+        data:
+          result.data,
+      });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * PAY NOW (retry online payment for an unpaid order)
+ * =========================================================
+ *
+ * POST /api/v1/payments/orders/:orderId/pay
+ *
+ * Works for both:
+ * - orders placed through grouped checkout (cart)
+ *   → one PayMongo session for the whole checkout
+ * - single orders (custom bouquet)
+ *   → PayMongo session for that order
+ * =========================================================
+ */
+export const payOrder = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const order =
+      await Order.findOne({
+        _id:
+          req.params.orderId,
+
+        customer:
+          req.user.userId,
+      }).populate(
+        "customer",
+        "firstName lastName email phoneNumber"
+      );
+
+    if (!order) {
+      const error = new Error(
+        "Order was not found or does not belong to this customer."
+      );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+    if (
+      order.paymentMethod !==
+      "paymongo"
+    ) {
+      const error = new Error(
+        "This order is not paid online."
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
     if (
       order.paymentStatus ===
-        "pending" &&
-      order
-        .paymongoCheckoutSessionId &&
-      order
-        .paymentCheckoutUrl
+      "paid"
     ) {
+      const error = new Error(
+        "This order has already been paid."
+      );
+
+      error.statusCode = 409;
+
+      throw error;
+    }
+
+    if (
+      [
+        "cancelled",
+        "completed",
+        "delivered",
+      ].includes(
+        order.orderStatus
+      )
+    ) {
+      const error = new Error(
+        "Payment cannot be made for this order anymore."
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+    const checkout =
+      await Checkout.findOne({
+        orders:
+          order._id,
+
+        customer:
+          req.user.userId,
+      }).select("_id");
+
+    if (checkout) {
+      const result =
+        await createCheckoutPayMongoSession(
+          checkout._id,
+          req.user.userId
+        );
+
       return res
         .status(200)
         .json({
           success: true,
 
           message:
-            "Existing PayMongo checkout session retrieved successfully.",
+            result.alreadyPaid
+              ? "This order has already been paid."
+              : "PayMongo checkout session is ready.",
 
           data: {
+            ...result,
+
             orderId:
               order._id,
-
-            checkoutSessionId:
-              order
-                .paymongoCheckoutSessionId,
-
-            checkoutUrl:
-              order
-                .paymentCheckoutUrl,
-
-            paymentStatus:
-              order
-                .paymentStatus,
           },
         });
     }
 
     const result =
-      await createPayMongoCheckoutSession({
-        order,
-
-        customer:
-          order.customer,
-      });
-
-    order.paymentProvider =
-      "paymongo";
-
-    order.paymentStatus =
-      "pending";
-
-    order.paymongoCheckoutSessionId =
-      result.checkoutSessionId;
-
-    order.paymentCheckoutUrl =
-      result.checkoutUrl;
-
-    order.paymentInitiatedAt =
-      new Date();
-
-    order.paymentFailedAt =
-      null;
-
-    await order.save();
+      await startSingleOrderPayment(
+        order
+      );
 
     return res
-      .status(201)
+      .status(result.status)
       .json({
         success: true,
 
         message:
-          "PayMongo checkout session created successfully.",
+          result.message,
 
-        data: {
-          orderId:
-            order._id,
-
-          checkoutSessionId:
-            result
-              .checkoutSessionId,
-
-          checkoutUrl:
-            result
-              .checkoutUrl,
-
-          paymentStatus:
-            order
-              .paymentStatus,
-        },
+        data:
+          result.data,
       });
   } catch (error) {
     next(error);
@@ -495,7 +840,14 @@ export const payMongoWebhook =
         session.id &&
         order
           .paymongoCheckoutSessionId !==
+          session.id &&
+        !(
+          order
+            .previousPaymongoSessionIds ||
+          []
+        ).includes(
           session.id
+        )
       ) {
         console.error(
           "PayMongo checkout session mismatch for order:",
@@ -626,12 +978,30 @@ export const payMongoWebhook =
           });
       }
 
+      /*
+       * Already paid (same payment, or a second session
+       * paid after "Pay Now") → never record twice.
+       */
       if (
         order.paymentStatus ===
-          "paid" &&
-        order.paymongoPaymentId ===
-          paidPayment.id
+        "paid"
       ) {
+        if (
+          order.paymongoPaymentId !==
+          paidPayment.id
+        ) {
+          console.error(
+            "PayMongo: another payment arrived for an already paid order. Refund manually if needed.",
+            {
+              orderId:
+                order._id,
+
+              paymentId:
+                paidPayment.id,
+            }
+          );
+        }
+
         /*
          * Keep event ID updated if
          * necessary.

@@ -49,6 +49,13 @@ import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+  sanitizePhoneInput,
+} from '../../utils/validation';
+
 /*
  * =========================================================
  * TYPES
@@ -168,14 +175,6 @@ const capitalize = (
     value
       .slice(1)
       .replaceAll('_', ' ')
-  );
-};
-
-const isValidPhilippinePhone = (
-  value: string
-) => {
-  return /^(09|\+639)\d{9}$/.test(
-    value
   );
 };
 
@@ -398,7 +397,11 @@ export default function CustomerProfileScreen() {
       );
 
       setPhoneNumber(
-        user.phoneNumber
+        sanitizePhoneInput(
+          normalizePhone(
+            user.phoneNumber
+          )
+        )
       );
 
       setEditVisible(
@@ -428,7 +431,9 @@ export default function CustomerProfileScreen() {
         lastName.trim();
 
       const cleanedPhone =
-        phoneNumber.trim();
+        normalizePhone(
+          phoneNumber
+        );
 
       if (
         !cleanedFirstName ||
@@ -458,13 +463,13 @@ export default function CustomerProfileScreen() {
       }
 
       if (
-        !isValidPhilippinePhone(
+        !isValidPhone(
           cleanedPhone
         )
       ) {
         Alert.alert(
           'Invalid Phone Number',
-          'Enter a valid Philippine phone number, such as 09171234567.'
+          PHONE_ERROR
         );
 
         return;
@@ -1480,20 +1485,40 @@ export default function CustomerProfileScreen() {
                     value={
                       phoneNumber
                     }
-                    onChangeText={
-                      setPhoneNumber
+                    onChangeText={(text) =>
+                      setPhoneNumber(
+                        sanitizePhoneInput(
+                          text
+                        )
+                      )
                     }
-                    keyboardType="phone-pad"
+                    keyboardType="number-pad"
                     placeholder="09171234567"
                     placeholderTextColor="#B8AFB4"
                     editable={
                       !savingProfile
                     }
                     maxLength={
-                      13
+                      11
                     }
                   />
                 </View>
+
+                {phoneNumber.length > 0 &&
+                !isValidPhone(
+                  phoneNumber
+                ) ? (
+                  <Text
+                    style={{
+                      marginTop: 6,
+                      color:
+                        '#C64262',
+                      fontSize: 12,
+                    }}
+                  >
+                    {PHONE_ERROR}
+                  </Text>
+                ) : null}
 
                 <Pressable
                   style={[

@@ -45,6 +45,17 @@ import {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import AddressAutocomplete from '../../components/ui/address-autocomplete';
+
+import { reverseGeocode, type AddressSuggestion } from '../../services/geo';
+
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+  sanitizePhoneInput,
+} from '../../utils/validation';
+
 import { setCartItemAddOns, type AddOnSelection, type OrderAddOn } from '../../services/addons';
 
 import AddOnPicker from '../../components/customer/addon-picker';
@@ -728,14 +739,6 @@ const formatCurrency = (
   )}`;
 };
 
-const isValidPhilippinePhone = (
-  value: string
-) => {
-  return /^(09|\+639)\d{9}$/.test(
-    value.trim()
-  );
-};
-
 const isValidDate = (
   value: string
 ) => {
@@ -1035,7 +1038,13 @@ export default function CustomerCheckoutScreen() {
         }
 
         if (address.recipientPhoneNumber) {
-          setRecipientPhone(address.recipientPhoneNumber);
+          setRecipientPhone(
+            sanitizePhoneInput(
+              normalizePhone(
+                address.recipientPhoneNumber
+              )
+            )
+          );
         }
       },
       []
@@ -1244,6 +1253,61 @@ export default function CustomerCheckoutScreen() {
         setRequest(
           loadedRequest
         );
+
+        /*
+         * Needed-by date from the request → schedule it
+         * (same pre-order rule as the cart checkout).
+         * The customer can still change or turn it off.
+         */
+        if (
+          loadedRequest.requestedDate
+        ) {
+          const neededBy =
+            new Date(
+              loadedRequest.requestedDate
+            );
+
+          if (
+            !Number.isNaN(
+              neededBy.getTime()
+            )
+          ) {
+            const pad = (
+              value: number
+            ) =>
+              String(
+                value
+              ).padStart(
+                2,
+                "0"
+              );
+
+            const dateText =
+              `${neededBy.getFullYear()}-${pad(
+                neededBy.getMonth() +
+                  1
+              )}-${pad(
+                neededBy.getDate()
+              )}`;
+
+            if (
+              new Date(
+                `${dateText}T23:59:59`
+              ).getTime() >
+              Date.now()
+            ) {
+              setScheduled(
+                true
+              );
+
+              setDeliveryDate(
+                (current) =>
+                  current ||
+                  dateText
+              );
+            }
+          }
+        }
       },
       [
         customBouquetRequestId,
@@ -1497,9 +1561,73 @@ export default function CustomerCheckoutScreen() {
    * DELIVERY LOCATION PIN
    * ===================================================== */
 
+  /*
+   * Fill the address fields from a map pin or a chosen
+   * suggestion. Empty parts never erase what is there;
+   * every field stays editable.
+   */
+  const applyAddressSuggestion =
+    useCallback(
+      (
+        suggestion: AddressSuggestion,
+        options: {
+          replaceStreet?: boolean;
+        } = {}
+      ) => {
+        if (
+          suggestion.street ||
+          options.replaceStreet
+        ) {
+          setStreet(
+            suggestion.street ||
+              ""
+          );
+        }
+
+        if (suggestion.barangay) {
+          setBarangay(
+            suggestion.barangay
+          );
+        }
+
+        if (suggestion.city) {
+          setCity(
+            suggestion.city
+          );
+        }
+
+        if (suggestion.province) {
+          setProvince(
+            suggestion.province
+          );
+        }
+
+        if (suggestion.postalCode) {
+          setPostalCode(
+            suggestion.postalCode
+          );
+        }
+      },
+      []
+    );
+
+  const [
+    addressAutofilling,
+    setAddressAutofilling,
+  ] =
+    useState(false);
+
+  const reverseGeocodeIdRef =
+    useRef(0);
+
   const selectDeliveryCoordinate =
     useCallback(
-      (coordinate: LatLng) => {
+      (
+        coordinate: LatLng,
+        options: {
+          autofill?: boolean;
+        } = {}
+      ) => {
         if (
           !Number.isFinite(
             coordinate.latitude
@@ -1526,8 +1654,136 @@ export default function CustomerCheckoutScreen() {
         setQuoteError(
           null
         );
+
+        if (
+          options.autofill ===
+          false
+        ) {
+          return;
+        }
+
+        /*
+         * Pin moved → look up the address for it.
+         * Only the latest pin wins.
+         */
+        const lookupId =
+          ++reverseGeocodeIdRef.current;
+
+        setAddressAutofilling(
+          true
+        );
+
+        void reverseGeocode(
+          coordinate.latitude,
+          coordinate.longitude
+        )
+          .then((address) => {
+            if (
+              lookupId !==
+                reverseGeocodeIdRef.current ||
+              !address
+            ) {
+              return;
+            }
+
+            applyAddressSuggestion(
+              address
+            );
+          })
+          .finally(() => {
+            if (
+              lookupId ===
+              reverseGeocodeIdRef.current
+            ) {
+              setAddressAutofilling(
+                false
+              );
+            }
+          });
       },
-      []
+      [applyAddressSuggestion]
+    );
+
+  /*
+   * Suggestion chosen while typing the address:
+   * fill the fields and move the pin when the place
+   * has coordinates.
+   */
+  const handleAddressSuggestion =
+    useCallback(
+      (
+        suggestion: AddressSuggestion,
+        fromStreetField: boolean
+      ) => {
+        applyAddressSuggestion(
+          suggestion,
+          {
+            replaceStreet:
+              fromStreetField,
+          }
+        );
+
+        if (
+          suggestion.latitude !==
+            null &&
+          suggestion.longitude !==
+            null &&
+          Number.isFinite(
+            suggestion.latitude
+          ) &&
+          Number.isFinite(
+            suggestion.longitude
+          )
+        ) {
+          const coordinate: LatLng = {
+            latitude:
+              suggestion.latitude,
+
+            longitude:
+              suggestion.longitude,
+          };
+
+          /*
+           * Cancel any pending pin lookup so it does
+           * not overwrite the chosen suggestion.
+           */
+          reverseGeocodeIdRef.current += 1;
+
+          setAddressAutofilling(
+            false
+          );
+
+          selectDeliveryCoordinate(
+            coordinate,
+            {
+              autofill:
+                false,
+            }
+          );
+
+          deliveryMapRef.current
+            ?.animateToRegion(
+              {
+                latitude:
+                  coordinate.latitude,
+
+                longitude:
+                  coordinate.longitude,
+
+                latitudeDelta:
+                  0.008,
+
+                longitudeDelta:
+                  0.008,
+              },
+              500
+            );
+        }
+      },
+      [
+        applyAddressSuggestion,
+        selectDeliveryCoordinate,
+      ]
     );
 
   /* =======================================================
@@ -1726,11 +1982,11 @@ export default function CustomerCheckoutScreen() {
         }
 
         if (
-          !isValidPhilippinePhone(
+          !isValidPhone(
             recipientPhone
           )
         ) {
-          return "Enter a valid Philippine phone number such as 09171234567.";
+          return PHONE_ERROR;
         }
 
         if (
@@ -1915,7 +2171,9 @@ export default function CustomerCheckoutScreen() {
           recipientName.trim(),
 
         recipientPhoneNumber:
-          recipientPhone.trim(),
+          normalizePhone(
+            recipientPhone
+          ),
 
         isPreOrder:
           scheduled,
@@ -2028,7 +2286,8 @@ export default function CustomerCheckoutScreen() {
         showErrors = false
       ) => {
         if (
-          !isCartCheckout
+          !isCartCheckout &&
+          !request
         ) {
           return null;
         }
@@ -2068,9 +2327,17 @@ export default function CustomerCheckoutScreen() {
             null
           );
 
+          /*
+           * Cart → /checkout/quote
+           * Custom bouquet (AI conversation) →
+           * /checkout/custom-bouquet/quote
+           * Same delivery and pre-order fee rules.
+           */
           const response =
             await apiRequest<CheckoutQuoteResponse>(
-              "/checkout/quote",
+              isCartCheckout
+                ? "/checkout/quote"
+                : "/checkout/custom-bouquet/quote",
               {
                 method:
                   "POST",
@@ -2080,7 +2347,14 @@ export default function CustomerCheckoutScreen() {
 
                 body:
                   JSON.stringify(
-                    commonBody
+                    isCartCheckout
+                      ? commonBody
+                      : {
+                          ...commonBody,
+
+                          customBouquetRequestId:
+                            request?._id,
+                        }
                   ),
               }
             );
@@ -2153,6 +2427,7 @@ export default function CustomerCheckoutScreen() {
         commonBody,
         getValidationError,
         isCartCheckout,
+        request,
       ]
     );
 
@@ -2164,8 +2439,9 @@ export default function CustomerCheckoutScreen() {
    */
   useEffect(() => {
     if (
-      !isCartCheckout ||
-      !cart
+      isCartCheckout
+        ? !cart
+        : !request
     ) {
       return;
     }
@@ -2207,6 +2483,7 @@ export default function CustomerCheckoutScreen() {
     commonBody,
     getValidationError,
     isCartCheckout,
+    request,
     requestCartQuote,
   ]);
 
@@ -2440,6 +2717,25 @@ export default function CustomerCheckoutScreen() {
         );
       }
 
+      /*
+       * Same as the cart: show the full total first.
+       * The server refuses the order if its total is
+       * different from the one shown here.
+       */
+      const freshQuote =
+        quote ??
+        (
+          await requestCartQuote(
+            true
+          )
+        );
+
+      if (!freshQuote) {
+        throw new Error(
+          "A valid checkout total is required before placing the order."
+        );
+      }
+
       const body = {
         ...commonBody,
 
@@ -2450,24 +2746,41 @@ export default function CustomerCheckoutScreen() {
 
         customBouquetRequestId:
           request._id,
+
+        expectedTotalAmount:
+          freshQuote.totalAmount,
       };
 
-      const response =
-        await apiRequest<CreateOrderResponse>(
-          "/orders",
-          {
-            method:
-              "POST",
+      let response: CreateOrderResponse;
 
-            authenticated:
-              true,
+      try {
+        response =
+          await apiRequest<CreateOrderResponse>(
+            "/orders",
+            {
+              method:
+                "POST",
 
-            body:
-              JSON.stringify(
-                body
-              ),
-          }
+              authenticated:
+                true,
+
+              body:
+                JSON.stringify(
+                  body
+                ),
+            }
+          );
+      } catch (error) {
+        /*
+         * Total changed on the server (e.g. delivery
+         * route) → show the new total before retrying.
+         */
+        void requestCartQuote(
+          false
         );
+
+        throw error;
+      }
 
       const order =
         response?.data
@@ -2664,7 +2977,7 @@ export default function CustomerCheckoutScreen() {
               "Checkout created",
               `Your orders were created, but the PayMongo payment page could not be completed.\n\n${getErrorMessage(
                 paymentError,
-                "You can retry payment."
+                "You can pay later from My Orders with Pay Now."
               )}`,
               [
                 {
@@ -2718,7 +3031,7 @@ export default function CustomerCheckoutScreen() {
               "Order created",
               `Your custom bouquet order was created, but the PayMongo payment page could not be opened.\n\n${getErrorMessage(
                 paymentError,
-                "You can retry payment later."
+                "You can pay later from My Orders with Pay Now."
               )}`,
               [
                 {
@@ -3444,23 +3757,41 @@ export default function CustomerCheckoutScreen() {
                 value={
                   recipientPhone
                 }
-                onChangeText={
-                  setRecipientPhone
+                onChangeText={(text) =>
+                  setRecipientPhone(
+                    sanitizePhoneInput(
+                      text
+                    )
+                  )
                 }
                 placeholder="09171234567"
                 placeholderTextColor="#A59CA1"
-                keyboardType="phone-pad"
+                keyboardType="number-pad"
+                maxLength={11}
                 style={
                   styles.input
                 }
               />
 
               <Text
-                style={
-                  styles.helperText
-                }
+                style={[
+                  styles.helperText,
+
+                  recipientPhone.length > 0 &&
+                    !isValidPhone(
+                      recipientPhone
+                    ) && {
+                      color:
+                        COLORS.danger,
+                    },
+                ]}
               >
-                Philippine mobile number
+                {recipientPhone.length > 0 &&
+                !isValidPhone(
+                  recipientPhone
+                )
+                  ? PHONE_ERROR
+                  : "11 digits starting with 09"}
               </Text>
             </Field>
           </Section>
@@ -3541,17 +3872,52 @@ export default function CustomerCheckoutScreen() {
                 </ScrollView>
               ) : null}
 
+              {addressAutofilling ? (
+                <View
+                  style={{
+                    flexDirection:
+                      "row",
+                    alignItems:
+                      "center",
+                    gap: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      COLORS.primary
+                    }
+                  />
+
+                  <Text
+                    style={
+                      styles.helperText
+                    }
+                  >
+                    Filling in the address from your map pin…
+                  </Text>
+                </View>
+              ) : null}
+
               <Field
                 label="Street / House Number"
               >
-                <TextInput
+                <AddressAutocomplete
+                  role="customer"
                   value={
                     street
                   }
                   onChangeText={
                     setStreet
                   }
-                  placeholder="123 Sample Street"
+                  onSelect={(suggestion) =>
+                    handleAddressSuggestion(
+                      suggestion,
+                      true
+                    )
+                  }
+                  placeholder="Type a street or barangay (e.g. Tabuco)"
                   placeholderTextColor="#A59CA1"
                   style={
                     styles.input
@@ -3562,12 +3928,19 @@ export default function CustomerCheckoutScreen() {
               <Field
                 label="Barangay"
               >
-                <TextInput
+                <AddressAutocomplete
+                  role="customer"
                   value={
                     barangay
                   }
                   onChangeText={
                     setBarangay
+                  }
+                  onSelect={(suggestion) =>
+                    handleAddressSuggestion(
+                      suggestion,
+                      false
+                    )
                   }
                   placeholder="Barangay"
                   placeholderTextColor="#A59CA1"
@@ -4484,62 +4857,182 @@ export default function CustomerCheckoutScreen() {
             <Section
               icon="receipt-outline"
               title="Price Summary"
-              subtitle="Final delivery and pre-order fees are calculated by the backend when the custom bouquet order is created."
+              subtitle="Agreed bouquet price plus delivery and pre-order fees, calculated by the FLOGRAM backend."
             >
-              <View
-                style={
-                  styles.totalCard
-                }
-              >
-                <SummaryRow
-                  label="Bouquet subtotal"
-                  value={
-                    customSubtotal
-                  }
-                />
-
+              {quoteLoading ? (
                 <View
                   style={
-                    styles.totalDivider
-                  }
-                />
-
-                <View
-                  style={
-                    styles.grandTotalRow
+                    styles.quoteLoading
                   }
                 >
-                  <View>
-                    <Text
-                      style={
-                        styles.grandTotalLabel
-                      }
-                    >
-                      Bouquet
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.grandTotalCaption
-                      }
-                    >
-                      Delivery or scheduling
-                      fees are confirmed by
-                      the server.
-                    </Text>
-                  </View>
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      COLORS.primary
+                    }
+                  />
 
                   <Text
                     style={
-                      styles.grandTotalValue
+                      styles.quoteLoadingText
                     }
                   >
-                    {formatCurrency(
-                      customSubtotal
-                    )}
+                    Calculating delivery
+                    and pre-order fees...
                   </Text>
                 </View>
-              </View>
+              ) : quote ? (
+                <View
+                  style={
+                    styles.totalCard
+                  }
+                >
+                  <SummaryRow
+                    label={
+                      customQuantity > 1
+                        ? `Bouquet (${formatCurrency(
+                            Number(
+                              quote.productsSubtotal ||
+                                0
+                            ) /
+                              customQuantity
+                          )} × ${customQuantity})`
+                        : "Bouquet (agreed price)"
+                    }
+                    value={
+                      quote.productsSubtotal
+                    }
+                  />
+
+                  <SummaryRow
+                    label="Delivery fee"
+                    value={
+                      quote.deliveryFee
+                    }
+                  />
+
+                  <SummaryRow
+                    label="Pre-order fee"
+                    value={
+                      quote.preOrderFee
+                    }
+                  />
+
+                  <View
+                    style={
+                      styles.totalDivider
+                    }
+                  />
+
+                  <View
+                    style={
+                      styles.grandTotalRow
+                    }
+                  >
+                    <View>
+                      <Text
+                        style={
+                          styles.grandTotalLabel
+                        }
+                      >
+                        Total
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.grandTotalCaption
+                        }
+                      >
+                        {fulfillmentType ===
+                        "pickup"
+                          ? "Pickup • no delivery fee"
+                          : "Delivery to your pinned location"}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={
+                        styles.grandTotalValue
+                      }
+                    >
+                      {formatCurrency(
+                        quote.totalAmount
+                      )}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View>
+                  <View
+                    style={
+                      styles.totalCard
+                    }
+                  >
+                    <SummaryRow
+                      label="Bouquet (agreed price)"
+                      value={
+                        customSubtotal
+                      }
+                    />
+                  </View>
+
+                  <View
+                    style={
+                      styles.pendingQuote
+                    }
+                  >
+                    <Ionicons
+                      name="calculator-outline"
+                      size={22}
+                      color={
+                        quoteError
+                          ? COLORS.danger
+                          : COLORS.primary
+                      }
+                    />
+
+                    <Text
+                      style={[
+                        styles.pendingQuoteText,
+
+                        quoteError &&
+                          styles.pendingQuoteError,
+                      ]}
+                    >
+                      {quoteError ||
+                        "Complete the recipient and fulfillment details to see the delivery fee, pre-order fee and total."}
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    onPress={() => {
+                      void requestCartQuote(
+                        true
+                      );
+                    }}
+                    disabled={
+                      quoteLoading
+                    }
+                    style={
+                      styles.calculateButton
+                    }
+                  >
+                    <Ionicons
+                      name="calculator-outline"
+                      size={17}
+                      color="#FFFFFF"
+                    />
+
+                    <Text
+                      style={
+                        styles.calculateButtonText
+                      }
+                    >
+                      Calculate Total
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
             </Section>
           )}
 
@@ -4678,7 +5171,8 @@ export default function CustomerCheckoutScreen() {
                 styles.bottomTotalLabel
               }
             >
-              {isCartCheckout
+              {isCartCheckout ||
+              quote
                 ? "Final total"
                 : "Bouquet subtotal"}
             </Text>
@@ -4697,12 +5191,13 @@ export default function CustomerCheckoutScreen() {
                       cartSubtotal
                     )
                 : formatCurrency(
-                    customSubtotal
+                    quote
+                      ? quote.totalAmount
+                      : customSubtotal
                   )}
             </Text>
 
-            {isCartCheckout &&
-              !quote && (
+            {!quote && (
               <Text
                 style={
                   styles.bottomEstimate

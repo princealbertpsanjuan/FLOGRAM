@@ -586,6 +586,17 @@ const checkoutSchema =
         default: null,
       },
 
+      /*
+       * Sessions replaced by "Pay Now" after they
+       * expired. A late payment on one of these is still
+       * recognised by the webhook.
+       */
+      previousPaymongoSessionIds: {
+        type: [String],
+
+        default: [],
+      },
+
       paymentCheckoutUrl: {
         type: String,
 

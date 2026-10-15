@@ -666,6 +666,16 @@ totalAmount: {
           true,
       },
 
+      /*
+       * Single-order PayMongo sessions replaced by
+       * "Pay Now" after they expired.
+       */
+      previousPaymongoSessionIds: {
+        type: [String],
+
+        default: [],
+      },
+
       paymongoPaymentIntentId: {
         type:
           String,

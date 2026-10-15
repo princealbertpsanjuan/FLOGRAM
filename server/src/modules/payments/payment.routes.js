@@ -6,6 +6,7 @@ import {
   createCheckout,
   getPaymentStatus,
   payMongoWebhook,
+  payOrder,
 } from "./payment.controller.js";
 
 import {
@@ -66,6 +67,32 @@ paymentRouter.post(
   validatePaymentRequest,
 
   createCheckout
+);
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * PAY NOW (pay again after closing / cancelling PayMongo)
+ * =========================================================
+ *
+ * POST
+ * /api/v1/payments/orders/:orderId/pay
+ * =========================================================
+ */
+paymentRouter.post(
+  "/orders/:orderId/pay",
+
+  authenticate,
+
+  authorize(
+    "customer"
+  ),
+
+  orderPaymentValidation,
+
+  validatePaymentRequest,
+
+  payOrder
 );
 
 /*

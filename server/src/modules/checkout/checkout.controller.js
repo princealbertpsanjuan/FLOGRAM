@@ -4,13 +4,52 @@ import {
   getCustomerCheckout,
   getCustomerCheckouts,
   processCheckoutPayMongoWebhook,
+  quoteCustomBouquetCheckout,
   quoteCustomerCheckout,
 } from "./checkout.service.js";
 
 /*
  * =========================================================
  * CUSTOMER
- * GET CHECKOUT QUOTE
+ * GET CUSTOM BOUQUET CHECKOUT QUOTE
+ * =========================================================
+ */
+
+export const quoteCustomBouquet =
+  async (
+    req,
+    res,
+    next
+  ) => {
+    try {
+      const quote =
+        await quoteCustomBouquetCheckout(
+          req.user.userId,
+          req.body
+        );
+
+      return res
+        .status(200)
+        .json({
+          success:
+            true,
+
+          message:
+            "Custom bouquet checkout quote calculated successfully.",
+
+          data: {
+            quote,
+          },
+        });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * GET CART CHECKOUT QUOTE
  * =========================================================
  */
 

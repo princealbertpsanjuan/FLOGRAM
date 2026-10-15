@@ -3,6 +3,12 @@ import {
   validationResult,
 } from "express-validator";
 
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+} from "../../utils/contactFormats.js";
+
 /*
  * =========================================================
  * CUSTOMER
@@ -210,15 +216,35 @@ export const createOrderValidation = [
 
   body("recipientPhoneNumber")
     .optional({
-      nullable: true,
+      values: "falsy",
     })
     .trim()
-    .matches(
-      /^(09|\+639)\d{9}$/
+    .custom((value) =>
+      isValidPhone(value)
     )
     .withMessage(
-      "Enter a valid Philippine phone number."
+      PHONE_ERROR
+    )
+    .customSanitizer(
+      normalizePhone
     ),
+
+  /*
+   * Total the customer saw on the checkout screen
+   * (custom bouquet quote). When sent, the order is
+   * only created if the server total is the same.
+   */
+  body("expectedTotalAmount")
+    .optional({
+      values: "null",
+    })
+    .isFloat({
+      min: 0,
+    })
+    .withMessage(
+      "Expected total amount is invalid."
+    )
+    .toFloat(),
 
   /*
    * =======================================================
