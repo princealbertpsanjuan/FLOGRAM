@@ -33,6 +33,9 @@ import AdminScreenHeader, {
   ADMIN_COLORS as C,
 } from '../../components/admin/admin-screen-header';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 import {
   formatPhDateTime,
   formatShiftWindow,
@@ -176,6 +179,11 @@ export default function AdminRiderShiftsScreen() {
         )
       : list;
   }, [shifts, filter]);
+
+  /*
+   * Show 5 shifts + "See all"; collapses on tab change.
+   */
+  const shiftsSeeAll = useSeeAll(visibleShifts, { resetKey: filter });
 
   const pendingTotal = useMemo(
     () =>
@@ -341,6 +349,7 @@ export default function AdminRiderShiftsScreen() {
         }
       />
 
+      <KeyboardSafeView>
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -503,7 +512,8 @@ export default function AdminRiderShiftsScreen() {
             </Text>
           </View>
         ) : (
-          visibleShifts.map(shift => {
+          <>
+          {shiftsSeeAll.visible.map(shift => {
             const statusStyle = SHIFT_STATUS_STYLE[shift.status];
             const pending = shift.reservations.filter(r => r.status === 'pending');
             const expanded = expandedId === shift._id;
@@ -643,9 +653,12 @@ export default function AdminRiderShiftsScreen() {
                 ) : null}
               </View>
             );
-          })
+          })}
+          <SeeAllButton state={shiftsSeeAll} role="admin" />
+          </>
         )}
       </ScrollView>
+      </KeyboardSafeView>
     </View>
   );
 }

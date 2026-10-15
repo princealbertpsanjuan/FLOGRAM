@@ -73,6 +73,22 @@ export type AdminFlorist = {
 
   shopLogo?: string | null;
 
+  address?: {
+    street?: string;
+    barangay?: string;
+    city?: string;
+    province?: string;
+    postalCode?: string;
+  } | null;
+
+  /*
+   * Map pin set by the seller (needed for delivery quotes).
+   */
+  location?: {
+    latitude?: number | null;
+    longitude?: number | null;
+  } | null;
+
   verificationStatus?:
     | "pending"
     | "approved"

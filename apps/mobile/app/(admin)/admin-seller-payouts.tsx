@@ -19,7 +19,9 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import ScreenHeader from '../../components/ui/screen-header';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import { EmptyState, ErrorState, ScreenLoader } from '../../components/ui/state-views';
 import {
   PAYMENT_METHOD_LABELS,
@@ -203,6 +205,14 @@ export default function AdminSellerPayoutsScreen() {
 
   const owedTotal = balances.reduce((sum, balance) => sum + Math.max(0, balance.amountOwed), 0);
 
+  const owedBalances = balances.filter(balance => balance.unpaidOrderCount > 0 || balance.awaitingCodOrders > 0);
+
+  /*
+   * Show 5 records + "See all"; collapses on tab change.
+   */
+  const balancesSeeAll = useSeeAll(owedBalances, { resetKey: tab });
+  const payoutsSeeAll = useSeeAll(payouts, { resetKey: tab });
+
   return (
     <View style={styles.screen}>
       <ScreenHeader
@@ -228,6 +238,7 @@ export default function AdminSellerPayoutsScreen() {
       {loading ? (
         <ScreenLoader role="admin" />
       ) : (
+        <KeyboardSafeView>
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
           keyboardShouldPersistTaps="handled"
@@ -256,11 +267,11 @@ export default function AdminSellerPayoutsScreen() {
                 </Text>
               </View>
 
-              {balances.filter(balance => balance.unpaidOrderCount > 0 || balance.awaitingCodOrders > 0).length === 0 ? (
+              {owedBalances.length === 0 ? (
                 <EmptyState role="admin" icon="wallet-outline" title="Nothing owed" message="All seller earnings are paid out." />
               ) : (
-                balances
-                  .filter(balance => balance.unpaidOrderCount > 0 || balance.awaitingCodOrders > 0)
+                <>
+                {balancesSeeAll.visible
                   .map(balance => (
                     <View key={balance.floristId} style={styles.card}>
                       <View style={styles.rowBetween}>
@@ -317,13 +328,16 @@ export default function AdminSellerPayoutsScreen() {
                         </Pressable>
                       ) : null}
                     </View>
-                  ))
+                  ))}
+                <SeeAllButton state={balancesSeeAll} role="admin" />
+                </>
               )}
             </>
           ) : payouts.length === 0 ? (
             <EmptyState role="admin" icon="document-text-outline" title={`No ${tab} payouts`} />
           ) : (
-            payouts.map(payout => (
+            <>
+            {payoutsSeeAll.visible.map(payout => (
               <View key={payout._id} style={styles.card}>
                 <View style={styles.rowBetween}>
                   <View style={{ flex: 1 }}>
@@ -440,9 +454,12 @@ export default function AdminSellerPayoutsScreen() {
                   )
                 ) : null}
               </View>
-            ))
+            ))}
+            <SeeAllButton state={payoutsSeeAll} role="admin" />
+            </>
           )}
         </ScrollView>
+        </KeyboardSafeView>
       )}
     </View>
   );

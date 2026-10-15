@@ -31,6 +31,7 @@ import {
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 
 /*
  * =========================================================
@@ -962,6 +963,13 @@ export default function AdminReportsScreen() {
    * LOADING
    * =======================================================
    */
+
+  /*
+   * Top Shops: show 5 + "See all"; collapses on period change.
+   */
+  const topShopsSeeAll = useSeeAll(report?.topShops, {
+    resetKey: selectedPeriod,
+  });
 
   if (loading && !report) {
     return (
@@ -1997,14 +2005,21 @@ export default function AdminReportsScreen() {
                 </Text>
               </View>
             ) : (
-              report.topShops.map(
-                (shop) => (
-                  <TopShopRow
-                    key={`${shop.floristId ?? shop.rank}`}
-                    shop={shop}
-                  />
-                )
-              )
+              <>
+                {topShopsSeeAll.visible.map(
+                  (shop) => (
+                    <TopShopRow
+                      key={`${shop.floristId ?? shop.rank}`}
+                      shop={shop}
+                    />
+                  )
+                )}
+
+                <SeeAllButton
+                  state={topShopsSeeAll}
+                  role="admin"
+                />
+              </>
             )}
           </View>
 

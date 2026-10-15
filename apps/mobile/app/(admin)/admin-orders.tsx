@@ -26,6 +26,7 @@ import {
 } from "../../services/admin";
 
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 
 type FilterStatus =
   | "all"
@@ -536,6 +537,14 @@ export default function AdminOrdersScreen() {
       search,
       dateRange,
     ]);
+
+  /*
+   * Show 5 orders + "See all"; collapses again when the
+   * status, date or search filter changes.
+   */
+  const seeAll = useSeeAll(filteredOrders, {
+    resetKey: `${filter}|${dateRange}|${search.trim().toLowerCase()}`,
+  });
 
   /*
    * Same definitions as the Admin Dashboard:
@@ -1266,7 +1275,7 @@ export default function AdminOrdersScreen() {
                 styles.list
               }
             >
-              {filteredOrders.map(
+              {seeAll.visible.map(
                 (order, index) => {
                   const id =
                     getOrderId(
@@ -1282,7 +1291,7 @@ export default function AdminOrdersScreen() {
                     index === 0 ||
                     dayLabel !==
                       getDayLabel(
-                        filteredOrders[index - 1]
+                        seeAll.visible[index - 1]
                           .createdAt
                       );
 
@@ -1529,6 +1538,8 @@ export default function AdminOrdersScreen() {
                   );
                 }
               )}
+
+              <SeeAllButton state={seeAll} role="admin" />
             </View>
           )}
         </View>

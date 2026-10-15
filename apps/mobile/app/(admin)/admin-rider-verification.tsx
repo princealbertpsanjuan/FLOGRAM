@@ -25,6 +25,7 @@ import {
 } from "../../services/admin";
 
 import RequirementDocumentsView from "../../components/admin/requirement-documents";
+import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
 
 const COLORS = {
   purple: "#312E81",
@@ -392,6 +393,11 @@ export default function AdminRiderVerificationScreen() {
     }
   }, [rejectionReason, selectedRider]);
 
+  /*
+   * Show 5 applications + "See all".
+   */
+  const seeAll = useSeeAll(riders);
+
   if (loading && riders.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -635,7 +641,7 @@ export default function AdminRiderVerificationScreen() {
           </View>
         ) : null}
 
-        {riders.map((rider) => {
+        {seeAll.visible.map((rider) => {
           const riderId = getRiderId(rider);
           const owner = getOwner(rider);
           const processing =
@@ -798,6 +804,8 @@ export default function AdminRiderVerificationScreen() {
             </View>
           );
         })}
+
+        <SeeAllButton state={seeAll} role="admin" />
 
         <View style={styles.bottomSpace} />
       </ScrollView>
@@ -1010,11 +1018,7 @@ export default function AdminRiderVerificationScreen() {
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
-          behavior={
-            Platform.OS === "ios"
-              ? "padding"
-              : undefined
-          }
+          behavior={Platform.OS === 'web' ? undefined : 'padding'}
         >
           <Pressable
             style={StyleSheet.absoluteFill}

@@ -16,6 +16,7 @@ import {
   AdminRiderRemittance,
   getAdminRemittances,
 } from "../../services/admin";
+import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
 
 type FilterStatus = "all" | AdminRemittanceStatus;
 
@@ -295,6 +296,13 @@ export default function AdminRemittancesScreen() {
       (item) => item.status === selectedFilter
     );
   }, [remittances, selectedFilter]);
+
+  /*
+   * Show 5 remittances + "See all"; collapses on tab change.
+   */
+  const seeAll = useSeeAll(filteredRemittances, {
+    resetKey: selectedFilter,
+  });
 
   const submittedCount = useMemo(
     () =>
@@ -670,7 +678,7 @@ export default function AdminRemittancesScreen() {
           </View>
         ) : null}
 
-        {filteredRemittances.map(
+        {seeAll.visible.map(
           (remittance) => {
             const statusStyle =
               getStatusStyle(remittance.status);
@@ -901,6 +909,8 @@ export default function AdminRemittancesScreen() {
             );
           }
         )}
+
+        <SeeAllButton state={seeAll} role="admin" />
 
         <View style={styles.bottomSpace} />
       </ScrollView>

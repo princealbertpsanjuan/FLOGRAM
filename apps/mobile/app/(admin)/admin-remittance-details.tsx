@@ -1139,11 +1139,7 @@ export default function AdminRemittanceDetailsScreen() {
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
-          behavior={
-            Platform.OS === "ios"
-              ? "padding"
-              : undefined
-          }
+          behavior={Platform.OS === 'web' ? undefined : 'padding'}
         >
           <Pressable
             style={StyleSheet.absoluteFill}

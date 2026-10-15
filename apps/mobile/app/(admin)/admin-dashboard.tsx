@@ -32,6 +32,7 @@ import {
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import InboxBell from '../../components/ui/inbox-bell';
 import { useDesktopWeb } from '../../hooks/use-desktop-web';
 
@@ -435,6 +436,14 @@ export default function AdminDashboardScreen() {
       void loadDashboard();
     }, [loadDashboard])
   );
+
+  /*
+   * System Activity: show 5 + "See all".
+   */
+  const activitySeeAll =
+    useSeeAll(
+      dashboard?.recentActivity
+    );
 
   /*
    * =======================================================
@@ -1673,7 +1682,7 @@ export default function AdminDashboardScreen() {
                   styles.contentSubheading
                 }
               >
-                Seller payouts, disputes, penalties and insights
+                Listings, seller payouts, disputes, penalties and insights
               </Text>
             </View>
           </View>
@@ -1681,25 +1690,33 @@ export default function AdminDashboardScreen() {
           {[
             [
               {
+                icon: "flower-outline" as const,
+                title: "Products",
+                text: "Browse seller listings, hide or restore",
+                route: "/(admin)/admin-products",
+              },
+              {
                 icon: "wallet-outline" as const,
                 title: "Seller Payouts",
                 text: "Sales minus commission, record transfers",
                 route: "/(admin)/admin-seller-payouts",
               },
+            ],
+            [
               {
                 icon: "chatbubbles-outline" as const,
                 title: "Disputes",
                 text: "Review and resolve reported orders",
                 route: "/(admin)/admin-disputes",
               },
-            ],
-            [
               {
                 icon: "warning-outline" as const,
                 title: "Violations",
                 text: "Warnings, suspensions and bans",
                 route: "/(admin)/admin-violations",
               },
+            ],
+            [
               {
                 icon: "analytics-outline" as const,
                 title: "Customer Insights",
@@ -2021,7 +2038,7 @@ export default function AdminDashboardScreen() {
                 </Text>
               </View>
             ) : (
-              activities.map(
+              activitySeeAll.visible.map(
                 (
                   activity,
                   index
@@ -2105,7 +2122,7 @@ export default function AdminDashboardScreen() {
                       </View>
 
                       {index <
-                        activities.length -
+                        activitySeeAll.visible.length -
                           1 && (
                         <View
                           style={
@@ -2119,6 +2136,11 @@ export default function AdminDashboardScreen() {
               )
             )}
           </View>
+
+          <SeeAllButton
+            state={activitySeeAll}
+            role="admin"
+          />
 
           <View
             style={
