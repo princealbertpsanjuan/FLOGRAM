@@ -25,6 +25,7 @@ import {
 } from "react-native";
 
 import SafeAreaView from '../../components/ui/top-safe-area-view';
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 
 import { apiRequest } from "../../services/api";
 import { getStoredUser } from "../../services/auth";
@@ -3548,6 +3549,7 @@ const openRequestAiConversation = (
               </View>
             </View>
 
+            {/* Inside the screen's KeyboardSafeView (main render). */}
             <TextInput
               value={caption}
               onChangeText={
@@ -4134,12 +4136,7 @@ const openRequestAiConversation = (
             }
           >
             <KeyboardAvoidingView
-              behavior={
-                Platform.OS ===
-                "ios"
-                  ? "padding"
-                  : undefined
-              }
+              behavior={Platform.OS === 'web' ? undefined : 'padding'}
               style={
                 styles.commentSheet
               }
@@ -4573,14 +4570,12 @@ const openRequestAiConversation = (
         }
       />
 
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
-        }
-      >
+      {/*
+       * Every tab renders inside this ScrollView, so the
+       * "Share a Floral Moment" caption and the request
+       * inputs stay above the keyboard.
+       */}
+      <KeyboardSafeView style={styles.container}>
         <View
           style={styles.header}
         >
@@ -4772,9 +4767,13 @@ const openRequestAiConversation = (
             "requests" &&
             renderRequestsTab()}
         </ScrollView>
+      </KeyboardSafeView>
 
-        <CustomerBottomNav active="bloom" />
-      </KeyboardAvoidingView>
+      {/*
+       * Outside the keyboard wrapper so the nav stays under
+       * the keyboard instead of being pushed above it.
+       */}
+      <CustomerBottomNav active="bloom" />
 
       {renderCommentsModal()}
     </SafeAreaView>

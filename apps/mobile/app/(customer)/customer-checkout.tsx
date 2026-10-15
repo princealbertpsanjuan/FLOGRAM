@@ -2903,12 +2903,7 @@ export default function CustomerCheckoutScreen() {
         style={
           styles.container
         }
-        behavior={
-          Platform.OS ===
-          "ios"
-            ? "padding"
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         {/* HEADER */}
 

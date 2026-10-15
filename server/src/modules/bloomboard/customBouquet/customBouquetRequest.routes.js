@@ -5,6 +5,7 @@ import {
 import {
   cancel,
   create,
+  dismiss,
   getForSeller,
   getMine,
   getOne,
@@ -205,6 +206,28 @@ customBouquetRequestRouter.patch(
   authorize("customer"),
   validateCustomBouquetRequestId,
   cancel
+);
+
+/*
+ * =========================================================
+ * SELLER
+ * REMOVE A REQUEST FROM OWN LIST
+ * =========================================================
+ *
+ * PATCH /:requestId/dismiss
+ *
+ * Requests are broadcast to every approved
+ * florist; this hides one request for the
+ * calling florist only.
+ * =========================================================
+ */
+
+customBouquetRequestRouter.patch(
+  "/:requestId/dismiss",
+  authenticate,
+  authorize("seller"),
+  validateCustomBouquetRequestId,
+  dismiss
 );
 
 /*

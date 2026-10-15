@@ -28,6 +28,7 @@ import {
 } from "../../services/api";
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import AlsoBoughtRow from '../../components/customer/also-bought-row';
 import ListingComments from '../../components/customer/listing-comments';
 import GiftHint from '../../components/customer/gift-hint';
@@ -818,643 +819,650 @@ export default function CustomerProductDetailsScreen() {
          * =================================================
          */}
 
-        <ScrollView
-          style={
-            styles.scrollView
-          }
-          contentContainerStyle={
-            styles.scrollContent
-          }
-          showsVerticalScrollIndicator={
-            false
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={
-                refreshing
-              }
-              onRefresh={
-                handleRefresh
-              }
-              tintColor="#D85D7A"
-              colors={[
-                "#D85D7A",
-              ]}
-            />
-          }
-        >
-          {/*
-           * ===============================================
-           * MAIN IMAGE
-           * ===============================================
-           */}
-
-          <View
+        {/*
+         * The comment box (ListingComments) lifts
+         * above the keyboard.
+         */}
+        <KeyboardSafeView>
+          <ScrollView
             style={
-              styles.heroContainer
+              styles.scrollView
+            }
+            contentContainerStyle={
+              styles.scrollContent
+            }
+            showsVerticalScrollIndicator={
+              false
+            }
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={
+                  refreshing
+                }
+                onRefresh={
+                  handleRefresh
+                }
+                tintColor="#D85D7A"
+                colors={[
+                  "#D85D7A",
+                ]}
+              />
             }
           >
-            {currentImage ? (
-              <Image
-                source={{
-                  uri:
-                    currentImage,
-                }}
-                style={
-                  styles.heroImage
-                }
-                resizeMode="cover"
-              />
-            ) : (
+            {/*
+             * ===============================================
+             * MAIN IMAGE
+             * ===============================================
+             */}
+
+            <View
+              style={
+                styles.heroContainer
+              }
+            >
+              {currentImage ? (
+                <Image
+                  source={{
+                    uri:
+                      currentImage,
+                  }}
+                  style={
+                    styles.heroImage
+                  }
+                  resizeMode="cover"
+                />
+              ) : (
+                <View
+                  style={
+                    styles.heroPlaceholder
+                  }
+                >
+                  <Ionicons
+                    name="flower-outline"
+                    size={68}
+                    color="#D991A5"
+                  />
+
+                  <Text
+                    style={
+                      styles.noImageText
+                    }
+                  >
+                    No image
+                    available
+                  </Text>
+                </View>
+              )}
+
               <View
-                style={
-                  styles.heroPlaceholder
-                }
+                style={[
+                  styles.availabilityBadge,
+
+                  !isAvailable &&
+                    styles.unavailableBadge,
+                ]}
               >
-                <Ionicons
-                  name="flower-outline"
-                  size={68}
-                  color="#D991A5"
+                <View
+                  style={[
+                    styles.availabilityDot,
+
+                    !isAvailable &&
+                      styles.unavailableDot,
+                  ]}
                 />
 
                 <Text
-                  style={
-                    styles.noImageText
-                  }
+                  style={[
+                    styles.availabilityText,
+
+                    !isAvailable &&
+                      styles.unavailableText,
+                  ]}
                 >
-                  No image
-                  available
+                  {isAvailable
+                    ? "Available"
+                    : "Unavailable"}
                 </Text>
               </View>
-            )}
+            </View>
+
+            {/*
+             * ===============================================
+             * IMAGE THUMBNAILS
+             * ===============================================
+             */}
+
+            {images.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={
+                  false
+                }
+                contentContainerStyle={
+                  styles.thumbnailList
+                }
+              >
+                {images.map(
+                  (
+                    image,
+                    index
+                  ) => {
+                    const imageUrl =
+                      getImageUrl(
+                        image
+                      );
+
+                    return (
+                      <Pressable
+                        key={`${image}-${index}`}
+                        style={[
+                          styles.thumbnailContainer,
+
+                          selectedImageIndex ===
+                            index &&
+                            styles.thumbnailSelected,
+                        ]}
+                        onPress={() =>
+                          setSelectedImageIndex(
+                            index
+                          )
+                        }
+                      >
+                        {imageUrl ? (
+                          <Image
+                            source={{
+                              uri:
+                                imageUrl,
+                            }}
+                            style={
+                              styles.thumbnail
+                            }
+                          />
+                        ) : (
+                          <View
+                            style={
+                              styles.thumbnailPlaceholder
+                            }
+                          >
+                            <Ionicons
+                              name="flower-outline"
+                              size={19}
+                              color="#D991A5"
+                            />
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  }
+                )}
+              </ScrollView>
+            ) : null}
+
+            {/*
+             * ===============================================
+             * PRODUCT INFORMATION
+             * ===============================================
+             */}
 
             <View
-              style={[
-                styles.availabilityBadge,
-
-                !isAvailable &&
-                  styles.unavailableBadge,
-              ]}
+              style={
+                styles.productCard
+              }
             >
-              <View
-                style={[
-                  styles.availabilityDot,
+              <View style={styles.shopRow}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.shopName,
+                    { flex: 1 },
+                  ]}
+                >
+                  {getFloristName(
+                    flower.florist
+                  )}
+                </Text>
 
-                  !isAvailable &&
-                    styles.unavailableDot,
-                ]}
-              />
+                <FollowShopButton floristId={florist?._id} />
+              </View>
 
               <Text
-                style={[
-                  styles.availabilityText,
-
-                  !isAvailable &&
-                    styles.unavailableText,
-                ]}
+                style={
+                  styles.productName
+                }
               >
-                {isAvailable
-                  ? "Available"
-                  : "Unavailable"}
+                {flower.name}
               </Text>
-            </View>
-          </View>
 
-          {/*
-           * ===============================================
-           * IMAGE THUMBNAILS
-           * ===============================================
-           */}
+              <View
+                style={
+                  styles.priceRow
+                }
+              >
+                <Text
+                  style={
+                    styles.price
+                  }
+                >
+                  {formatPrice(
+                    flower.price
+                  )}
+                </Text>
 
-          {images.length > 1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
-                styles.thumbnailList
-              }
-            >
-              {images.map(
-                (
-                  image,
-                  index
-                ) => {
-                  const imageUrl =
-                    getImageUrl(
-                      image
-                    );
-
-                  return (
-                    <Pressable
-                      key={`${image}-${index}`}
-                      style={[
-                        styles.thumbnailContainer,
-
-                        selectedImageIndex ===
-                          index &&
-                          styles.thumbnailSelected,
-                      ]}
-                      onPress={() =>
-                        setSelectedImageIndex(
-                          index
-                        )
+                {flower.category ? (
+                  <View
+                    style={
+                      styles.categoryBadge
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.categoryText
                       }
                     >
-                      {imageUrl ? (
-                        <Image
-                          source={{
-                            uri:
-                              imageUrl,
-                          }}
-                          style={
-                            styles.thumbnail
-                          }
-                        />
-                      ) : (
-                        <View
-                          style={
-                            styles.thumbnailPlaceholder
-                          }
-                        >
-                          <Ionicons
-                            name="flower-outline"
-                            size={19}
-                            color="#D991A5"
-                          />
-                        </View>
-                      )}
-                    </Pressable>
-                  );
+                      {
+                        flower.category
+                      }
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {flower.description ? (
+                <>
+                  <View
+                    style={
+                      styles.divider
+                    }
+                  />
+
+                  <Text
+                    style={
+                      styles.sectionLabel
+                    }
+                  >
+                    Description
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.description
+                    }
+                  >
+                    {
+                      flower.description
+                    }
+                  </Text>
+                </>
+              ) : null}
+            </View>
+
+            {/*
+             * ===============================================
+             * BOUQUET DETAILS
+             * ===============================================
+             */}
+
+            <View
+              style={
+                styles.infoCard
+              }
+            >
+              <View
+                style={
+                  styles.sectionHeader
                 }
-              )}
-            </ScrollView>
-          ) : null}
+              >
+                <View
+                  style={
+                    styles.sectionIcon
+                  }
+                >
+                  <Ionicons
+                    name="flower-outline"
+                    size={19}
+                    color="#D85D7A"
+                  />
+                </View>
 
-          {/*
-           * ===============================================
-           * PRODUCT INFORMATION
-           * ===============================================
-           */}
+                <Text
+                  style={
+                    styles.sectionTitle
+                  }
+                >
+                  Bouquet Details
+                </Text>
+              </View>
 
-          <View
-            style={
-              styles.productCard
-            }
-          >
-            <View style={styles.shopRow}>
+              <DetailRow
+                icon="pricetag-outline"
+                label="Category"
+                value={
+                  flower.category ||
+                  "Not specified"
+                }
+              />
+
+              <DetailRow
+                icon="flower-outline"
+                label="Flower Type"
+                value={
+                  flower
+                    .flowerTypes
+                    ?.length
+                    ? flower.flowerTypes.join(
+                        ", "
+                      )
+                    : "Not specified"
+                }
+              />
+
+              <DetailRow
+                icon="color-palette-outline"
+                label="Color"
+                value={
+                  flower.colors
+                    ?.length
+                    ? flower.colors.join(
+                        ", "
+                      )
+                    : "Not specified"
+                }
+              />
+
+              <DetailRow
+                icon="gift-outline"
+                label="Occasion"
+                value={
+                  flower.occasion
+                    ?.length
+                    ? flower.occasion.join(
+                        ", "
+                      )
+                    : "Any occasion"
+                }
+                last
+              />
+            </View>
+
+            {/*
+             * ===============================================
+             * FLORIST INFORMATION
+             * ===============================================
+             */}
+
+            <View
+              style={
+                styles.infoCard
+              }
+            >
+              <View
+                style={
+                  styles.sectionHeader
+                }
+              >
+                <View
+                  style={
+                    styles.sectionIcon
+                  }
+                >
+                  <Ionicons
+                    name="storefront-outline"
+                    size={19}
+                    color="#D85D7A"
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.sectionTitle
+                  }
+                >
+                  Florist
+                </Text>
+              </View>
+
               <Text
-                numberOfLines={1}
-                style={[
-                  styles.shopName,
-                  { flex: 1 },
-                ]}
+                style={
+                  styles.floristTitle
+                }
               >
                 {getFloristName(
                   flower.florist
                 )}
               </Text>
 
-              <FollowShopButton floristId={florist?._id} />
-            </View>
-
-            <Text
-              style={
-                styles.productName
-              }
-            >
-              {flower.name}
-            </Text>
-
-            <View
-              style={
-                styles.priceRow
-              }
-            >
-              <Text
-                style={
-                  styles.price
-                }
-              >
-                {formatPrice(
-                  flower.price
-                )}
-              </Text>
-
-              {flower.category ? (
-                <View
+              {florist?.description ? (
+                <Text
                   style={
-                    styles.categoryBadge
+                    styles.floristDescription
                   }
                 >
+                  {
+                    florist.description
+                  }
+                </Text>
+              ) : null}
+
+              <View
+                style={
+                  styles.floristDivider
+                }
+              />
+
+              <View
+                style={
+                  styles.floristInfoRow
+                }
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={18}
+                  color="#938987"
+                />
+
+                <Text
+                  style={
+                    styles.floristInfoText
+                  }
+                >
+                  {formatAddress(
+                    florist?.address
+                  )}
+                </Text>
+              </View>
+
+              {florist?.contactNumber ? (
+                <View
+                  style={
+                    styles.floristInfoRow
+                  }
+                >
+                  <Ionicons
+                    name="call-outline"
+                    size={18}
+                    color="#938987"
+                  />
+
                   <Text
                     style={
-                      styles.categoryText
+                      styles.floristInfoText
                     }
                   >
                     {
-                      flower.category
+                      florist.contactNumber
+                    }
+                  </Text>
+                </View>
+              ) : null}
+
+              {florist?.businessEmail ? (
+                <View
+                  style={
+                    styles.floristInfoRow
+                  }
+                >
+                  <Ionicons
+                    name="mail-outline"
+                    size={18}
+                    color="#938987"
+                  />
+
+                  <Text
+                    style={
+                      styles.floristInfoText
+                    }
+                  >
+                    {
+                      florist.businessEmail
                     }
                   </Text>
                 </View>
               ) : null}
             </View>
 
-            {flower.description ? (
-              <>
+            {/*
+             * ===============================================
+             * QUANTITY
+             * ===============================================
+             */}
+
+            <View
+              style={
+                styles.quantityCard
+              }
+            >
+              <View>
+                <Text
+                  style={
+                    styles.quantityTitle
+                  }
+                >
+                  Quantity
+                </Text>
+
+                <Text
+                  style={
+                    styles.quantitySubtitle
+                  }
+                >
+                  Choose how many
+                  bouquets
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.quantityControl
+                }
+              >
+                <Pressable
+                  style={[
+                    styles.quantityButton,
+
+                    quantity <= 1 &&
+                      styles.quantityButtonDisabled,
+                  ]}
+                  onPress={
+                    decreaseQuantity
+                  }
+                  disabled={
+                    quantity <= 1
+                  }
+                >
+                  <Ionicons
+                    name="remove"
+                    size={19}
+                    color={
+                      quantity <= 1
+                        ? "#CFC8C6"
+                        : "#554E4C"
+                    }
+                  />
+                </Pressable>
+
                 <View
                   style={
-                    styles.divider
-                  }
-                />
-
-                <Text
-                  style={
-                    styles.sectionLabel
+                    styles.quantityValueContainer
                   }
                 >
-                  Description
-                </Text>
+                  <Text
+                    style={
+                      styles.quantityValue
+                    }
+                  >
+                    {quantity}
+                  </Text>
+                </View>
 
-                <Text
+                <Pressable
                   style={
-                    styles.description
+                    styles.quantityButton
+                  }
+                  onPress={
+                    increaseQuantity
+                  }
+                  disabled={
+                    !isAvailable
                   }
                 >
-                  {
-                    flower.description
-                  }
-                </Text>
-              </>
-            ) : null}
-          </View>
-
-          {/*
-           * ===============================================
-           * BOUQUET DETAILS
-           * ===============================================
-           */}
-
-          <View
-            style={
-              styles.infoCard
-            }
-          >
-            <View
-              style={
-                styles.sectionHeader
-              }
-            >
-              <View
-                style={
-                  styles.sectionIcon
-                }
-              >
-                <Ionicons
-                  name="flower-outline"
-                  size={19}
-                  color="#D85D7A"
-                />
+                  <Ionicons
+                    name="add"
+                    size={19}
+                    color={
+                      isAvailable
+                        ? "#554E4C"
+                        : "#CFC8C6"
+                    }
+                  />
+                </Pressable>
               </View>
-
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Bouquet Details
-              </Text>
             </View>
 
-            <DetailRow
-              icon="pricetag-outline"
-              label="Category"
-              value={
-                flower.category ||
-                "Not specified"
-              }
-            />
-
-            <DetailRow
-              icon="flower-outline"
-              label="Flower Type"
-              value={
-                flower
-                  .flowerTypes
-                  ?.length
-                  ? flower.flowerTypes.join(
-                      ", "
-                    )
-                  : "Not specified"
-              }
-            />
-
-            <DetailRow
-              icon="color-palette-outline"
-              label="Color"
-              value={
-                flower.colors
-                  ?.length
-                  ? flower.colors.join(
-                      ", "
-                    )
-                  : "Not specified"
-              }
-            />
-
-            <DetailRow
-              icon="gift-outline"
-              label="Occasion"
-              value={
-                flower.occasion
-                  ?.length
-                  ? flower.occasion.join(
-                      ", "
-                    )
-                  : "Any occasion"
-              }
-              last
-            />
-          </View>
-
-          {/*
-           * ===============================================
-           * FLORIST INFORMATION
-           * ===============================================
-           */}
-
-          <View
-            style={
-              styles.infoCard
-            }
-          >
-            <View
-              style={
-                styles.sectionHeader
-              }
-            >
-              <View
-                style={
-                  styles.sectionIcon
-                }
-              >
-                <Ionicons
-                  name="storefront-outline"
-                  size={19}
-                  color="#D85D7A"
-                />
-              </View>
-
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Florist
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.floristTitle
-              }
-            >
-              {getFloristName(
-                flower.florist
-              )}
-            </Text>
-
-            {florist?.description ? (
-              <Text
-                style={
-                  styles.floristDescription
-                }
-              >
-                {
-                  florist.description
-                }
-              </Text>
-            ) : null}
+            {/*
+             * ===============================================
+             * IMPORTANT AVAILABILITY NOTE
+             * ===============================================
+             */}
 
             <View
               style={
-                styles.floristDivider
-              }
-            />
-
-            <View
-              style={
-                styles.floristInfoRow
+                styles.availabilityNote
               }
             >
               <Ionicons
-                name="location-outline"
-                size={18}
-                color="#938987"
+                name="information-circle-outline"
+                size={20}
+                color="#B37B35"
               />
 
               <Text
                 style={
-                  styles.floristInfoText
+                  styles.availabilityNoteText
                 }
               >
-                {formatAddress(
-                  florist?.address
-                )}
+                Bouquet availability
+                is confirmed through
+                the florist listing.
+                Arrangements are
+                prepared after an
+                order is confirmed.
               </Text>
             </View>
 
-            {florist?.contactNumber ? (
-              <View
-                style={
-                  styles.floristInfoRow
-                }
-              >
-                <Ionicons
-                  name="call-outline"
-                  size={18}
-                  color="#938987"
-                />
+            <GiftHint floristId={florist?._id} />
 
-                <Text
-                  style={
-                    styles.floristInfoText
-                  }
-                >
-                  {
-                    florist.contactNumber
-                  }
-                </Text>
-              </View>
-            ) : null}
+            <ListingComments flowerId={flower._id} />
 
-            {florist?.businessEmail ? (
-              <View
-                style={
-                  styles.floristInfoRow
-                }
-              >
-                <Ionicons
-                  name="mail-outline"
-                  size={18}
-                  color="#938987"
-                />
-
-                <Text
-                  style={
-                    styles.floristInfoText
-                  }
-                >
-                  {
-                    florist.businessEmail
-                  }
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/*
-           * ===============================================
-           * QUANTITY
-           * ===============================================
-           */}
-
-          <View
-            style={
-              styles.quantityCard
-            }
-          >
-            <View>
-              <Text
-                style={
-                  styles.quantityTitle
-                }
-              >
-                Quantity
-              </Text>
-
-              <Text
-                style={
-                  styles.quantitySubtitle
-                }
-              >
-                Choose how many
-                bouquets
-              </Text>
-            </View>
+            <AlsoBoughtRow flowerId={flower._id} />
 
             <View
               style={
-                styles.quantityControl
+                styles.bottomSpacer
               }
-            >
-              <Pressable
-                style={[
-                  styles.quantityButton,
-
-                  quantity <= 1 &&
-                    styles.quantityButtonDisabled,
-                ]}
-                onPress={
-                  decreaseQuantity
-                }
-                disabled={
-                  quantity <= 1
-                }
-              >
-                <Ionicons
-                  name="remove"
-                  size={19}
-                  color={
-                    quantity <= 1
-                      ? "#CFC8C6"
-                      : "#554E4C"
-                  }
-                />
-              </Pressable>
-
-              <View
-                style={
-                  styles.quantityValueContainer
-                }
-              >
-                <Text
-                  style={
-                    styles.quantityValue
-                  }
-                >
-                  {quantity}
-                </Text>
-              </View>
-
-              <Pressable
-                style={
-                  styles.quantityButton
-                }
-                onPress={
-                  increaseQuantity
-                }
-                disabled={
-                  !isAvailable
-                }
-              >
-                <Ionicons
-                  name="add"
-                  size={19}
-                  color={
-                    isAvailable
-                      ? "#554E4C"
-                      : "#CFC8C6"
-                  }
-                />
-              </Pressable>
-            </View>
-          </View>
-
-          {/*
-           * ===============================================
-           * IMPORTANT AVAILABILITY NOTE
-           * ===============================================
-           */}
-
-          <View
-            style={
-              styles.availabilityNote
-            }
-          >
-            <Ionicons
-              name="information-circle-outline"
-              size={20}
-              color="#B37B35"
             />
-
-            <Text
-              style={
-                styles.availabilityNoteText
-              }
-            >
-              Bouquet availability
-              is confirmed through
-              the florist listing.
-              Arrangements are
-              prepared after an
-              order is confirmed.
-            </Text>
-          </View>
-
-          <GiftHint floristId={florist?._id} />
-
-          <ListingComments flowerId={flower._id} />
-
-          <AlsoBoughtRow flowerId={flower._id} />
-
-          <View
-            style={
-              styles.bottomSpacer
-            }
-          />
-        </ScrollView>
+          </ScrollView>
+        </KeyboardSafeView>
 
         {/*
          * =================================================

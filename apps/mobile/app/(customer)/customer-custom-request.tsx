@@ -7,6 +7,7 @@ import {
 import React, {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -25,7 +26,7 @@ import {
   View,
 } from "react-native";
 
-import { apiRequest } from "../../services/api";
+import { ApiError, apiRequest } from "../../services/api";
 
 import { File as ExpoFile } from "expo-file-system";
 
@@ -100,6 +101,11 @@ type CustomBouquetRequest = {
     | string
     | null;
 
+  sourceMessage?:
+    | { _id: string }
+    | string
+    | null;
+
   inspirationImage?: string | null;
 
   occasion?: string | null;
@@ -132,6 +138,29 @@ type CreateRequestResponse = {
     acceptingProposals?: boolean;
   };
 };
+
+type MyRequestsResponse = {
+  success: boolean;
+  message?: string;
+
+  data?: {
+    requests?: CustomBouquetRequest[];
+  };
+};
+
+/*
+ * Message the server sends (HTTP 409) when the
+ * customer already has an active request for
+ * the same design.
+ */
+const DUPLICATE_REQUEST_MESSAGE =
+  "You already sent a request for this design.";
+
+const INACTIVE_REQUEST_STATUSES = [
+  "cancelled",
+  "rejected",
+  "customer_declined",
+];
 
 type SelectedImage = {
   uri: string;
@@ -442,6 +471,25 @@ export default function CustomerCustomRequestScreen() {
     setSubmitting,
   ] = useState(false);
 
+  /*
+   * A ref blocks double taps immediately;
+   * state alone updates one render too late.
+   */
+  const submittingRef =
+    useRef(false);
+
+  /*
+   * Set once this design has been sent
+   * (now or earlier) so the form cannot
+   * be submitted again.
+   */
+  const [
+    alreadySent,
+    setAlreadySent,
+  ] = useState<{
+    conversationId: string | null;
+  } | null>(null);
+
   /* =======================================================
    * LOAD AI SOURCE
    * ===================================================== */
@@ -521,6 +569,53 @@ export default function CustomerCustomRequestScreen() {
         setAiSourceMessage(
           sourceMessage
         );
+
+        /*
+         * One request per AI design: check
+         * whether this image was already sent.
+         */
+        try {
+          const mine =
+            await apiRequest<MyRequestsResponse>(
+              "/bloomboard/custom-bouquet-requests/mine",
+              {
+                authenticated: true,
+              }
+            );
+
+          const existing =
+            (mine?.data?.requests ?? []).find(
+              (request) => {
+                const sourceId =
+                  typeof request.sourceMessage ===
+                  "string"
+                    ? request.sourceMessage
+                    : request.sourceMessage?._id;
+
+                return (
+                  sourceId ===
+                    sourceMessageId &&
+                  !INACTIVE_REQUEST_STATUSES.includes(
+                    String(request.status ?? "")
+                  )
+                );
+              }
+            );
+
+          if (existing) {
+            setAlreadySent({
+              conversationId:
+                getRequestConversationId(
+                  existing
+                ) ?? aiConversationId,
+            });
+          }
+        } catch {
+          /*
+           * Not critical: the server still
+           * rejects a duplicate on submit.
+           */
+        }
 
         /*
          * Only copy the basic information
@@ -782,11 +877,63 @@ export default function CustomerCustomRequestScreen() {
    * SUBMIT
    * ===================================================== */
 
+  const openMyRequests = () => {
+    router.replace({
+      pathname:
+        "/(customer)/customer-bloomboard",
+      params: {
+        tab:
+          "requests",
+      },
+    } as never);
+  };
+
+  const showAlreadySent = (
+    conversationId: string | null
+  ) => {
+    Alert.alert(
+      "Request already sent",
+      "You already sent a request for this design. Florist offers will appear there.",
+      [
+        {
+          text: "Close",
+          style: "cancel",
+        },
+        {
+          text: "View Requests",
+          onPress: () =>
+            conversationId
+              ? openAiConversation(
+                  conversationId
+                )
+              : openMyRequests(),
+        },
+      ]
+    );
+  };
+
   const submitRequest =
     async () => {
+      if (
+        submittingRef.current
+      ) {
+        return;
+      }
+
+      if (alreadySent) {
+        showAlreadySent(
+          alreadySent.conversationId
+        );
+
+        return;
+      }
+
       if (!validateForm()) {
         return;
       }
+
+      submittingRef.current =
+        true;
 
       try {
         setSubmitting(true);
@@ -948,6 +1095,23 @@ export default function CustomerCustomRequestScreen() {
               : null
           );
 
+        /*
+         * Lock and clear the form so going back
+         * never shows a filled form ready to
+         * be sent again.
+         */
+        setAlreadySent({
+          conversationId:
+            linkedConversationId,
+        });
+
+        setManualImage(null);
+        setOccasion("");
+        setBudget("");
+        setQuantity("1");
+        setRequestedDate("");
+        setCustomerMessage("");
+
         if (
           linkedConversationId
         ) {
@@ -976,20 +1140,40 @@ export default function CustomerCustomRequestScreen() {
             {
               text:
                 "View Requests",
-              onPress: () => {
-                router.replace({
-                  pathname:
-                    "/(customer)/customer-bloomboard",
-                  params: {
-                    tab:
-                      "requests",
-                  },
-                } as never);
-              },
+              onPress:
+                openMyRequests,
             },
           ]
         );
       } catch (error) {
+        const message =
+          getErrorMessage(
+            error,
+            "Please try again."
+          );
+
+        if (
+          (error instanceof ApiError &&
+            error.status === 409) ||
+          message ===
+            DUPLICATE_REQUEST_MESSAGE
+        ) {
+          const conversationId =
+            isAiMode
+              ? aiConversationId
+              : null;
+
+          setAlreadySent({
+            conversationId,
+          });
+
+          showAlreadySent(
+            conversationId
+          );
+
+          return;
+        }
+
         Alert.alert(
           "Unable to send request",
           getErrorMessage(
@@ -998,6 +1182,9 @@ export default function CustomerCustomRequestScreen() {
           )
         );
       } finally {
+        submittingRef.current =
+          false;
+
         setSubmitting(false);
       }
     };
@@ -1198,11 +1385,7 @@ export default function CustomerCustomRequestScreen() {
         style={
           styles.container
         }
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         {/* =================================================
          * HEADER
@@ -2463,7 +2646,8 @@ export default function CustomerCustomRequestScreen() {
             style={({ pressed }) => [
               styles.submitButton,
 
-              submitting &&
+              (submitting ||
+                alreadySent) &&
                 styles.submitDisabled,
 
               pressed &&
@@ -2471,7 +2655,23 @@ export default function CustomerCustomRequestScreen() {
                 styles.pressed,
             ]}
           >
-            {submitting ? (
+            {alreadySent ? (
+              <>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={19}
+                  color="#FFFFFF"
+                />
+
+                <Text
+                  style={
+                    styles.submitButtonText
+                  }
+                >
+                  Request already sent
+                </Text>
+              </>
+            ) : submitting ? (
               <>
                 <ActivityIndicator
                   size="small"

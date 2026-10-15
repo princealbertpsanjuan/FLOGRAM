@@ -1,6 +1,9 @@
+import fs from "fs";
+
 import {
   cancelCustomBouquetRequest,
   createCustomBouquetRequest,
+  dismissCustomBouquetRequest,
   getCustomerCustomBouquetRequests,
   getCustomBouquetRequestById,
   getSellerCustomBouquetRequests,
@@ -194,6 +197,48 @@ export const create = async (
         },
       });
   } catch (error) {
+    /*
+     * The uploaded reference photo is not
+     * used when the request fails.
+     */
+    if (req.file?.path) {
+      fs.unlink(
+        req.file.path,
+        () => {}
+      );
+    }
+
+    /*
+     * Duplicate request for the same design:
+     * tell the app which request already exists.
+     */
+    if (
+      error?.statusCode === 409 &&
+      error.existingRequestId
+    ) {
+      return res
+        .status(409)
+        .json({
+          success:
+            false,
+
+          message:
+            error.message,
+
+          data: {
+            duplicate:
+              true,
+
+            requestId:
+              error.existingRequestId,
+
+            aiConversationId:
+              error.existingAiConversationId ||
+              null,
+          },
+        });
+    }
+
     next(error);
   }
 };
@@ -461,6 +506,50 @@ export const cancel = async (
           acceptingProposals:
             false,
         },
+      });
+  } catch (error) {
+    next(error);
+  }
+};
+/*
+ * =========================================================
+ * SELLER
+ * REMOVE A REQUEST FROM OWN LIST
+ * =========================================================
+ *
+ * PATCH /:requestId/dismiss
+ * =========================================================
+ */
+
+export const dismiss = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const sellerId =
+      getAuthenticatedUserId(
+        req
+      );
+
+    const result =
+      await dismissCustomBouquetRequest(
+        req.params
+          .requestId,
+        sellerId
+      );
+
+    return res
+      .status(200)
+      .json({
+        success:
+          true,
+
+        message:
+          "Custom bouquet request removed from your list.",
+
+        data:
+          result,
       });
   } catch (error) {
     next(error);

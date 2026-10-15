@@ -1,4 +1,5 @@
 import CustomBouquetRequest from "./customBouquetRequest.model.js";
+import CustomBouquetProposal from "./customBouquetProposal.model.js";
 import { notifySafely } from "../../notifications/notify-helpers.js";
 
 import User from "../../auth/auth.model.js";
@@ -53,6 +54,64 @@ const normalizeOptionalNumber = (
     ? null
     : number;
 };
+
+/*
+ * =========================================================
+ * DUPLICATE REQUEST PROTECTION
+ * =========================================================
+ *
+ * Rule: one request per flower design.
+ *
+ * A customer may only have ONE active
+ * (not cancelled / declined) request for:
+ *
+ * - the same AI generated image message, or
+ * - the same AI conversation + same image.
+ *
+ * Manual uploads always store a new file,
+ * so they are additionally protected by a
+ * short idempotency window that stops the
+ * same form from being sent twice.
+ * =========================================================
+ */
+
+const INACTIVE_REQUEST_STATUSES = [
+  "cancelled",
+  "rejected",
+  "customer_declined",
+  /*
+   * Already ordered: the customer may order the
+   * same design again with a new request.
+   */
+  "converted_to_order",
+];
+
+const DUPLICATE_SUBMIT_WINDOW_MS =
+  60 * 1000;
+
+const throwDuplicateRequestError =
+  (existingRequest) => {
+    const error =
+      new Error(
+        "You already sent a request for this design."
+      );
+
+    error.statusCode = 409;
+
+    error.existingRequestId =
+      String(
+        existingRequest._id
+      );
+
+    error.existingAiConversationId =
+      existingRequest.aiConversation
+        ? String(
+            existingRequest.aiConversation
+          )
+        : null;
+
+    throw error;
+  };
 
 const getApprovedSellerFlorist =
   async (
@@ -395,29 +454,58 @@ export const createCustomBouquetRequest =
 
     /*
      * =====================================================
-     * AUTO-CREATE AI CONVERSATION
-     * =====================================================
-     *
-     * Manual image requests do not
-     * start from the AI page.
-     *
-     * Create an AI conversation so
-     * seller proposals can later be
-     * presented and discussed there.
+     * ONE ACTIVE REQUEST PER DESIGN
      * =====================================================
      */
 
-    let automaticallyCreatedConversation =
-      false;
+    if (sourceMessage) {
+      const existingForMessage =
+        await CustomBouquetRequest.findOne({
+          customer:
+            customerId,
 
-    if (!aiConversation) {
-      aiConversation =
-        await createAiConversation(
-          customerId
+          sourceMessage:
+            sourceMessage._id,
+
+          status: {
+            $nin:
+              INACTIVE_REQUEST_STATUSES,
+          },
+        })
+          .select("_id aiConversation")
+          .lean();
+
+      if (existingForMessage) {
+        throwDuplicateRequestError(
+          existingForMessage
         );
+      }
+    } else if (aiConversation) {
+      const existingForConversation =
+        await CustomBouquetRequest.findOne({
+          customer:
+            customerId,
 
-      automaticallyCreatedConversation =
-        true;
+          aiConversation:
+            aiConversation._id,
+
+          inspirationImage,
+
+          status: {
+            $nin:
+              INACTIVE_REQUEST_STATUSES,
+          },
+        })
+          .select("_id aiConversation")
+          .lean();
+
+      if (
+        existingForConversation
+      ) {
+        throwDuplicateRequestError(
+          existingForConversation
+        );
+      }
     }
 
     /*
@@ -488,6 +576,101 @@ export const createCustomBouquetRequest =
 
     /*
      * =====================================================
+     * DOUBLE-SUBMIT WINDOW
+     * =====================================================
+     *
+     * Same customer + same occasion, budget,
+     * quantity and message within 60 seconds
+     * is treated as the same form sent twice.
+     * =====================================================
+     */
+
+    const occasion =
+      requestData.occasion ||
+      conversationPreferences
+        .occasion ||
+      null;
+
+    const customerMessage =
+      requestData
+        .customerMessage ||
+      null;
+
+    /*
+     * AI-image requests are already covered by the
+     * per-message rule above; applying the window to
+     * them would block two DIFFERENT designs sent
+     * within a minute with the same default fields.
+     */
+    const recentDuplicate =
+      sourceMessage
+        ? null
+        : await CustomBouquetRequest.findOne({
+        customer:
+          customerId,
+
+        sourceMessage:
+          null,
+
+        occasion,
+
+        budget,
+
+        quantity,
+
+        customerMessage,
+
+        status: {
+          $nin:
+            INACTIVE_REQUEST_STATUSES,
+        },
+
+        createdAt: {
+          $gte:
+            new Date(
+              Date.now() -
+                DUPLICATE_SUBMIT_WINDOW_MS
+            ),
+        },
+      })
+        .select("_id aiConversation")
+        .lean();
+
+    if (recentDuplicate) {
+      throwDuplicateRequestError(
+        recentDuplicate
+      );
+    }
+
+    /*
+     * =====================================================
+     * AUTO-CREATE AI CONVERSATION
+     * =====================================================
+     *
+     * Manual image requests do not
+     * start from the AI page.
+     *
+     * Create an AI conversation so
+     * seller proposals can later be
+     * presented and discussed there.
+     * =====================================================
+     */
+
+    let automaticallyCreatedConversation =
+      false;
+
+    if (!aiConversation) {
+      aiConversation =
+        await createAiConversation(
+          customerId
+        );
+
+      automaticallyCreatedConversation =
+        true;
+    }
+
+    /*
+     * =====================================================
      * CREATE OPEN REQUEST
      * =====================================================
      *
@@ -524,11 +707,7 @@ export const createCustomBouquetRequest =
 
         inspirationImage,
 
-        occasion:
-          requestData.occasion ||
-          conversationPreferences
-            .occasion ||
-          null,
+        occasion,
 
         budget,
 
@@ -589,10 +768,7 @@ export const createCustomBouquetRequest =
             []
           ),
 
-        customerMessage:
-          requestData
-            .customerMessage ||
-          null,
+        customerMessage,
 
         status:
           "open",
@@ -889,9 +1065,25 @@ export const getSellerCustomBouquetRequests =
       };
     }
 
+    /*
+     * Hide requests this florist removed
+     * from their list.
+     */
+    query = {
+      ...query,
+
+      dismissedBy: {
+        $ne:
+          florist._id,
+      },
+    };
+
     return CustomBouquetRequest.find(
       query
     )
+      .select(
+        "-dismissedBy"
+      )
       .populate(
         "customer",
         "firstName lastName profileImage"
@@ -907,6 +1099,125 @@ export const getSellerCustomBouquetRequests =
         createdAt:
           -1,
       });
+  };
+
+/*
+ * =========================================================
+ * SELLER
+ * DISMISS (REMOVE) A REQUEST FROM OWN LIST
+ * =========================================================
+ *
+ * Only hides the request for this florist.
+ * Other florists and the customer are not
+ * affected. A florist cannot remove a request
+ * they won or one with an active offer
+ * (they must withdraw the offer first).
+ * =========================================================
+ */
+
+export const dismissCustomBouquetRequest =
+  async (
+    requestId,
+    sellerId
+  ) => {
+    const {
+      florist,
+    } =
+      await getApprovedSellerFlorist(
+        sellerId
+      );
+
+    const request =
+      await CustomBouquetRequest.findById(
+        requestId
+      ).select(
+        "_id florist selectedProposal status"
+      );
+
+    if (!request) {
+      const error =
+        new Error(
+          "Custom bouquet request was not found."
+        );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+    if (
+      request.florist &&
+      String(
+        request.florist
+      ) ===
+        String(
+          florist._id
+        )
+    ) {
+      const error =
+        new Error(
+          "The customer selected your offer for this request, so it can't be removed."
+        );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+    const activeProposal =
+      await CustomBouquetProposal.findOne({
+        request:
+          request._id,
+
+        florist:
+          florist._id,
+
+        status: {
+          $in: [
+            "submitted",
+            "selected",
+          ],
+        },
+      })
+        .select("_id status")
+        .lean();
+
+    if (activeProposal) {
+      const error =
+        new Error(
+          activeProposal.status ===
+            "selected"
+            ? "The customer selected your offer for this request, so it can't be removed."
+            : "Withdraw your offer before removing this request."
+        );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+    await CustomBouquetRequest.updateOne(
+      {
+        _id:
+          request._id,
+      },
+      {
+        $addToSet: {
+          dismissedBy:
+            florist._id,
+        },
+      }
+    );
+
+    return {
+      requestId:
+        String(
+          request._id
+        ),
+
+      dismissed:
+        true,
+    };
   };
 
 /*

@@ -42,7 +42,7 @@ import {
 } from '../../services/auth';
 
 import {
-  getMyReviews,
+  getReviewOverview,
 } from '../../services/review';
 
 import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
@@ -206,9 +206,13 @@ export default function CustomerProfileScreen() {
   ] =
     useState(false);
 
+  /*
+   * Completed orders still waiting for a review.
+   * The badge clears once everything is reviewed.
+   */
   const [
-    reviewCount,
-    setReviewCount,
+    pendingReviewCount,
+    setPendingReviewCount,
   ] =
     useState(0);
 
@@ -275,7 +279,7 @@ export default function CustomerProfileScreen() {
             await Promise.allSettled(
               [
                 getCurrentUser(),
-                getMyReviews(),
+                getReviewOverview(),
               ]
             );
 
@@ -294,23 +298,12 @@ export default function CustomerProfileScreen() {
             reviewsResult.status ===
             'fulfilled'
           ) {
-            const result =
-              reviewsResult.value;
-
-            setReviewCount(
-              typeof result.count ===
-                'number'
-                ? result.count
-                : Array.isArray(
-                      result.reviews
-                    )
-                  ? result
-                      .reviews
-                      .length
-                  : 0
+            setPendingReviewCount(
+              reviewsResult.value
+                .toReview.length
             );
           } else {
-            setReviewCount(
+            setPendingReviewCount(
               0
             );
           }
@@ -976,36 +969,12 @@ export default function CustomerProfileScreen() {
             />
 
             <QuickAction
-              icon="heart-outline"
-              title="Liked"
+              icon="sparkles-outline"
+              title="My Activity"
               onPress={() =>
-                router.push({
-                  pathname:
-                    '/(customer)/customer-activity',
-                  params: {
-                    tab: 'liked',
-                  },
-                } as never)
-              }
-            />
-
-            <View
-              style={
-                styles.quickDivider
-              }
-            />
-
-            <QuickAction
-              icon="bookmark-outline"
-              title="Saved"
-              onPress={() =>
-                router.push({
-                  pathname:
-                    '/(customer)/customer-activity',
-                  params: {
-                    tab: 'saved',
-                  },
-                } as never)
+                router.push(
+                  '/(customer)/customer-activity' as never
+                )
               }
             />
 
@@ -1018,170 +987,37 @@ export default function CustomerProfileScreen() {
             <QuickAction
               icon="star-outline"
               title="Reviews"
-              badge={
-                reviewCount >
+              subtitle={
+                pendingReviewCount >
                 0
-                  ? reviewCount
+                  ? `${pendingReviewCount} to review`
+                  : 'All caught up'
+              }
+              badge={
+                pendingReviewCount >
+                0
+                  ? pendingReviewCount
                   : undefined
               }
               onPress={() =>
                 router.push(
-                  '/(customer)/customer-orders' as never
-                )
-              }
-            />
-          </View>
-
-          {/*
-           * =============================================
-           * ORDERS
-           * =============================================
-           */}
-
-          <Text
-            style={
-              styles.sectionLabel
-            }
-          >
-            ORDERS
-          </Text>
-
-          <View
-            style={
-              styles.menuCard
-            }
-          >
-            <ProfileMenuItem
-              icon="receipt-outline"
-              title="Order History"
-              subtitle="Active, completed and cancelled orders"
-              onPress={() =>
-                router.push(
-                  '/(customer)/customer-orders' as never
+                  '/(customer)/customer-reviews' as never
                 )
               }
             />
 
-            <MenuDivider />
-
-            <ProfileMenuItem
-              icon="star-outline"
-              title="Completed Orders & Reviews"
-              subtitle={
-                reviewCount >
-                0
-                  ? `${reviewCount} review${
-                      reviewCount ===
-                      1
-                        ? ''
-                        : 's'
-                    } submitted`
-                  : 'Rate your delivered orders'
-              }
-              badge={
-                reviewCount >
-                0
-                  ? reviewCount
-                  : null
-              }
-              onPress={() =>
-                router.push(
-                  '/(customer)/customer-orders' as never
-                )
-              }
-            />
-          </View>
-
-          {/*
-           * =============================================
-           * MY ACTIVITY
-           * =============================================
-           */}
-
-          <Text
-            style={
-              styles.sectionLabel
-            }
-          >
-            MY ACTIVITY
-          </Text>
-
-          <View
-            style={
-              styles.menuCard
-            }
-          >
-            <ProfileMenuItem
-              icon="heart-outline"
-              title="Liked Posts"
-              subtitle="Bouquet posts you liked"
-              onPress={() =>
-                router.push({
-                  pathname:
-                    '/(customer)/customer-activity',
-                  params: {
-                    tab: 'liked',
-                  },
-                } as never)
+            <View
+              style={
+                styles.quickDivider
               }
             />
 
-            <MenuDivider />
-
-            <ProfileMenuItem
-              icon="bookmark-outline"
-              title="Saved Items"
-              subtitle="Inspirations you saved for later"
-              onPress={() =>
-                router.push({
-                  pathname:
-                    '/(customer)/customer-activity',
-                  params: {
-                    tab: 'saved',
-                  },
-                } as never)
-              }
-            />
-
-            <MenuDivider />
-
-            <ProfileMenuItem
-              icon="chatbubble-ellipses-outline"
-              title="My Comments"
-              subtitle="Your comments on BloomBoard posts"
-              onPress={() =>
-                router.push({
-                  pathname:
-                    '/(customer)/customer-activity',
-                  params: {
-                    tab: 'comments',
-                  },
-                } as never)
-              }
-            />
-
-            <MenuDivider />
-
-            <ProfileMenuItem
+            <QuickAction
               icon="storefront-outline"
               title="Following"
-              subtitle="Florist shops you follow"
               onPress={() =>
                 router.push(
                   '/(customer)/customer-following' as never
-                )
-              }
-            />
-
-            <MenuDivider />
-
-            <ProfileMenuItem
-              icon="flag-outline"
-              title="My Reports"
-              subtitle="Problems you reported about orders"
-              onPress={() =>
-                router.push(
-                  '/(shared)/my-reports' as never
                 )
               }
             />
@@ -1273,6 +1109,19 @@ export default function CustomerProfileScreen() {
                     role: 'customer',
                   },
                 } as never)
+              }
+            />
+
+            <MenuDivider />
+
+            <ProfileMenuItem
+              icon="flag-outline"
+              title="My Reports"
+              subtitle="Problems you reported about orders"
+              onPress={() =>
+                router.push(
+                  '/(shared)/my-reports' as never
+                )
               }
             />
 
@@ -1401,12 +1250,7 @@ export default function CustomerProfileScreen() {
             style={
               styles.modalOverlay
             }
-            behavior={
-              Platform.OS ===
-              'ios'
-                ? 'padding'
-                : undefined
-            }
+            behavior={Platform.OS === 'web' ? undefined : 'padding'}
           >
             <Pressable
               style={
@@ -1730,12 +1574,15 @@ export default function CustomerProfileScreen() {
 function QuickAction({
   icon,
   title,
+  subtitle,
   badge,
   onPress,
 }: {
   icon: IoniconName;
 
   title: string;
+
+  subtitle?: string;
 
   badge?: number;
 
@@ -1786,9 +1633,21 @@ function QuickAction({
         style={
           styles.quickActionText
         }
+        numberOfLines={1}
       >
         {title}
       </Text>
+
+      {subtitle ? (
+        <Text
+          style={
+            styles.quickActionSubtext
+          }
+          numberOfLines={1}
+        >
+          {subtitle}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -2460,6 +2319,18 @@ const styles =
 
       fontWeight:
         '800',
+    },
+
+    quickActionSubtext: {
+      marginTop: 2,
+
+      color:
+        TEXT_SECONDARY,
+
+      fontSize: 9,
+
+      fontWeight:
+        '700',
     },
 
     quickDivider: {

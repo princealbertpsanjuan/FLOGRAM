@@ -1531,12 +1531,7 @@ export default function CustomerReviewScreen() {
       style={
         styles.screen
       }
-      behavior={
-        Platform.OS ===
-        'ios'
-          ? 'padding'
-          : undefined
-      }
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
     >
       <View
         style={

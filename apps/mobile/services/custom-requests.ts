@@ -73,5 +73,12 @@ export const withdrawProposal = async (proposalId: string) =>
     authenticated: true,
   });
 
+/** Hide a broadcast request from this shop's list only. */
+export const dismissCustomRequest = async (requestId: string) =>
+  apiRequest<Wrapped<{ requestId: string; dismissed: boolean }>>(`${BASE}/${encodeURIComponent(requestId)}/dismiss`, {
+    method: 'PATCH',
+    authenticated: true,
+  });
+
 export const requestIdOf = (proposal: SellerProposal) =>
   typeof proposal.request === 'string' ? proposal.request : proposal.request?._id || '';

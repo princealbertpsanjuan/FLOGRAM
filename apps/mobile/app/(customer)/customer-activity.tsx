@@ -18,6 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
+import ScreenHeader from '../../components/ui/screen-header';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -35,9 +38,12 @@ import { getUploadUrl } from '../../utils/media';
  * CUSTOMER – MY ACTIVITY
  * =========================================================
  *
- * Me → Liked Posts / Saved Items / My Comments
+ * Me → My Activity: Liked / Saved / Comments
  *
  * tab=liked | saved | comments
+ *
+ * Grids show 9 posts (3 rows) and lists show 5,
+ * each with a "See all" button.
  * =========================================================
  */
 
@@ -48,6 +54,7 @@ const TEXT = '#2D2A2E';
 const MUTED = '#77717A';
 
 const GRID_GAP = 3;
+const GRID_LIMIT = 9;
 const TILE = (Dimensions.get('window').width - 32 - GRID_GAP * 2) / 3;
 
 const isTab = (value: unknown): value is Tab =>
@@ -119,30 +126,19 @@ export default function CustomerActivityScreen() {
 
   const posts = tab === 'liked' ? liked : saved;
 
+  // Collapse again whenever the tab changes.
+  const postsSeeAll = useSeeAll(posts, { resetKey: tab, limit: GRID_LIMIT });
+  const commentsSeeAll = useSeeAll(comments, { resetKey: tab });
+
   return (
     <View style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
 
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={10}
-          onPress={() =>
-            router.canGoBack()
-              ? router.back()
-              : router.replace('/(customer)/customer-profile' as never)
-          }
-          style={styles.back}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={24}
-            color={TEXT}
-          />
-        </Pressable>
-        <Text style={styles.title}>My Activity</Text>
-      </View>
+      <ScreenHeader
+        role="customer"
+        title="My Activity"
+        subtitle="Posts you liked, saved and commented on"
+      />
 
       <View style={styles.tabs}>
         {(
@@ -193,7 +189,7 @@ export default function CustomerActivityScreen() {
               text="Comments you write on BloomBoard posts will appear here."
             />
           ) : (
-            comments.map(comment => {
+            commentsSeeAll.visible.map(comment => {
               const image = getUploadUrl(comment.post.images?.[0]);
               return (
                 <Pressable
@@ -241,7 +237,7 @@ export default function CustomerActivityScreen() {
           />
         ) : (
           <View style={styles.grid}>
-            {posts.map(post => {
+            {postsSeeAll.visible.map(post => {
               const image = getUploadUrl(post.images?.[0]);
               return (
                 <Pressable
@@ -268,6 +264,22 @@ export default function CustomerActivityScreen() {
             })}
           </View>
         )}
+
+        {!loading && tab === 'comments' ? (
+          <SeeAllButton
+            state={commentsSeeAll}
+            role="customer"
+          />
+        ) : null}
+
+        {!loading && tab !== 'comments' ? (
+          <View style={styles.seeAllGap}>
+            <SeeAllButton
+              state={postsSeeAll}
+              role="customer"
+            />
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* POST PREVIEW */}
@@ -341,17 +353,6 @@ function Empty({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: str
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#FAF8F9' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 26,
-    borderBottomRightRadius: 26,
-  },
-  back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { marginLeft: 4, color: TEXT, fontSize: 19, fontWeight: '800' },
   tabs: {
     flexDirection: 'row',
     paddingHorizontal: 12,
@@ -366,6 +367,7 @@ const styles = StyleSheet.create({
   content: { padding: 16 },
   error: { marginBottom: 12, color: '#C64262', fontSize: 14 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  seeAllGap: { marginTop: 12 },
   tile: { width: TILE, height: TILE },
   tileImage: { width: '100%', height: '100%', borderRadius: 6, backgroundColor: '#F3EEF1' },
   thumbPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#FCE8F0' },
