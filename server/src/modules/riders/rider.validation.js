@@ -3,6 +3,18 @@ import {
   validationResult,
 } from "express-validator";
 
+import {
+  LICENSE_ERROR,
+  PHONE_ERROR,
+  PLATE_ERROR,
+  isValidLicense,
+  isValidPhone,
+  isValidPlate,
+  normalizeLicense,
+  normalizePhone,
+  normalizePlate,
+} from "../../utils/contactFormats.js";
+
 export const riderProfileValidation = [
   body("vehicleType")
     .notEmpty()
@@ -17,14 +29,28 @@ export const riderProfileValidation = [
     .withMessage("Invalid vehicle type."),
 
   body("vehiclePlateNumber")
-    .optional()
-    .trim(),
+    .optional({ values: "falsy" })
+    .trim()
+    .custom((value) =>
+      isValidPlate(value)
+    )
+    .withMessage(PLATE_ERROR)
+    .customSanitizer(
+      normalizePlate
+    ),
 
   body("driverLicenseNumber")
     .trim()
     .notEmpty()
     .withMessage(
       "Driver license number is required."
+    )
+    .custom((value) =>
+      isValidLicense(value)
+    )
+    .withMessage(LICENSE_ERROR)
+    .customSanitizer(
+      normalizeLicense
     ),
 
   body("emergencyContactName")
@@ -40,9 +66,12 @@ export const riderProfileValidation = [
     .withMessage(
       "Emergency contact number is required."
     )
-    .matches(/^(09|\+639)\d{9}$/)
-    .withMessage(
-      "Enter a valid Philippine phone number."
+    .custom((value) =>
+      isValidPhone(value)
+    )
+    .withMessage(PHONE_ERROR)
+    .customSanitizer(
+      normalizePhone
     ),
 
   body("address.street")
@@ -84,7 +113,15 @@ export const updateRiderValidation = [
 
   body("vehiclePlateNumber")
     .optional()
-    .trim(),
+    .trim()
+    .custom((value) =>
+      value === "" ||
+      isValidPlate(value)
+    )
+    .withMessage(PLATE_ERROR)
+    .customSanitizer(
+      normalizePlate
+    ),
 
   body("driverLicenseNumber")
     .optional()
@@ -92,6 +129,13 @@ export const updateRiderValidation = [
     .notEmpty()
     .withMessage(
       "Driver license number cannot be empty."
+    )
+    .custom((value) =>
+      isValidLicense(value)
+    )
+    .withMessage(LICENSE_ERROR)
+    .customSanitizer(
+      normalizeLicense
     ),
 
   body("emergencyContactName")
@@ -105,9 +149,27 @@ export const updateRiderValidation = [
   body("emergencyContactNumber")
     .optional()
     .trim()
-    .matches(/^(09|\+639)\d{9}$/)
-    .withMessage(
-      "Enter a valid Philippine phone number."
+    .custom((value) =>
+      isValidPhone(value)
+    )
+    .withMessage(PHONE_ERROR)
+    .customSanitizer(
+      normalizePhone
+    ),
+
+  /*
+   * Lives on the User account, not the Rider
+   * profile (see updateRiderProfile).
+   */
+  body("phoneNumber")
+    .optional()
+    .trim()
+    .custom((value) =>
+      isValidPhone(value)
+    )
+    .withMessage(PHONE_ERROR)
+    .customSanitizer(
+      normalizePhone
     ),
 ];
 

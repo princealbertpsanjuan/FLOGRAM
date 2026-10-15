@@ -7,7 +7,21 @@ import {
   verifyPasswordResetCode,
 } from "./auth.service.js";
 
-import { sendPasswordResetCode } from "../../services/email.service.js";
+import {
+  isEmailConfigured,
+  sendPasswordResetCode,
+  withTimeout,
+} from "../../services/email.service.js";
+
+/*
+ * The whole forgot-password request (database + email)
+ * must answer within this time, so the app never waits
+ * until its own request timeout.
+ */
+const FORGOT_PASSWORD_TIMEOUT_MS = 20000;
+
+const FORGOT_PASSWORD_EMAIL_ERROR =
+  "We couldn't send the email right now. Please try again in a few minutes.";
 
 export const register = async (req, res, next) => {
   try {
@@ -74,9 +88,29 @@ export const getCurrentUser = async (req, res, next) => {
  */
 export const forgotPassword = async (req, res, next) => {
   try {
-    const result = await createPasswordResetCode(req.body.email);
+    /*
+     * Fail fast with a clear message when the server has
+     * no email provider configured at all.
+     */
+    if (!isEmailConfigured()) {
+      console.error(
+        "Password reset email failed: no email provider configured (set BREVO_API_KEY + EMAIL_FROM, or EMAIL_USER + EMAIL_PASSWORD)."
+      );
 
-    if (result.userExists) {
+      const error = new Error(
+        "Password reset by email is not available right now. Please contact FLOGRAM support."
+      );
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const sendResetEmail = async () => {
+      const result = await createPasswordResetCode(req.body.email);
+
+      if (!result.userExists) {
+        return;
+      }
+
       try {
         await sendPasswordResetCode({
           email: result.email,
@@ -91,12 +125,28 @@ export const forgotPassword = async (req, res, next) => {
          */
         console.error("Password reset email failed:", emailError);
 
-        const error = new Error(
-          "We couldn't send the email right now. Please try again in a few minutes."
-        );
+        const error = new Error(FORGOT_PASSWORD_EMAIL_ERROR);
         error.statusCode = 503;
         throw error;
       }
+    };
+
+    try {
+      await withTimeout(
+        sendResetEmail(),
+        FORGOT_PASSWORD_TIMEOUT_MS,
+        "Forgot password request timed out."
+      );
+    } catch (error) {
+      if (error?.statusCode) {
+        throw error;
+      }
+
+      console.error("Forgot password failed:", error);
+
+      const friendlyError = new Error(FORGOT_PASSWORD_EMAIL_ERROR);
+      friendlyError.statusCode = 503;
+      throw friendlyError;
     }
 
     res.status(200).json({

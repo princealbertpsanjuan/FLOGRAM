@@ -64,6 +64,17 @@ import ShopLocationPicker, {
   type ShopCoordinate,
 } from '../../components/seller/shop-location-picker';
 
+import AddressAutocomplete from '../../components/ui/address-autocomplete';
+
+import type { AddressSuggestion } from '../../services/geo';
+
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+  sanitizePhoneInput,
+} from '../../utils/validation';
+
 /*
  * =========================================================
  * TYPES
@@ -101,7 +112,9 @@ const getInitialForm = (
     florist.description || '',
 
   contactNumber:
-    florist.contactNumber || '',
+    normalizePhone(
+      florist.contactNumber
+    ),
 
   businessEmail:
     florist.businessEmail || '',
@@ -434,6 +447,36 @@ export default function SellerProfileScreen() {
     );
   };
 
+  /*
+   * Fill the address fields from an address suggestion
+   * or from the shop map pin. Empty parts keep what the
+   * seller already typed.
+   */
+  const fillAddress = (
+    address: AddressSuggestion
+  ) => {
+    setForm(
+      current => ({
+        ...current,
+        street:
+          address.street ||
+          current.street,
+        barangay:
+          address.barangay ||
+          current.barangay,
+        city:
+          address.city ||
+          current.city,
+        province:
+          address.province ||
+          current.province,
+        postalCode:
+          address.postalCode ||
+          current.postalCode,
+      })
+    );
+  };
+
   const handleSaveProfile =
     useCallback(
       async () => {
@@ -443,6 +486,20 @@ export default function SellerProfileScreen() {
           Alert.alert(
             'Shop Name Required',
             'Please enter your shop name.'
+          );
+
+          return;
+        }
+
+        // Required by the shop profile.
+        if (
+          !isValidPhone(
+            form.contactNumber
+          )
+        ) {
+          Alert.alert(
+            'Invalid Contact Number',
+            PHONE_ERROR
           );
 
           return;
@@ -463,7 +520,9 @@ export default function SellerProfileScreen() {
                   form.description.trim(),
 
                 contactNumber:
-                  form.contactNumber.trim(),
+                  normalizePhone(
+                    form.contactNumber
+                  ),
 
                 businessEmail:
                   form.businessEmail.trim(),
@@ -979,8 +1038,10 @@ export default function SellerProfileScreen() {
                     styles.followersCount
                   }
                 >
+                  {/* "–" = could not load (not "0 followers") */}
                   {data?.followers
-                    ?.count ?? 0}
+                    ? data.followers.count
+                    : '–'}
                 </Text>
 
                 <Text
@@ -1044,6 +1105,13 @@ export default function SellerProfileScreen() {
             />
 
             <InfoRow
+              label="Shop Address"
+              value={
+                locationText
+              }
+            />
+
+            <InfoRow
               label="Business Email"
               value={
                 florist?.businessEmail ||
@@ -1091,23 +1159,20 @@ export default function SellerProfileScreen() {
               value={
                 locationText
               }
-            />
-
-            <InfoRow
-              label="Map Pin"
-              value={
-                isValidShopCoordinate(
-                  florist?.location
-                )
-                  ? `${florist.location.latitude.toFixed(
-                      5
-                    )}, ${florist.location.longitude.toFixed(
-                      5
-                    )}`
-                  : 'Not set — tap Edit to pin your shop'
-              }
               last
             />
+
+            <Text
+              style={
+                styles.mapPinHint
+              }
+            >
+              {isValidShopCoordinate(
+                florist?.location
+              )
+                ? 'Map pin set ✓'
+                : 'Map pin not set — tap Edit to pin your shop'}
+            </Text>
           </View>
 
           {/* SHOP TOOLS */}
@@ -1421,16 +1486,31 @@ export default function SellerProfileScreen() {
                   value={
                     form.contactNumber
                   }
-                  placeholder="Enter contact number"
+                  placeholder="09XXXXXXXXX"
                   keyboardType="phone-pad"
                   onChangeText={
                     value =>
                       updateField(
                         'contactNumber',
-                        value
+                        sanitizePhoneInput(
+                          value
+                        )
                       )
                   }
                 />
+
+                {form.contactNumber &&
+                !isValidPhone(
+                  form.contactNumber
+                ) ? (
+                  <Text
+                    style={
+                      styles.fieldError
+                    }
+                  >
+                    {PHONE_ERROR}
+                  </Text>
+                ) : null}
 
                 <FormField
                   label="Business Email"
@@ -1457,20 +1537,68 @@ export default function SellerProfileScreen() {
                   Shop Address
                 </Text>
 
-                <FormField
-                  label="Street"
-                  value={
-                    form.street
+                <View
+                  style={
+                    styles.formGroup
                   }
-                  placeholder="Street / Building"
-                  onChangeText={
-                    value =>
-                      updateField(
-                        'street',
-                        value
-                      )
-                  }
-                />
+                >
+                  <Text
+                    style={
+                      styles.formLabel
+                    }
+                  >
+                    Street
+                  </Text>
+
+                  <AddressAutocomplete
+                    role="seller"
+                    value={
+                      form.street
+                    }
+                    placeholder="Street / Building (e.g. Tabuco)"
+                    placeholderTextColor="#B0B2B0"
+                    style={
+                      styles.input
+                    }
+                    onChangeText={
+                      value =>
+                        updateField(
+                          'street',
+                          value
+                        )
+                    }
+                    onSelect={
+                      suggestion => {
+                        fillAddress(
+                          suggestion
+                        );
+
+                        // The typed text was only the search.
+                        updateField(
+                          'street',
+                          suggestion.street
+                        );
+
+                        if (
+                          suggestion.latitude !=
+                            null &&
+                          suggestion.longitude !=
+                            null
+                        ) {
+                          updateField(
+                            'location',
+                            {
+                              latitude:
+                                suggestion.latitude,
+                              longitude:
+                                suggestion.longitude,
+                            }
+                          );
+                        }
+                      }
+                    }
+                  />
+                </View>
 
                 <FormField
                   label="Barangay"
@@ -1554,6 +1682,9 @@ export default function SellerProfileScreen() {
                   }
                   disabled={
                     saving
+                  }
+                  onAddressResolved={
+                    fillAddress
                   }
                 />
 
@@ -2824,6 +2955,21 @@ const styles =
 
     formGroup: {
       marginBottom: 14,
+    },
+
+    fieldError: {
+      marginTop: -8,
+      marginBottom: 12,
+      color: '#C2413B',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+
+    mapPinHint: {
+      marginTop: 8,
+      color: '#5E9874',
+      fontSize: 12,
+      fontWeight: '700',
     },
 
     formLabel: {

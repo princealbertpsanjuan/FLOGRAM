@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DateRangeButton, isInRange, type DateRange } from '../../components/ui/date-range-picker';
 import ScreenHeader from '../../components/ui/screen-header';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import { EmptyState, ErrorState, ScreenLoader } from '../../components/ui/state-views';
@@ -43,6 +44,8 @@ export default function AdminDisputesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  // Optional filed-on date range (calendar). null = all dates.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,7 +68,10 @@ export default function AdminDisputesScreen() {
   /*
    * Show 5 disputes + "See all"; collapses on filter change.
    */
-  const seeAll = useSeeAll(disputes, { resetKey: filter });
+  const datedDisputes = disputes.filter(item => isInRange(item.createdAt, dateRange));
+  const seeAll = useSeeAll(datedDisputes, {
+    resetKey: `${filter}|${dateRange ? `${dateRange.start}_${dateRange.end}` : ''}`,
+  });
 
   if (loading) {
     return <ScreenLoader role="admin" message="Loading disputes..." />;
@@ -98,6 +104,17 @@ export default function AdminDisputesScreen() {
         })}
       </View>
 
+      <View style={styles.filters}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setDateRange(null)}
+          style={[styles.chip, !dateRange && styles.chipActive]}
+        >
+          <Text style={[styles.chipText, !dateRange && { color: '#FFFFFF' }]}>All dates</Text>
+        </Pressable>
+        <DateRangeButton value={dateRange} onChange={setDateRange} role="admin" maxDate={new Date()} />
+      </View>
+
       <FlatList
         data={seeAll.visible}
         keyExtractor={item => item._id}
@@ -117,7 +134,7 @@ export default function AdminDisputesScreen() {
           error ? (
             <ErrorState role="admin" message={error} onRetry={() => void load()} />
           ) : (
-            <EmptyState role="admin" icon="checkmark-done-outline" title="Nothing here" message="No disputes with this status." />
+            <EmptyState role="admin" icon="checkmark-done-outline" title="Nothing here" message={dateRange ? 'No disputes with this status in the selected dates.' : 'No disputes with this status.'} />
           )
         }
         renderItem={({ item }) => (
@@ -152,7 +169,7 @@ export default function AdminDisputesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F5F8' },
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
   chip: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: ACCENT },
   chipActive: { backgroundColor: ACCENT },
   chipText: { color: ACCENT, fontSize: 12, fontWeight: '700' },

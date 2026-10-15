@@ -20,6 +20,7 @@ import {
 } from "../../services/admin";
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import AdminContactActions from '../../components/admin/admin-contact-actions';
 
 import { formatAddOnsLine } from '../../services/addons';
 
@@ -106,6 +107,24 @@ function getPersonEmail(
   }
 
   return person.email || "Not available";
+}
+
+function getPersonPhone(
+  person: AdminOrder["customer"] | AdminOrder["seller"]
+) {
+  if (!person || typeof person === "string") {
+    return undefined;
+  }
+
+  return person.phoneNumber || undefined;
+}
+
+function getShopContact(order: AdminOrder) {
+  if (order.florist && typeof order.florist === "object" && order.florist.contactNumber) {
+    return order.florist.contactNumber;
+  }
+
+  return getPersonPhone(order.seller);
 }
 
 function getShopName(order: AdminOrder) {
@@ -603,6 +622,16 @@ export default function AdminOrderDetailsScreen() {
             />
 
             <DetailRow
+              label="Phone"
+              value={getPersonPhone(order.customer) || "Not provided"}
+            />
+
+            <AdminContactActions
+              phone={getPersonPhone(order.customer)}
+              compact
+            />
+
+            <DetailRow
               label="Recipient"
               value={order.recipientName}
             />
@@ -612,6 +641,15 @@ export default function AdminOrderDetailsScreen() {
               value={order.recipientPhoneNumber}
               isLast
             />
+
+            {order.recipientPhoneNumber &&
+            order.recipientPhoneNumber !==
+              getPersonPhone(order.customer) ? (
+              <AdminContactActions
+                phone={order.recipientPhoneNumber}
+                compact
+              />
+            ) : null}
           </View>
 
           <SectionHeader
@@ -633,7 +671,17 @@ export default function AdminOrderDetailsScreen() {
             <DetailRow
               label="Seller Email"
               value={getPersonEmail(order.seller)}
+            />
+
+            <DetailRow
+              label="Shop Contact"
+              value={getShopContact(order) || "Not provided"}
               isLast
+            />
+
+            <AdminContactActions
+              phone={getShopContact(order)}
+              compact
             />
           </View>
 

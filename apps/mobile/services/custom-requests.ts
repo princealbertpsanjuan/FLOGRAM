@@ -30,7 +30,8 @@ export type CustomRequest = {
   theme?: string | null;
   bouquetSize?: string | null;
   wrapping?: string | null;
-  specialInstructions?: string | null;
+  // Server stores a string array (older records: a string)
+  specialInstructions?: string[] | string | null;
   customerMessage?: string | null;
   status: string;
   quotedPrice?: number | null;

@@ -35,6 +35,8 @@ import RiderBottomNav, {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import ContactActions from '../../components/ui/contact-actions';
+
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 
 /*
@@ -1026,6 +1028,43 @@ function ActiveDeliveryCard({
             'Phone unavailable'
           }
         </Text>
+
+        <ContactActions
+          phone={
+            delivery.recipientPhoneNumber
+          }
+          role="rider"
+          compact
+        />
+
+        {florist?.contactNumber ? (
+          <>
+            <Text
+              style={[
+                styles.infoSectionLabel,
+                { marginTop: 12 },
+              ]}
+            >
+              SHOP CONTACT
+            </Text>
+
+            <Text
+              style={
+                styles.recipientPhone
+              }
+            >
+              {florist.contactNumber}
+            </Text>
+
+            <ContactActions
+              phone={
+                florist.contactNumber
+              }
+              role="rider"
+              compact
+            />
+          </>
+        ) : null}
       </View>
 
       {/* ORDER */}

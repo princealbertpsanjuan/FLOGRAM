@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -19,6 +21,7 @@ import {
   Text,
   View,
 } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 import {
   getMyCheckouts,
@@ -27,7 +30,9 @@ import {
 } from "../../services/checkout";
 
 import {
+  canPayOrderOnline,
   getMyOrders,
+  payOrderOnline,
   type CustomerOrder,
 } from "../../services/orders";
 
@@ -1827,6 +1832,11 @@ export default function CustomerOrdersScreen() {
                           entry.id
                         )
                       }
+                      onPaymentDone={() =>
+                        void loadPurchases(
+                          false
+                        )
+                      }
                     />
                   );
                 }
@@ -1841,6 +1851,11 @@ export default function CustomerOrdersScreen() {
                       reviewByOrderId[
                         entry.id
                       ]
+                    }
+                    onPaymentDone={() =>
+                      void loadPurchases(
+                        false
+                      )
                     }
                     onPress={() =>
                       openOrder(
@@ -2066,9 +2081,13 @@ function CheckoutCard({
   checkout,
   reviewByOrderId,
   onPress,
+  onPaymentDone,
 }: {
   checkout:
     CustomerCheckout;
+
+  onPaymentDone:
+    () => void;
 
   reviewByOrderId:
     Record<
@@ -2544,6 +2563,38 @@ function CheckoutCard({
         </Text>
       </View>
 
+      {checkout.paymentMethod ===
+        "paymongo" &&
+      checkout.paymentStatus !==
+        "paid" &&
+      checkout.paymentStatus !==
+        "refunded" &&
+      checkout.checkoutStatus !==
+        "cancelled" &&
+      category ===
+        "active" &&
+      getCheckoutOrders(
+        checkout
+      ).length > 0 &&
+      getCheckoutOrders(
+        checkout
+      ).every(
+        (child) =>
+          child.orderStatus !==
+          "cancelled"
+      ) ? (
+        <PayNowChip
+          orderId={
+            getCheckoutOrders(
+              checkout
+            )[0]._id
+          }
+          onDone={
+            onPaymentDone
+          }
+        />
+      ) : null}
+
       {category ===
         "completed" &&
       completedOrders.length >
@@ -2609,6 +2660,115 @@ function CheckoutCard({
 
 /*
  * =========================================================
+ * PAY NOW (online payment not finished)
+ * =========================================================
+ */
+
+function PayNowChip({
+  orderId,
+  onDone,
+}: {
+  orderId: string;
+
+  onDone: () => void;
+}) {
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const payNow =
+    async () => {
+      try {
+        setLoading(
+          true
+        );
+
+        const result =
+          await payOrderOnline(
+            orderId
+          );
+
+        if (
+          result.alreadyPaid ||
+          !result.checkoutUrl
+        ) {
+          Alert.alert(
+            "Already Paid",
+            "We already received your online payment for this order."
+          );
+        } else {
+          await WebBrowser.openBrowserAsync(
+            result.checkoutUrl
+          );
+        }
+
+        onDone();
+      } catch (
+        error
+      ) {
+        Alert.alert(
+          "Unable to open payment",
+          error instanceof
+            Error
+            ? error.message
+            : "Please try again."
+        );
+      } finally {
+        setLoading(
+          false
+        );
+      }
+    };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={
+        loading
+      }
+      onPress={() =>
+        void payNow()
+      }
+      style={({
+        pressed,
+      }) => [
+        styles.payNowChip,
+
+        (pressed ||
+          loading) && {
+          opacity: 0.75,
+        },
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color="#FFFFFF"
+        />
+      ) : (
+        <>
+          <Ionicons
+            name="card-outline"
+            size={15}
+            color="#FFFFFF"
+          />
+
+          <Text
+            style={
+              styles.payNowChipText
+            }
+          >
+            Pay Now
+          </Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+/*
+ * =========================================================
  * STANDALONE ORDER CARD
  * =========================================================
  */
@@ -2617,8 +2777,11 @@ function StandaloneOrderCard({
   order,
   reviewStatus,
   onPress,
+  onPaymentDone,
 }: {
   order: CustomerOrder;
+
+  onPaymentDone: () => void;
 
   reviewStatus?:
     OrderReviewStatus;
@@ -3003,6 +3166,19 @@ function StandaloneOrderCard({
           }
         </Text>
       </View>
+
+      {canPayOrderOnline(
+        order
+      ) ? (
+        <PayNowChip
+          orderId={
+            order._id
+          }
+          onDone={
+            onPaymentDone
+          }
+        />
+      ) : null}
 
       {order.orderStatus ===
         "completed" ? (
@@ -3933,6 +4109,43 @@ const styles =
 
       color:
         "#A79E9C",
+    },
+
+    payNowChip: {
+      marginTop:
+        10,
+
+      minHeight:
+        40,
+
+      borderRadius:
+        12,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap:
+        6,
+
+      backgroundColor:
+        "#DF628F",
+    },
+
+    payNowChipText: {
+      fontSize:
+        13,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#FFFFFF",
     },
 
     paymentStatus: {

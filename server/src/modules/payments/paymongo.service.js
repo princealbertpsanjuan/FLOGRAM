@@ -147,6 +147,7 @@ export const createPayMongoCheckoutSession =
   async ({
     order,
     customer,
+    idempotencyKey = null,
   }) => {
     if (!order) {
       const error = new Error(
@@ -484,6 +485,7 @@ export const createPayMongoCheckoutSession =
               "application/json",
 
             "Idempotency-Key":
+              idempotencyKey ||
               `flogram-order-${order._id}`,
           },
 
@@ -584,6 +586,147 @@ export const createPayMongoCheckoutSession =
       raw:
         checkoutSession,
     };
+  };
+
+/*
+ * =========================================================
+ * RETRIEVE CHECKOUT SESSION (PAY AGAIN)
+ * =========================================================
+ *
+ * Used before reusing or replacing a session when the
+ * customer taps "Pay Now" again:
+ *
+ * - active  → same session can still be paid → reuse it
+ * - paid    → payment already went through (webhook may
+ *             be late) → never open a second payment
+ * - expired → safe to create a new session
+ *
+ * Returns null when PayMongo cannot be reached.
+ * =========================================================
+ */
+
+export const retrievePayMongoCheckoutSession =
+  async (
+    checkoutSessionId
+  ) => {
+    if (!checkoutSessionId) {
+      return null;
+    }
+
+    try {
+      const response =
+        await fetch(
+          `${PAYMONGO_API_URL}/v1/checkout_sessions/${encodeURIComponent(
+            checkoutSessionId
+          )}`,
+          {
+            method:
+              "GET",
+
+            headers: {
+              Authorization:
+                getAuthorizationHeader(),
+            },
+          }
+        );
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const result =
+        await response.json();
+
+      const session =
+        result?.data ||
+        null;
+
+      if (!session?.id) {
+        return null;
+      }
+
+      const attributes =
+        session.attributes ||
+        {};
+
+      const payments =
+        Array.isArray(
+          attributes.payments
+        )
+          ? attributes.payments
+          : [];
+
+      const paidPayment =
+        payments.find(
+          (payment) =>
+            payment
+              ?.attributes
+              ?.status ===
+            "paid"
+        ) || null;
+
+      return {
+        id:
+          session.id,
+
+        status:
+          String(
+            attributes.status ||
+              ""
+          ).toLowerCase(),
+
+        checkoutUrl:
+          attributes.checkout_url ||
+          null,
+
+        paidPayment,
+
+        session,
+      };
+    } catch (error) {
+      console.error(
+        "Unable to retrieve PayMongo checkout session:",
+        error?.message ||
+          error
+      );
+
+      return null;
+    }
+  };
+
+/*
+ * Best effort: close an old session before a new one is
+ * created so the customer cannot pay twice.
+ */
+export const expirePayMongoCheckoutSession =
+  async (
+    checkoutSessionId
+  ) => {
+    if (!checkoutSessionId) {
+      return false;
+    }
+
+    try {
+      const response =
+        await fetch(
+          `${PAYMONGO_API_URL}/v1/checkout_sessions/${encodeURIComponent(
+            checkoutSessionId
+          )}/expire`,
+          {
+            method:
+              "POST",
+
+            headers: {
+              Authorization:
+                getAuthorizationHeader(),
+            },
+          }
+        );
+
+      return response.ok;
+    } catch {
+      return false;
+    }
   };
 
 /*

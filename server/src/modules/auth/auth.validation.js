@@ -1,5 +1,11 @@
 import { body, validationResult } from "express-validator";
 
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+} from "../../utils/contactFormats.js";
+
 const passwordValidationRules = (fieldName, label = "Password") => {
   return body(fieldName)
     .notEmpty()
@@ -41,10 +47,9 @@ export const registerValidation = [
     .trim()
     .notEmpty()
     .withMessage("Phone number is required.")
-    .matches(/^(09|\+639)\d{9}$/)
-    .withMessage(
-      "Enter a valid Philippine phone number, such as 09171234567."
-    ),
+    .custom((value) => isValidPhone(value))
+    .withMessage(PHONE_ERROR)
+    .customSanitizer(normalizePhone),
 
   passwordValidationRules("password"),
 

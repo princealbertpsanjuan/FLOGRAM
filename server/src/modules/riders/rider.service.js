@@ -220,6 +220,11 @@ export const updateRiderProfile =
       throw error;
     }
 
+    /*
+     * Values were validated and normalized by
+     * updateRiderValidation (phone 09XXXXXXXXX,
+     * license A01-23-456789, plate uppercase).
+     */
     const allowedFields = [
       "vehicleType",
       "vehiclePlateNumber",
@@ -228,12 +233,28 @@ export const updateRiderProfile =
       "emergencyContactNumber",
     ];
 
+    const vehicleFields = [
+      "vehicleType",
+      "vehiclePlateNumber",
+      "driverLicenseNumber",
+    ];
+
+    const changedVehicleFields = [];
+
     allowedFields.forEach(
       (field) => {
         if (
           profileData[field] !==
           undefined
         ) {
+          if (
+            vehicleFields.includes(field) &&
+            String(rider[field] ?? "") !==
+              String(profileData[field] ?? "")
+          ) {
+            changedVehicleFields.push(field);
+          }
+
           rider[field] =
             profileData[field];
         }
@@ -248,9 +269,81 @@ export const updateRiderProfile =
       };
     }
 
+    /*
+     * The contact number lives on the User account.
+     */
+    let user = null;
+
+    if (
+      profileData.phoneNumber !==
+      undefined
+    ) {
+      user = await User.findById(
+        userId
+      );
+
+      if (!user) {
+        const error = new Error(
+          "User account was not found."
+        );
+
+        error.statusCode = 404;
+
+        throw error;
+      }
+
+      user.phoneNumber =
+        profileData.phoneNumber;
+    }
+
     await rider.save();
 
-    return rider;
+    if (user) {
+      await user.save();
+    }
+
+    /*
+     * Vehicle / license edits are allowed, but the
+     * Admin is told so they can re-check them.
+     */
+    if (changedVehicleFields.length > 0) {
+      const owner =
+        user ||
+        (await User.findById(userId)
+          .select("firstName lastName")
+          .lean());
+
+      const riderName =
+        [owner?.firstName, owner?.lastName]
+          .filter(Boolean)
+          .join(" ") || "A rider";
+
+      const labels = {
+        vehicleType: "vehicle type",
+        vehiclePlateNumber: "plate number",
+        driverLicenseNumber: "license number",
+      };
+
+      await notifyAdmins({
+        type: "system",
+        title: "Rider updated vehicle/license",
+        message: `Rider ${riderName} updated vehicle/license details (${changedVehicleFields
+          .map((field) => labels[field])
+          .join(", ")}). Please review if re-verification is needed.`,
+        metadata: {
+          riderId: String(rider._id),
+          userId: String(userId),
+          changedFields: changedVehicleFields,
+        },
+      });
+    }
+
+    return Rider.findById(
+      rider._id
+    ).populate(
+      "owner",
+      "firstName lastName email phoneNumber role verificationStatus"
+    );
   };
 
 /*

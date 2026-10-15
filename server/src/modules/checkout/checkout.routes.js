@@ -9,12 +9,14 @@ import {
   getOne,
   payMongoWebhook,
   quoteCheckout,
+  quoteCustomBouquet,
 } from "./checkout.controller.js";
 
 import {
   checkoutIdValidation,
   checkoutQuoteValidation,
   createCheckoutValidation,
+  customBouquetQuoteValidation,
   validateCheckoutRequest,
 } from "./checkout.validation.js";
 
@@ -79,6 +81,36 @@ checkoutRouter.post(
   validateCheckoutRequest,
 
   quoteCheckout
+);
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * CUSTOM BOUQUET CHECKOUT QUOTE
+ * =========================================================
+ *
+ * POST /api/v1/checkout/custom-bouquet/quote
+ *
+ * Accepted custom bouquet (AI conversation): agreed price,
+ * delivery fee, pre-order fee and total — the same amounts
+ * POST /orders stores and PayMongo charges.
+ * =========================================================
+ */
+
+checkoutRouter.post(
+  "/custom-bouquet/quote",
+
+  authenticate,
+
+  authorize(
+    "customer"
+  ),
+
+  customBouquetQuoteValidation,
+
+  validateCheckoutRequest,
+
+  quoteCustomBouquet
 );
 
 /*

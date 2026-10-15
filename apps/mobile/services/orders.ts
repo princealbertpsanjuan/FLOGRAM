@@ -493,6 +493,72 @@ export async function completeOrder(
 
 /*
  * =========================================================
+ * PAY NOW (online payment not finished)
+ *
+ * POST /payments/orders/:orderId/pay
+ *
+ * Reuses the open PayMongo page when it is still active,
+ * or creates a new one when it expired. Cart orders are
+ * paid together with the rest of their checkout.
+ * =========================================================
+ */
+
+export type OrderPaymentSession = {
+  orderId: string;
+
+  checkoutId?: string;
+
+  checkoutSessionId?: string;
+
+  checkoutUrl: string | null;
+
+  alreadyPaid?: boolean;
+
+  paymentStatus: PaymentStatus;
+
+  totalAmount?: number;
+};
+
+type OrderPaymentResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: OrderPaymentSession;
+};
+
+export async function payOrderOnline(
+  orderId: string
+): Promise<OrderPaymentSession> {
+  const response =
+    await apiRequest<OrderPaymentResponse>(
+      `/payments/orders/${encodeURIComponent(orderId.trim())}/pay`,
+      {
+        method: 'POST',
+
+        authenticated: true,
+      }
+    );
+
+  return response.data;
+}
+
+/*
+ * Online payment started but not finished, and the
+ * order can still be paid.
+ */
+export const canPayOrderOnline = (order: {
+  paymentMethod?: PaymentMethod | null;
+  paymentStatus?: PaymentStatus | null;
+  orderStatus?: string | null;
+}) =>
+  order.paymentMethod === 'paymongo' &&
+  order.paymentStatus !== 'paid' &&
+  order.paymentStatus !== 'refunded' &&
+  !['cancelled', 'completed', 'delivered'].includes(String(order.orderStatus || ''));
+
+/*
+ * =========================================================
  * SELLER ORDER FILTERS
  * =========================================================
  */

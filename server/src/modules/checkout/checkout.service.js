@@ -6,6 +6,7 @@ import Cart from "../cart/cart.model.js";
 import Flower from "../flowers/flower.model.js";
 import Florist from "../florists/florist.model.js";
 import Order from "../orders/order.model.js";
+import CustomBouquetRequest from "../bloomboard/customBouquet/customBouquetRequest.model.js";
 
 import {
   createOrder,
@@ -20,7 +21,9 @@ import {
 } from "../../services/routing.service.js";
 
 import {
+  expirePayMongoCheckoutSession,
   parsePayMongoWebhook,
+  retrievePayMongoCheckoutSession,
   verifyPayMongoWebhookSignature,
 } from "../payments/paymongo.service.js";
 import { resolveAddOnSelections } from "../addons/addon.service.js";
@@ -1152,6 +1155,273 @@ export const quoteCustomerCheckout =
 
 /*
  * =========================================================
+ * QUOTE CUSTOM BOUQUET CHECKOUT
+ * =========================================================
+ *
+ * Accepted custom bouquet (AI conversation proposal).
+ *
+ * Same rules as the cart quote and as the order that
+ * POST /orders creates for sourceType "custom_bouquet":
+ *
+ *   agreed price × quantity
+ * + distance-based delivery fee (shop pin → customer pin,
+ *   pickup = 0)
+ * + pre-order fee (scheduled date)
+ * = total
+ *
+ * No Order is created here.
+ * =========================================================
+ */
+
+export const quoteCustomBouquetCheckout =
+  async (
+    customerId,
+    checkoutData
+  ) => {
+    await getCustomer(
+      customerId
+    );
+
+    const fulfillmentType =
+      validateFulfillment(
+        checkoutData
+      );
+
+    const schedule =
+      resolveSchedule(
+        checkoutData
+      );
+
+    const request =
+      await CustomBouquetRequest.findOne({
+        _id:
+          checkoutData
+            .customBouquetRequestId,
+
+        customer:
+          customerId,
+      });
+
+    if (!request) {
+      throw createError(
+        "Custom bouquet request was not found or does not belong to this customer.",
+        404
+      );
+    }
+
+    if (
+      request.status !==
+      "customer_accepted"
+    ) {
+      throw createError(
+        "Only customer-accepted custom bouquet quotes can be checked out."
+      );
+    }
+
+    const unitPrice =
+      Number(
+        request.quotedPrice
+      );
+
+    if (
+      request.quotedPrice ===
+        null ||
+      request.quotedPrice ===
+        undefined ||
+      !Number.isFinite(
+        unitPrice
+      ) ||
+      unitPrice < 0
+    ) {
+      throw createError(
+        "The custom bouquet request does not have a valid quoted price."
+      );
+    }
+
+    const florist =
+      await Florist.findById(
+        request.florist
+      );
+
+    if (!florist) {
+      throw createError(
+        "Florist profile was not found.",
+        404
+      );
+    }
+
+    const quantity =
+      Math.max(
+        Number(
+          request.quantity
+        ) || 1,
+        1
+      );
+
+    const productsSubtotal =
+      unitPrice *
+      quantity;
+
+    const route =
+      await calculateShopDelivery({
+        florist,
+
+        fulfillmentType,
+
+        deliveryLocation:
+          checkoutData
+            .deliveryLocation ||
+          {},
+      });
+
+    const deliveryFee =
+      Number(
+        route.deliveryFee ||
+          0
+      );
+
+    const preOrderFee =
+      schedule.isPreOrder
+        ? PRE_ORDER_FEE
+        : 0;
+
+    const totalAmount =
+      productsSubtotal +
+      deliveryFee +
+      preOrderFee;
+
+    const productName =
+      request.occasion
+        ? `Custom ${request.occasion} Bouquet`
+        : "Custom Bouquet";
+
+    const item = {
+      customBouquetRequestId:
+        request._id,
+
+      florist:
+        florist._id,
+
+      shopName:
+        florist.shopName ||
+        "FLOGRAM Florist",
+
+      productName,
+
+      inspirationImage:
+        request.inspirationImage ||
+        null,
+
+      quantity,
+
+      unitPrice,
+
+      addOns:
+        [],
+
+      addOnsTotal:
+        0,
+
+      subtotal:
+        productsSubtotal,
+
+      deliveryFee,
+
+      preOrderFee,
+
+      totalAmount,
+
+      deliveryDistanceMeters:
+        route
+          .deliveryDistanceMeters,
+
+      deliveryDurationSeconds:
+        route
+          .deliveryDurationSeconds,
+    };
+
+    return {
+      fulfillmentType,
+
+      isPreOrder:
+        schedule.isPreOrder,
+
+      requestedDeliveryDate:
+        schedule
+          .requestedDeliveryDate,
+
+      requestedDeliveryTimeStart:
+        schedule
+          .requestedDeliveryTimeStart,
+
+      requestedDeliveryTimeEnd:
+        schedule
+          .requestedDeliveryTimeEnd,
+
+      itemCount:
+        1,
+
+      totalQuantity:
+        quantity,
+
+      shopCount:
+        1,
+
+      unitPrice,
+
+      productsSubtotal,
+
+      deliveryFee,
+
+      preOrderFee,
+
+      totalAmount,
+
+      shops: [
+        {
+          florist:
+            florist._id,
+
+          shopName:
+            florist.shopName ||
+            "FLOGRAM Florist",
+
+          itemCount:
+            1,
+
+          totalQuantity:
+            quantity,
+
+          productsSubtotal,
+
+          deliveryFee,
+
+          preOrderFee,
+
+          totalAmount,
+
+          deliveryDistanceMeters:
+            route
+              .deliveryDistanceMeters,
+
+          deliveryDurationSeconds:
+            route
+              .deliveryDurationSeconds,
+
+          items: [
+            item,
+          ],
+        },
+      ],
+
+      items: [
+        item,
+      ],
+    };
+  };
+
+/*
+ * =========================================================
  * POPULATE CHECKOUT
  * =========================================================
  */
@@ -1184,7 +1454,7 @@ const populateCheckout =
             "florist",
 
           select:
-            "shopName address location shopLogo",
+            "shopName address location shopLogo contactNumber",
         },
       });
   };
@@ -2319,39 +2589,162 @@ export const createCheckoutPayMongoSession =
     }
 
     /*
+     * One PayMongo session pays every Order in the
+     * checkout. If one of them was cancelled, the total
+     * would include it, so do not charge.
+     */
+    if (
+      (checkout.orders || []).some(
+        (order) =>
+          order?.orderStatus ===
+          "cancelled"
+      )
+    ) {
+      throw createError(
+        "An order in this checkout was cancelled, so it can no longer be paid online. Please cancel the remaining order and order again."
+      );
+    }
+
+    /*
      * =====================================================
-     * REUSE EXISTING SESSION
+     * REUSE / REPLACE EXISTING SESSION (PAY AGAIN)
+     * =====================================================
+     *
+     * The customer may have closed or cancelled the
+     * PayMongo page. Tapping "Pay Now" again:
+     *
+     * - session still active → reuse the same link
+     * - session already paid → record it, never charge twice
+     * - session expired      → expire-safe new session
      * =====================================================
      */
 
+    let idempotencyKey =
+      `flogram-checkout-${checkout._id}`;
+
+    let previousSessionId =
+      null;
+
     if (
-      checkout.paymentStatus ===
-        "pending" &&
       checkout
-        .paymongoCheckoutSessionId &&
-      checkout
-        .paymentCheckoutUrl
+        .paymongoCheckoutSessionId
     ) {
-      return {
-        checkoutId:
-          checkout._id,
-
-        checkoutSessionId:
+      const existing =
+        await retrievePayMongoCheckoutSession(
           checkout
-            .paymongoCheckoutSessionId,
+            .paymongoCheckoutSessionId
+        );
 
-        checkoutUrl:
-          checkout
-            .paymentCheckoutUrl,
+      if (
+        existing?.paidPayment
+      ) {
+        await applyCheckoutPaid({
+          checkout,
 
-        paymentStatus:
-          checkout
-            .paymentStatus,
+          sessionId:
+            existing.id,
 
-        totalAmount:
-          checkout
-            .totalAmount,
-      };
+          paidPayment:
+            existing.paidPayment,
+
+          eventId:
+            null,
+        });
+
+        return {
+          checkoutId:
+            checkout._id,
+
+          checkoutSessionId:
+            existing.id,
+
+          checkoutUrl:
+            null,
+
+          alreadyPaid:
+            true,
+
+          paymentStatus:
+            "paid",
+
+          totalAmount:
+            checkout
+              .totalAmount,
+        };
+      }
+
+      const reusableUrl =
+        existing?.checkoutUrl ||
+        checkout
+          .paymentCheckoutUrl;
+
+      /*
+       * Active session, or PayMongo could not be reached
+       * (we cannot prove the old link is closed, so we
+       * do not open a second one).
+       */
+      if (
+        (!existing ||
+          existing.status ===
+            "active") &&
+        reusableUrl
+      ) {
+        if (
+          checkout.paymentStatus !==
+          "pending"
+        ) {
+          checkout.paymentStatus =
+            "pending";
+
+          checkout.checkoutStatus =
+            "payment_pending";
+
+          await checkout.save();
+        }
+
+        return {
+          checkoutId:
+            checkout._id,
+
+          checkoutSessionId:
+            checkout
+              .paymongoCheckoutSessionId,
+
+          checkoutUrl:
+            reusableUrl,
+
+          paymentStatus:
+            checkout
+              .paymentStatus,
+
+          totalAmount:
+            checkout
+              .totalAmount,
+        };
+      }
+
+      if (!existing) {
+        throw createError(
+          "Unable to reach PayMongo right now. Please try again.",
+          502
+        );
+      }
+
+      if (
+        existing.status ===
+        "active"
+      ) {
+        await expirePayMongoCheckoutSession(
+          existing.id
+        );
+      }
+
+      previousSessionId =
+        checkout
+          .paymongoCheckoutSessionId;
+
+      idempotencyKey =
+        `flogram-checkout-${checkout._id}-${Date.now()}`;
     }
 
     /*
@@ -2730,7 +3123,7 @@ export const createCheckoutPayMongoSession =
              */
 
             "Idempotency-Key":
-              `flogram-checkout-${checkout._id}`,
+              idempotencyKey,
           },
 
           body:
@@ -2810,6 +3203,20 @@ export const createCheckoutPayMongoSession =
      * UPDATE CHECKOUT
      * =====================================================
      */
+
+    if (
+      previousSessionId &&
+      previousSessionId !==
+        session.id
+    ) {
+      checkout.previousPaymongoSessionIds =
+        [
+          ...(checkout
+            .previousPaymongoSessionIds ||
+            []),
+          previousSessionId,
+        ];
+    }
 
     checkout.paymentStatus =
       "pending";
@@ -2904,6 +3311,165 @@ export const createCheckoutPayMongoSession =
         checkout
           .totalAmount,
     };
+  };
+
+/*
+ * =========================================================
+ * MARK CHECKOUT + CHILD ORDERS PAID
+ * =========================================================
+ *
+ * Shared by the webhook and by "Pay Now" (when PayMongo
+ * says the old session was already paid). Runs once:
+ * a checkout that is already paid is left untouched.
+ * =========================================================
+ */
+
+const applyCheckoutPaid =
+  async ({
+    checkout,
+    sessionId,
+    paidPayment,
+    eventId,
+  }) => {
+    if (
+      checkout.paymentStatus ===
+      "paid"
+    ) {
+      return false;
+    }
+
+    const paymentId =
+      paidPayment?.id ||
+      null;
+
+    const paymentChannel =
+      paidPayment
+        ?.attributes
+        ?.source
+        ?.type ||
+      paidPayment
+        ?.attributes
+        ?.payment_method_type ||
+      null;
+
+    const now =
+      new Date();
+
+    /*
+     * orders may be populated (Pay Now) or plain ids
+     * (webhook).
+     */
+    const orderIds =
+      (checkout.orders || []).map(
+        (order) =>
+          order?._id ||
+          order
+      );
+
+    checkout.paymentStatus =
+      "paid";
+
+    checkout.checkoutStatus =
+      "paid";
+
+    checkout.paymongoPaymentId =
+      paymentId;
+
+    checkout.paidAt =
+      now;
+
+    checkout.paymentFailedAt =
+      null;
+
+    checkout.lastPaymentEventId =
+      eventId ||
+      checkout
+        .lastPaymentEventId ||
+      null;
+
+    if (
+      sessionId &&
+      !checkout
+        .paymongoCheckoutSessionId
+    ) {
+      checkout.paymongoCheckoutSessionId =
+        sessionId;
+    }
+
+    await checkout.save();
+
+    await Order.updateMany(
+      {
+        _id: {
+          $in:
+            orderIds,
+        },
+      },
+      {
+        $set: {
+          paymentStatus:
+            "paid",
+
+          paymentProvider:
+            "paymongo",
+
+          paymongoCheckoutSessionId:
+            sessionId ||
+            checkout
+              .paymongoCheckoutSessionId,
+
+          paymongoPaymentId:
+            paymentId,
+
+          paymentChannel,
+
+          paidAt:
+            now,
+
+          paymentFailedAt:
+            null,
+
+          lastPaymentEventId:
+            eventId ||
+            null,
+        },
+      }
+    );
+
+    /*
+     * Tell the customer and each shop that payment went
+     * through (the order is now visible to the shop).
+     */
+    const paidOrders =
+      await Order.find({ _id: { $in: orderIds } })
+        .select("_id seller productName totalAmount")
+        .lean();
+
+    await notifySafely({
+      recipient: checkout.customer?._id || checkout.customer,
+      role: "customer",
+      type: "order_updated",
+      title: "Payment received",
+      message: `We received your online payment of ₱${Number(checkout.totalAmount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}. Your order${paidOrders.length === 1 ? " was" : "s were"} sent to the shop.`,
+      order: paidOrders[0]?._id || null,
+      metadata: { screen: "order", checkoutId: String(checkout._id) },
+    });
+
+    await Promise.all(
+      paidOrders.map((order) =>
+        notifySafely({
+          recipient: order.seller,
+          role: "seller",
+          type: "order_created",
+          title: "New paid order",
+          message: `${order.productName || "A bouquet"} was paid online. Please accept the order.`,
+          order: order._id,
+          metadata: { screen: "order" },
+        })
+      )
+    );
+
+    return true;
   };
 
 /*
@@ -3091,16 +3657,56 @@ export const processCheckoutPayMongoWebhook =
      * =====================================================
      * CHECK SESSION CONSISTENCY
      * =====================================================
+     *
+     * After "Pay Now" replaced an expired session, the
+     * stored id is the newest one. Older ids are kept in
+     * previousPaymongoSessionIds.
+     * =====================================================
      */
 
-    if (
+    const isCurrentSession =
+      !checkout
+        .paymongoCheckoutSessionId ||
+      !session.id ||
       checkout
-        .paymongoCheckoutSessionId &&
-      session.id &&
-      checkout
-        .paymongoCheckoutSessionId !==
+        .paymongoCheckoutSessionId ===
+        session.id;
+
+    const isPreviousSession =
+      Boolean(session.id) &&
+      (checkout
+        .previousPaymongoSessionIds ||
+        []).includes(
         session.id
+      );
+
+    if (
+      !isCurrentSession &&
+      !isPreviousSession
     ) {
+      if (
+        checkout.paymentStatus ===
+        "paid"
+      ) {
+        return {
+          acknowledged:
+            true,
+
+          processed:
+            true,
+
+          duplicate:
+            true,
+
+          checkoutId:
+            checkout._id,
+
+          paymentStatus:
+            checkout
+              .paymentStatus,
+        };
+      }
+
       throw createError(
         "PayMongo checkout session does not match this FLOGRAM checkout.",
         409
@@ -3111,14 +3717,41 @@ export const processCheckoutPayMongoWebhook =
      * =====================================================
      * IDEMPOTENCY
      * =====================================================
+     *
+     * Same event twice, or the checkout was already
+     * marked paid (by another event or by "Pay Now"
+     * finding the paid session) → do nothing again.
+     * =====================================================
      */
 
     if (
-      eventId &&
-      checkout
-        .lastPaymentEventId ===
-        eventId
+      (eventId &&
+        checkout
+          .lastPaymentEventId ===
+          eventId) ||
+      checkout.paymentStatus ===
+        "paid"
     ) {
+      if (
+        checkout.paymentStatus ===
+          "paid" &&
+        session.id &&
+        checkout
+          .paymongoCheckoutSessionId !==
+          session.id
+      ) {
+        console.error(
+          "PayMongo: a second session was paid for an already paid checkout. Refund manually if needed.",
+          {
+            checkoutId:
+              checkout._id,
+
+            sessionId:
+              session.id,
+          }
+        );
+      }
+
       return {
         acknowledged:
           true,
@@ -3164,133 +3797,20 @@ export const processCheckoutPayMongoWebhook =
       payments[0] ||
       null;
 
+    await applyCheckoutPaid({
+      checkout,
+
+      sessionId:
+        session.id,
+
+      paidPayment,
+
+      eventId,
+    });
+
     const paymentId =
       paidPayment?.id ||
       null;
-
-    const paymentChannel =
-      paidPayment
-        ?.attributes
-        ?.source
-        ?.type ||
-      paidPayment
-        ?.attributes
-        ?.payment_method_type ||
-      null;
-
-    const now =
-      new Date();
-
-    /*
-     * =====================================================
-     * MARK CHECKOUT PAID
-     * =====================================================
-     */
-
-    checkout.paymentStatus =
-      "paid";
-
-    checkout.checkoutStatus =
-      "paid";
-
-    checkout.paymongoPaymentId =
-      paymentId;
-
-    checkout.paidAt =
-      now;
-
-    checkout.paymentFailedAt =
-      null;
-
-    checkout.lastPaymentEventId =
-      eventId;
-
-    if (
-      session.id &&
-      !checkout
-        .paymongoCheckoutSessionId
-    ) {
-      checkout.paymongoCheckoutSessionId =
-        session.id;
-    }
-
-    await checkout.save();
-
-    /*
-     * =====================================================
-     * MARK ALL CHILD ORDERS PAID
-     * =====================================================
-     */
-
-    await Order.updateMany(
-      {
-        _id: {
-          $in:
-            checkout.orders,
-        },
-      },
-      {
-        $set: {
-          paymentStatus:
-            "paid",
-
-          paymentProvider:
-            "paymongo",
-
-          paymongoCheckoutSessionId:
-            session.id ||
-            checkout
-              .paymongoCheckoutSessionId,
-
-          paymongoPaymentId:
-            paymentId,
-
-          paymentChannel,
-
-          paidAt:
-            now,
-
-          paymentFailedAt:
-            null,
-
-          lastPaymentEventId:
-            eventId,
-        },
-      }
-    );
-
-    /*
-     * Tell the customer and each shop that payment went
-     * through (the order is now visible to the shop).
-     */
-    const paidOrders =
-      await Order.find({ _id: { $in: checkout.orders } })
-        .select("_id seller productName totalAmount")
-        .lean();
-
-    await notifySafely({
-      recipient: checkout.customer,
-      role: "customer",
-      type: "order_updated",
-      title: "Payment received",
-      message: `We received your online payment of ₱${Number(checkout.totalAmount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}. Your order${paidOrders.length === 1 ? " was" : "s were"} sent to the shop.`,
-      order: paidOrders[0]?._id || null,
-      metadata: { screen: "order", checkoutId: String(checkout._id) },
-    });
-
-    await Promise.all(
-      paidOrders.map((order) =>
-        notifySafely({
-          recipient: order.seller,
-          role: "seller",
-          type: "order_created",
-          title: "New paid order",
-          message: `${order.productName || "A bouquet"} was paid online. Please accept the order.`,
-          order: order._id,
-          metadata: { screen: "order" },
-        })
-      )
-    );
 
     return {
       acknowledged:

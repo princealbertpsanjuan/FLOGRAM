@@ -116,6 +116,28 @@ riderRouter.patch(
 
 /*
  * =========================================================
+ * UPDATE MY RIDER SETTINGS
+ *
+ * PATCH
+ * /api/v1/riders/me
+ *
+ * Same handler as PATCH /profile. Used by the
+ * Rider profile settings (contact number,
+ * vehicle type, plate number, license number).
+ * =========================================================
+ */
+
+riderRouter.patch(
+  "/me",
+  authenticate,
+  authorize("rider"),
+  updateRiderValidation,
+  validateRiderRequest,
+  updateMyProfile
+);
+
+/*
+ * =========================================================
  * RIDER DASHBOARD
  *
  * GET

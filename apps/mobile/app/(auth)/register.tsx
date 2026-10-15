@@ -22,6 +22,13 @@ import {
 
 import { replaceHistory } from "../../services/navigation";
 
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+  sanitizePhoneInput,
+} from "../../utils/validation";
+
 type RegistrationRole = Exclude<
   UserRole,
   "admin"
@@ -29,9 +36,6 @@ type RegistrationRole = Exclude<
 
 const EMAIL_REGEX =
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const PHONE_REGEX =
-  /^(09|\+639)\d{9}$/;
 
 const LOWERCASE_REGEX =
   /[a-z]/;
@@ -191,13 +195,13 @@ export default function RegisterScreen() {
     }
 
     if (
-      !PHONE_REGEX.test(
+      !isValidPhone(
         cleanPhoneNumber
       )
     ) {
       Alert.alert(
         "Invalid Phone Number",
-        "Enter a valid Philippine phone number, such as 09171234567."
+        PHONE_ERROR
       );
 
       return false;
@@ -315,7 +319,9 @@ export default function RegisterScreen() {
                 .toLowerCase(),
 
             phoneNumber:
-              phoneNumber.trim(),
+              normalizePhone(
+                phoneNumber
+              ),
 
             password,
 
@@ -616,33 +622,37 @@ export default function RegisterScreen() {
                 value
               ) => {
                 /*
-                 * Keep only numbers and
-                 * an optional leading +.
+                 * Digits only, max 11
+                 * (09XXXXXXXXX).
                  */
 
-                const cleaned =
-                  value.replace(
-                    /[^\d+]/g,
-                    ""
-                  );
-
                 setPhoneNumber(
-                  cleaned
+                  sanitizePhoneInput(
+                    value
+                  )
                 );
               }}
               keyboardType="phone-pad"
-              maxLength={13}
+              maxLength={11}
               textContentType="telephoneNumber"
               returnKeyType="next"
             />
 
             <Text
-              style={
-                styles.fieldHint
-              }
+              style={[
+                styles.fieldHint,
+                phoneNumber.length > 0 &&
+                  !isValidPhone(
+                    phoneNumber
+                  ) && {
+                    color: "#C2413B",
+                  },
+              ]}
             >
-              Use 09XXXXXXXXX or
-              +639XXXXXXXXX.
+              {phoneNumber.length > 0 &&
+              !isValidPhone(phoneNumber)
+                ? PHONE_ERROR
+                : "11 digits starting with 09 (e.g. 09171234567)."}
             </Text>
 
             {/* ============================================

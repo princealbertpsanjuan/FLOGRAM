@@ -14,6 +14,17 @@ const isValidObjectId = (
   );
 };
 
+/*
+ * A value that is only quote marks ('""', "''", “”)
+ * is an empty note sent as a JSON string, not text.
+ */
+const isOnlyQuotes = (
+  value
+) =>
+  /^["'“”‘’\s]*$/.test(
+    value
+  );
+
 const normalizeOptionalString = (
   value
 ) => {
@@ -27,8 +38,12 @@ const normalizeOptionalString = (
   const normalized =
     String(value).trim();
 
-  return normalized ||
-    null;
+  return normalized &&
+    !isOnlyQuotes(
+      normalized
+    )
+    ? normalized
+    : null;
 };
 
 const normalizeStringArray = (
@@ -74,6 +89,13 @@ const normalizeStringArray = (
       ) {
         value =
           parsed;
+      } else if (
+        typeof parsed ===
+        "string"
+      ) {
+        // '"text"' → "text", '""' → nothing
+        value =
+          [parsed];
       } else {
         value =
           [trimmed];
@@ -110,7 +132,13 @@ const normalizeStringArray = (
               item || ""
             ).trim()
         )
-        .filter(Boolean)
+        .filter(
+          (item) =>
+            item &&
+            !isOnlyQuotes(
+              item
+            )
+        )
     ),
   ];
 };

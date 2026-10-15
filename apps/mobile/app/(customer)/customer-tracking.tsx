@@ -12,7 +12,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -40,6 +39,7 @@ import {
 } from "../../services/delivery";
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import ContactActions from '../../components/ui/contact-actions';
 
 /*
  * =========================================================
@@ -1406,43 +1406,6 @@ export default function CustomerTrackingScreen() {
 
   /*
    * =======================================================
-   * RIDER CONTACT
-   * =======================================================
-   */
-
-  const callRider =
-    useCallback(
-      async () => {
-        if (
-          !riderPhone
-        ) {
-          return;
-        }
-
-        const cleanPhone =
-          riderPhone.replace(
-            /[^\d+]/g,
-            ""
-          );
-
-        try {
-          await Linking.openURL(
-            `tel:${cleanPhone}`
-          );
-        } catch (
-          error
-        ) {
-          console.error(
-            "Unable to open phone dialer:",
-            error
-          );
-        }
-      },
-      [riderPhone]
-    );
-
-  /*
-   * =======================================================
    * LOADING
    * =======================================================
    */
@@ -2346,6 +2309,7 @@ export default function CustomerTrackingScreen() {
             </View>
 
             {delivery.rider ? (
+              <>
               <View
                 style={
                   styles.riderInfoRow
@@ -2386,24 +2350,13 @@ export default function CustomerTrackingScreen() {
                     </Text>
                   ) : null}
                 </View>
-
-                {riderPhone ? (
-                  <Pressable
-                    style={
-                      styles.callButton
-                    }
-                    onPress={() =>
-                      void callRider()
-                    }
-                  >
-                    <Ionicons
-                      name="call"
-                      size={18}
-                      color="#FFFFFF"
-                    />
-                  </Pressable>
-                ) : null}
               </View>
+
+              <ContactActions
+                phone={riderPhone}
+                role="customer"
+              />
+              </>
             ) : (
               <View
                 style={
@@ -2648,6 +2601,14 @@ export default function CustomerTrackingScreen() {
                   "FLOGRAM Florist"
                 }
               />
+
+              {florist?.contactNumber ? (
+                <ContactActions
+                  phone={florist.contactNumber}
+                  role="customer"
+                  compact
+                />
+              ) : null}
 
               <DetailRow
                 icon="card-outline"

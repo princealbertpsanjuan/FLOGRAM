@@ -1,3 +1,4 @@
+import { autoCompleteDeliveredOrders } from "./order-auto-complete.js";
 import Order from "./order.model.js";
 
 import User from "../auth/auth.model.js";
@@ -1199,6 +1200,47 @@ const totalAmount =
   deliveryFee +
   preOrderFee;
 
+/*
+ * The checkout screen shows a server quote first
+ * (POST /checkout/custom-bouquet/quote). When the app
+ * sends the total it showed, never store a different
+ * amount than the customer agreed to.
+ */
+if (
+  orderData.expectedTotalAmount !==
+    undefined &&
+  orderData.expectedTotalAmount !==
+    null &&
+  orderData.expectedTotalAmount !==
+    ""
+) {
+  const expectedTotal =
+    Number(
+      orderData.expectedTotalAmount
+    );
+
+  if (
+    Number.isFinite(
+      expectedTotal
+    ) &&
+    Math.round(
+      expectedTotal * 100
+    ) !==
+      Math.round(
+        totalAmount * 100
+      )
+  ) {
+    const error =
+      new Error(
+        `The order total changed to ₱${totalAmount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}. Please review the updated total and place the order again.`
+      );
+
+    error.statusCode = 409;
+
+    throw error;
+  }
+}
+
   /*
    * =======================================================
    * PAYMENT PROVIDER
@@ -1497,6 +1539,8 @@ export const getCustomerOrders =
     customerId,
     filters = {}
   ) => {
+    await autoCompleteDeliveredOrders();
+
     const query = {
       customer:
         customerId,
@@ -1540,6 +1584,8 @@ export const getSellerOrders =
     sellerId,
     filters = {}
   ) => {
+    await autoCompleteDeliveredOrders();
+
     const seller =
       await User.findById(
         sellerId
@@ -2565,6 +2611,8 @@ export const completeCustomerOrder =
 export const getAdminOrders = async (
   filters = {}
 ) => {
+  await autoCompleteDeliveredOrders();
+
   const query = {};
 
   if (

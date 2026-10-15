@@ -35,6 +35,13 @@ import AdminScreenHeader, {
 
 import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+import {
+  DateRangeButton,
+  DateRangePickerModal,
+  formatRange,
+  isInRange,
+  type DateRange,
+} from '../../components/ui/date-range-picker';
 
 import {
   formatPhDateTime,
@@ -88,6 +95,24 @@ const quickDates = () =>
     return { key, label };
   });
 
+/*
+ * Every YYYY-MM-DD from start to end (inclusive), capped.
+ */
+const MAX_RANGE_DAYS = 31;
+
+const daysBetween = (start: string, end: string) => {
+  const days: string[] = [];
+  const cursor = new Date(`${start}T00:00:00Z`);
+  const last = new Date(`${end}T00:00:00Z`);
+
+  while (cursor <= last && days.length < MAX_RANGE_DAYS) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return days;
+};
+
 const TIME_PATTERN = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -129,6 +154,11 @@ export default function AdminRiderShiftsScreen() {
   // Post shift form
   const [formOpen, setFormOpen] = useState(false);
   const [date, setDate] = useState(phDateKey(1));
+  // Last day when posting the same shift over several days (calendar range).
+  const [dateEnd, setDateEnd] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  // Optional date filter for the shift list (by shift start).
+  const [listRange, setListRange] = useState<DateRange | null>(null);
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
   const [slotLimit, setSlotLimit] = useState('3');
@@ -167,10 +197,11 @@ export default function AdminRiderShiftsScreen() {
     );
 
   const visibleShifts = useMemo(() => {
-    const list = shifts.filter(shift =>
-      filter === 'upcoming'
-        ? shift.timeStatus !== 'ended'
-        : shift.timeStatus === 'ended'
+    const list = shifts.filter(
+      shift =>
+        (filter === 'upcoming'
+          ? shift.timeStatus !== 'ended'
+          : shift.timeStatus === 'ended') && isInRange(shift.startAt, listRange)
     );
 
     return filter === 'upcoming'
@@ -178,12 +209,14 @@ export default function AdminRiderShiftsScreen() {
           (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
         )
       : list;
-  }, [shifts, filter]);
+  }, [shifts, filter, listRange]);
 
   /*
    * Show 5 shifts + "See all"; collapses on tab change.
    */
-  const shiftsSeeAll = useSeeAll(visibleShifts, { resetKey: filter });
+  const shiftsSeeAll = useSeeAll(visibleShifts, {
+    resetKey: `${filter}|${listRange ? `${listRange.start}_${listRange.end}` : ''}`,
+  });
 
   const pendingTotal = useMemo(
     () =>
@@ -221,15 +254,22 @@ export default function AdminRiderShiftsScreen() {
       return;
     }
 
-    const start = toPhIso(date, startTime);
-    const end = toPhIso(date, endTime);
+    // One day, or every day of the calendar range.
+    const days = dateEnd && dateEnd > date ? daysBetween(date, dateEnd) : [date];
 
-    // Overnight shift: end time is on the next day.
-    if (end <= start) {
-      end.setUTCDate(end.getUTCDate() + 1);
-    }
+    const windows = days.map(day => {
+      const start = toPhIso(day, startTime);
+      const end = toPhIso(day, endTime);
 
-    if (start.getTime() <= Date.now()) {
+      // Overnight shift: end time is on the next day.
+      if (end <= start) {
+        end.setUTCDate(end.getUTCDate() + 1);
+      }
+
+      return { start, end };
+    });
+
+    if (windows[0].start.getTime() <= Date.now()) {
       Alert.alert(
         'Shift already started',
         'Choose a start time in the future so Riders can request it.'
@@ -239,29 +279,46 @@ export default function AdminRiderShiftsScreen() {
 
     setPosting(true);
 
-    try {
-      const created = await createAdminRiderShift({
-        startAt: start.toISOString(),
-        endAt: end.toISOString(),
-        slotLimit: slots,
-      });
+    const created: RiderShift[] = [];
 
-      setShifts(previous => [created, ...previous]);
+    try {
+      for (const shiftWindow of windows) {
+        created.push(
+          await createAdminRiderShift({
+            startAt: shiftWindow.start.toISOString(),
+            endAt: shiftWindow.end.toISOString(),
+            slotLimit: slots,
+          })
+        );
+      }
+
       setFormOpen(false);
       setFilter('upcoming');
 
       Alert.alert(
-        'Shift Posted',
-        `${formatShiftWindow(created.startAt, created.endAt)}\n${slots} Rider slot${
-          slots === 1 ? '' : 's'
-        } are now open for requests.`
+        created.length === 1 ? 'Shift Posted' : 'Shifts Posted',
+        `${
+          created.length === 1
+            ? formatShiftWindow(created[0].startAt, created[0].endAt)
+            : `${created.length} shifts, ${formatRange({ start: date, end: days[days.length - 1] })}`
+        }\n${slots} Rider slot${slots === 1 ? '' : 's'} ${
+          created.length === 1 ? '' : 'per shift '
+        }are now open for requests.`
       );
     } catch (postError) {
-      Alert.alert('Unable to Post Shift', getErrorMessage(postError));
+      Alert.alert(
+        'Unable to Post Shift',
+        created.length > 0
+          ? `${created.length} of ${windows.length} shifts were posted. ${getErrorMessage(postError)}`
+          : getErrorMessage(postError)
+      );
     } finally {
+      if (created.length > 0) {
+        setShifts(previous => [...created.slice().reverse(), ...previous]);
+      }
       setPosting(false);
     }
-  }, [date, startTime, endTime, slotLimit]);
+  }, [date, dateEnd, startTime, endTime, slotLimit]);
 
   /*
    * -------------------------------------------------------
@@ -398,13 +455,16 @@ export default function AdminRiderShiftsScreen() {
                 {quickDates().map(item => (
                   <Pressable
                     key={item.key}
-                    onPress={() => setDate(item.key)}
-                    style={[styles.chip, date === item.key && styles.chipActive]}
+                    onPress={() => {
+                      setDate(item.key);
+                      setDateEnd(null);
+                    }}
+                    style={[styles.chip, date === item.key && !dateEnd && styles.chipActive]}
                   >
                     <Text
                       style={[
                         styles.chipText,
-                        date === item.key && styles.chipTextActive,
+                        date === item.key && !dateEnd && styles.chipTextActive,
                       ]}
                     >
                       {item.label}
@@ -412,13 +472,44 @@ export default function AdminRiderShiftsScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-              <TextInput
-                value={date}
-                onChangeText={setDate}
-                placeholder="YYYY-MM-DD"
-                autoCapitalize="none"
-                style={styles.input}
-              />
+              <View style={styles.dateInputRow}>
+                <TextInput
+                  value={date}
+                  onChangeText={value => {
+                    setDate(value);
+                    setDateEnd(null);
+                  }}
+                  placeholder="YYYY-MM-DD"
+                  autoCapitalize="none"
+                  style={[styles.input, styles.dateInput]}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open calendar"
+                  onPress={() => setCalendarOpen(true)}
+                  style={({ pressed }) => [styles.calendarButton, pressed && { opacity: 0.75 }]}
+                >
+                  <Ionicons name="calendar-outline" size={21} color={C.purpleAccent} />
+                </Pressable>
+              </View>
+              {dateEnd && dateEnd > date ? (
+                <Text style={styles.hint}>
+                  Posting the same shift every day: {formatRange({ start: date, end: dateEnd })} (
+                  {daysBetween(date, dateEnd).length} shifts).
+                </Text>
+              ) : null}
+              {calendarOpen ? (
+                <DateRangePickerModal
+                  visible={calendarOpen}
+                  value={DATE_PATTERN.test(date) ? { start: date, end: dateEnd ?? date } : null}
+                  role="admin"
+                  onClose={() => setCalendarOpen(false)}
+                  onApply={range => {
+                    setDate(range.start);
+                    setDateEnd(range.end !== range.start ? range.end : null);
+                  }}
+                />
+              ) : null}
 
               <View style={styles.row}>
                 <View style={styles.half}>
@@ -491,6 +582,18 @@ export default function AdminRiderShiftsScreen() {
           ))}
         </View>
 
+        {/* DATE FILTER (shift start) */}
+        <View style={styles.dateFilterRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setListRange(null)}
+            style={[styles.chip, !listRange && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, !listRange && styles.chipTextActive]}>All dates</Text>
+          </Pressable>
+          <DateRangeButton value={listRange} onChange={setListRange} role="admin" />
+        </View>
+
         {error ? (
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>{error}</Text>
@@ -506,7 +609,9 @@ export default function AdminRiderShiftsScreen() {
         ) : visibleShifts.length === 0 ? (
           <View style={styles.card}>
             <Text style={styles.emptyText}>
-              {filter === 'upcoming'
+              {listRange
+                ? 'No shifts in the selected dates.'
+                : filter === 'upcoming'
                 ? 'No upcoming shifts. Post a shift so Riders can request slots.'
                 : 'No past shifts yet.'}
             </Text>
@@ -776,6 +881,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAFC',
   },
   row: { flexDirection: 'row', gap: 10 },
+  dateInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dateInput: { flex: 1 },
+  calendarButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.purpleLight,
+  },
+  dateFilterRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 },
   half: { flex: 1 },
   hint: { marginTop: 10, color: C.secondaryText, fontSize: 12, lineHeight: 17 },
   primaryButton: {

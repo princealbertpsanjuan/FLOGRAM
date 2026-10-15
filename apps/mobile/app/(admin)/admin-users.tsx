@@ -6,6 +6,7 @@ import {
 } from "expo-router";
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -29,6 +30,12 @@ import {
 
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+import {
+  DateRangeButton,
+  formatRange,
+  isInRange,
+  type DateRange,
+} from '../../components/ui/date-range-picker';
 
 type RoleFilter = "all" | AdminUserRole;
 
@@ -39,6 +46,21 @@ type RegistrationPeriod =
   | "6m"
   | "1y"
   | "all";
+
+/*
+ * Registration date chips (null = all dates).
+ */
+const REGISTRATION_CHIPS: {
+  label: string;
+  value: RegistrationPeriod | null;
+}[] = [
+  { label: "All dates", value: null },
+  { label: "Today", value: "today" },
+  { label: "7 Days", value: "7d" },
+  { label: "30 Days", value: "30d" },
+  { label: "6 Months", value: "6m" },
+  { label: "1 Year", value: "1y" },
+];
 
 const VALID_ROLES: AdminUserRole[] = [
   "customer",
@@ -416,7 +438,7 @@ export default function AdminUsersScreen() {
       ? requestedRole
       : "all";
 
-  const registrationPeriod:
+  const initialRegistrationPeriod:
     | RegistrationPeriod
     | null =
     isRegistrationPeriod(
@@ -424,6 +446,32 @@ export default function AdminUsersScreen() {
     )
       ? requestedRegistrationPeriod
       : null;
+
+  /*
+   * Registration date filter: a quick period (from the
+   * Dashboard link or a chip) or a custom calendar range.
+   * Picking one clears the other.
+   */
+  const [
+    registrationPeriod,
+    setRegistrationPeriod,
+  ] = useState<
+    RegistrationPeriod | null
+  >(initialRegistrationPeriod);
+
+  const [
+    customRange,
+    setCustomRange,
+  ] = useState<DateRange | null>(
+    null
+  );
+
+  useEffect(() => {
+    setRegistrationPeriod(
+      initialRegistrationPeriod
+    );
+    setCustomRange(null);
+  }, [initialRegistrationPeriod]);
 
   const [
     users,
@@ -642,10 +690,15 @@ const handleHeaderRefresh = useCallback(async () => {
       return users.filter(
         (user) => {
           if (
-            !isUserRegisteredInPeriod(
-              user.createdAt,
-              registrationPeriod
-            )
+            customRange
+              ? !isInRange(
+                  user.createdAt,
+                  customRange
+                )
+              : !isUserRegisteredInPeriod(
+                  user.createdAt,
+                  registrationPeriod
+                )
           ) {
             return false;
           }
@@ -687,6 +740,7 @@ const handleHeaderRefresh = useCallback(async () => {
       search,
       roleFilter,
       registrationPeriod,
+      customRange,
     ]);
 
   /*
@@ -694,7 +748,7 @@ const handleHeaderRefresh = useCallback(async () => {
    * role, period or search filter changes.
    */
   const seeAll = useSeeAll(filteredUsers, {
-    resetKey: `${roleFilter}|${registrationPeriod ?? "all"}|${search.trim().toLowerCase()}`,
+    resetKey: `${roleFilter}|${registrationPeriod ?? "all"}|${customRange ? `${customRange.start}_${customRange.end}` : ""}|${search.trim().toLowerCase()}`,
   });
 
   /* =======================================================
@@ -1109,6 +1163,52 @@ const handleHeaderRefresh = useCallback(async () => {
             />
           </ScrollView>
 
+          {/* REGISTRATION DATE */}
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={
+              false
+            }
+            contentContainerStyle={[
+              styles.filters,
+              styles.dateFilters,
+            ]}
+          >
+            {REGISTRATION_CHIPS.map(
+              (item) => (
+                <FilterButton
+                  key={
+                    item.value ??
+                    "all-dates"
+                  }
+                  label={item.label}
+                  active={
+                    !customRange &&
+                    (registrationPeriod ??
+                      null) ===
+                      item.value
+                  }
+                  onPress={() => {
+                    setRegistrationPeriod(
+                      item.value
+                    );
+                    setCustomRange(null);
+                  }}
+                />
+              )
+            )}
+
+            <DateRangeButton
+              value={customRange}
+              onChange={
+                setCustomRange
+              }
+              role="admin"
+              maxDate={new Date()}
+            />
+          </ScrollView>
+
           {/* ERROR */}
 
           {error ? (
@@ -1183,7 +1283,8 @@ const handleHeaderRefresh = useCallback(async () => {
                   styles.sectionTitle
                 }
               >
-                {registrationPeriod
+                {registrationPeriod ||
+                customRange
                   ? "New Registrations"
                   : "User Accounts"}
               </Text>
@@ -1193,7 +1294,11 @@ const handleHeaderRefresh = useCallback(async () => {
                   styles.sectionSubtitle
                 }
               >
-                {registrationPeriod
+                {customRange
+                  ? `Registered ${formatRange(
+                      customRange
+                    )}`
+                  : registrationPeriod
                   ? `Registered during ${getRegistrationPeriodLabel(
                       registrationPeriod
                     )}`
@@ -1840,6 +1945,10 @@ const styles =
     filters: {
       gap: 7,
       paddingBottom: 17,
+    },
+
+    dateFilters: {
+      alignItems: "center",
     },
 
     filterButton: {

@@ -1,3 +1,4 @@
+import { autoCompleteDeliveredOrders } from "../orders/order-auto-complete.js";
 import Order from "../orders/order.model.js";
 import RiderRemittance from "../riders/rider-remittance.model.js";
 import { getPlatformCommissionRate } from "./admin-settings.service.js";
@@ -7,22 +8,38 @@ import { getPlatformCommissionRate } from "./admin-settings.service.js";
  * RECOGNIZED REVENUE (one definition for Dashboard + Reports)
  * =========================================================
  *
- * An order counts as a sale when FLOGRAM (or the shop)
- * actually received the money:
+ * A sale is recognized when the ORDER IS COMPLETED: the
+ * customer marked a delivery "Order Received", or the shop
+ * handed a pickup order over. The same rule applies to every
+ * payment method (Online/PayMongo, Cash on Delivery, Cash on
+ * Pickup). A paid online order that is still being prepared
+ * or delivered is NOT a sale yet.
  *
- *   Online (PayMongo)  -> when payment is confirmed (paidAt)
- *   Cash on Pickup     -> when the shop hands it over (paidAt)
- *   Cash on Delivery   -> when Admin verifies the Rider's
- *                         remittance (verifiedAt)
+ *   recognizedAt = completedAt
+ *                  (older orders without it: deliveredAt,
+ *                   then updatedAt)
  *
- * Cancelled orders never count.
+ * Cancelled and refunded orders never count.
  *
- * Breakdown of every peso collected:
- *   gross        = order total paid by the customer
- *   deliveryFees = goes to Riders (not platform revenue)
- *   productSales = gross − delivery fees
+ * Breakdown of every completed order:
+ *   gross        = order.totalAmount (what the customer paid)
+ *                = subtotal + deliveryFee + preOrderFee
+ *   deliveryFees = order.deliveryFee  -> Rider income
+ *   productSales = gross − deliveryFee
+ *                = bouquet price × qty + add-ons + pre-order fee
  *   commission   = productSales × Admin commission rate
+ *                  (rounded per order, like Seller Earnings)
  *   sellerShare  = productSales − commission
+ *
+ * PRE-ORDER FEE belongs to the shop (product side): the shop
+ * does the extra work of a scheduled bouquet, and Seller
+ * Earnings / payouts (sellerPayouts) already pay it to the
+ * shop as part of "total − delivery fee". Commission is taken
+ * from it like the rest of product sales.
+ *
+ * COD cash awaiting remittance (informational only): completed
+ * COD orders whose Rider remittance is not verified yet. The
+ * sale is already recognized; the cash is still with the Rider.
  *
  * Days are Philippine calendar days (Asia/Manila, UTC+8).
  * =========================================================
@@ -58,74 +75,104 @@ const inRange = (date, startDate, endDate) => {
 };
 
 /*
- * Every recognized order in the range.
+ * When the sale happened (see header).
  */
-export const getRecognizedOrders = async ({ startDate = null, endDate = null } = {}) => {
-  const paidMatch = {
-    paymentStatus: "paid",
-    paymentMethod: { $in: ["paymongo", "cash_on_pickup"] },
-    orderStatus: { $ne: "cancelled" },
-  };
+export const recognizedAtOf = (order) => order.completedAt || order.deliveredAt || order.updatedAt || order.createdAt;
+
+const COMPLETED_MATCH = {
+  orderStatus: "completed",
+  paymentStatus: { $ne: "refunded" },
+};
+
+const rangeOf = (startDate, endDate) => {
+  const range = {};
+  if (startDate) range.$gte = startDate;
+  if (endDate) range.$lte = endDate;
+  return range;
+};
+
+/*
+ * Every recognized (completed) order in the range.
+ */
+export const getRecognizedOrders = async ({ startDate = null, endDate = null, florist = null } = {}) => {
+  await autoCompleteDeliveredOrders();
+
+  const match = { ...COMPLETED_MATCH };
+
+  if (florist) match.florist = florist;
 
   if (startDate || endDate) {
-    paidMatch.paidAt = {};
-    if (startDate) paidMatch.paidAt.$gte = startDate;
-    if (endDate) paidMatch.paidAt.$lte = endDate;
+    const range = rangeOf(startDate, endDate);
+
+    /*
+     * Same fallback order as recognizedAtOf().
+     */
+    match.$or = [
+      { completedAt: range },
+      { completedAt: null, deliveredAt: range },
+      { completedAt: null, deliveredAt: null, updatedAt: range },
+    ];
   }
 
-  const remittanceMatch = { status: "verified" };
+  const orders = await Order.find(match)
+    .select("_id florist totalAmount deliveryFee preOrderFee paymentMethod completedAt deliveredAt updatedAt createdAt")
+    .lean();
 
-  if (startDate || endDate) {
-    remittanceMatch.verifiedAt = {};
-    if (startDate) remittanceMatch.verifiedAt.$gte = startDate;
-    if (endDate) remittanceMatch.verifiedAt.$lte = endDate;
-  }
+  return orders
+    .map((order) => {
+      const gross = round(order.totalAmount);
+      const deliveryFee = round(order.deliveryFee);
 
-  const [paidOrders, remittances] = await Promise.all([
-    Order.find(paidMatch).select("_id florist totalAmount deliveryFee paymentMethod paidAt").lean(),
-    RiderRemittance.find(remittanceMatch).select("items.order verifiedAt").lean(),
-  ]);
+      return {
+        orderId: String(order._id),
+        florist: order.florist ? String(order.florist) : null,
+        method: order.paymentMethod,
+        recognizedAt: recognizedAtOf(order),
+        gross,
+        deliveryFee,
+        preOrderFee: round(order.preOrderFee),
+        productSales: round(Math.max(0, gross - deliveryFee)),
+      };
+    })
+    .filter((entry) => inRange(entry.recognizedAt, startDate, endDate));
+};
 
-  const verifiedAtByOrder = new Map();
-  remittances.forEach((remittance) =>
-    (remittance.items || []).forEach((item) => verifiedAtByOrder.set(String(item.order), remittance.verifiedAt))
-  );
+/*
+ * Completed COD orders whose cash the Rider has not remitted
+ * (Admin has not verified the remittance yet).
+ */
+const getCodAwaitingRemittance = async (entries) => {
+  const codEntries = entries.filter((entry) => entry.method === "cash_on_delivery");
 
-  const codOrders = verifiedAtByOrder.size
-    ? await Order.find({
-        _id: { $in: [...verifiedAtByOrder.keys()] },
-        orderStatus: { $ne: "cancelled" },
-      })
-        .select("_id florist totalAmount deliveryFee paymentMethod")
-        .lean()
-    : [];
+  if (!codEntries.length) return { orders: 0, amount: 0 };
 
-  const shape = (order, recognizedAt) => {
-    const gross = round(order.totalAmount);
-    const deliveryFee = round(order.deliveryFee);
+  const remittances = await RiderRemittance.find({
+    status: "verified",
+    "items.order": { $in: codEntries.map((entry) => entry.orderId) },
+  })
+    .select("items.order")
+    .lean();
 
-    return {
-      orderId: String(order._id),
-      florist: order.florist ? String(order.florist) : null,
-      method: order.paymentMethod,
-      recognizedAt,
-      gross,
-      deliveryFee,
-      productSales: round(Math.max(0, gross - deliveryFee)),
-    };
+  const verified = new Set(remittances.flatMap((remittance) => (remittance.items || []).map((item) => String(item.order))));
+
+  const waiting = codEntries.filter((entry) => !verified.has(entry.orderId));
+
+  return {
+    orders: waiting.length,
+    amount: round(waiting.reduce((sum, entry) => sum + entry.gross, 0)),
   };
-
-  return [
-    ...paidOrders.map((order) => shape(order, order.paidAt)),
-    ...codOrders.map((order) => shape(order, verifiedAtByOrder.get(String(order._id)))),
-  ].filter((entry) => inRange(entry.recognizedAt, startDate, endDate));
 };
 
 const summarize = (entries, rate) => {
   const gross = round(entries.reduce((sum, entry) => sum + entry.gross, 0));
   const deliveryFees = round(entries.reduce((sum, entry) => sum + entry.deliveryFee, 0));
   const productSales = round(entries.reduce((sum, entry) => sum + entry.productSales, 0));
-  const commission = round(productSales * rate);
+  const preOrderFees = round(entries.reduce((sum, entry) => sum + (entry.preOrderFee || 0), 0));
+  /*
+   * Commission is rounded per order, exactly like Seller
+   * Earnings / payouts, so the totals reconcile to the centavo.
+   */
+  const commission = round(entries.reduce((sum, entry) => sum + round(entry.productSales * rate), 0));
 
   const byMethod = (method) => round(entries.filter((entry) => entry.method === method).reduce((sum, entry) => sum + entry.gross, 0));
 
@@ -134,6 +181,7 @@ const summarize = (entries, rate) => {
     gross,
     deliveryFees,
     productSales,
+    preOrderFees,
     commission,
     sellerShare: round(productSales - commission),
     online: byMethod("paymongo"),
@@ -146,6 +194,7 @@ export const getRevenueSummary = async ({ startDate = null, endDate = null, gran
   const [entries, rate] = await Promise.all([getRecognizedOrders({ startDate, endDate }), getPlatformCommissionRate()]);
 
   const summary = summarize(entries, rate);
+  const codAwaitingRemittance = await getCodAwaitingRemittance(entries);
 
   let trend = [];
 
@@ -166,6 +215,7 @@ export const getRevenueSummary = async ({ startDate = null, endDate = null, gran
           cod: part.cod,
           pickup: part.pickup,
           total: part.gross,
+          deliveryFees: part.deliveryFees,
           productSales: part.productSales,
           commission: part.commission,
           sellerShare: part.sellerShare,
@@ -174,5 +224,5 @@ export const getRevenueSummary = async ({ startDate = null, endDate = null, gran
       });
   }
 
-  return { commissionRate: rate, ...summary, trend, entries };
+  return { commissionRate: rate, ...summary, codAwaitingRemittance, trend, entries };
 };

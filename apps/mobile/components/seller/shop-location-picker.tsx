@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import MapView, { Marker, type LatLng } from 'react-native-maps';
 
+import { reverseGeocode, type AddressSuggestion } from '../../services/geo';
 import { ROLE_ACCENT } from '../ui/state-views';
 
 /*
@@ -22,6 +23,14 @@ import { ROLE_ACCENT } from '../ui/state-views';
  *
  * The web build renders the react-native-maps stub; the
  * "Use my current location" button still works there.
+ *
+ * onAddressResolved: after the pin is placed / dragged /
+ * set from the current location, the pin is turned into
+ * an address (street, barangay, city, province, postal)
+ * so the form can fill its address fields.
+ *
+ * When `value` changes from outside (e.g. an address
+ * suggestion with coordinates), the map moves to it.
  * =========================================================
  */
 
@@ -46,21 +55,72 @@ export default function ShopLocationPicker({
   onChange,
   disabled,
   error,
+  onAddressResolved,
 }: {
   value: ShopCoordinate | null;
   onChange: (next: ShopCoordinate) => void;
   disabled?: boolean;
   error?: string | null;
+  onAddressResolved?: (address: AddressSuggestion) => void;
 }) {
   const mapRef = useRef<MapView | null>(null);
   const [locating, setLocating] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [resolvedLabel, setResolvedLabel] = useState<string | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Last coordinate this picker set itself (map tap / drag / GPS)
+  const internalRef = useRef<ShopCoordinate | null>(null);
+  // Only the latest reverse-geocode answer may fill the form
+  const lookupRef = useRef(0);
+
+  // Move the map when the pin is set from outside (address suggestion)
+  useEffect(() => {
+    if (!value) return;
+
+    const internal = internalRef.current;
+
+    if (internal && internal.latitude === value.latitude && internal.longitude === value.longitude) {
+      return;
+    }
+
+    mapRef.current?.animateToRegion(
+      { ...value, latitudeDelta: 0.008, longitudeDelta: 0.008 },
+      500
+    );
+  }, [value?.latitude, value?.longitude]);
+
+  const resolveAddress = async (coordinate: ShopCoordinate) => {
+    if (!onAddressResolved) return;
+
+    const lookup = ++lookupRef.current;
+
+    setResolving(true);
+    const address = await reverseGeocode(coordinate.latitude, coordinate.longitude);
+
+    if (lookup !== lookupRef.current) return;
+
+    setResolving(false);
+
+    if (address) {
+      setResolvedLabel(address.label || null);
+      onAddressResolved(address);
+    } else {
+      setResolvedLabel(null);
+    }
+  };
+
+  const setPin = (coordinate: ShopCoordinate) => {
+    internalRef.current = coordinate;
+    onChange(coordinate);
+    void resolveAddress(coordinate);
+  };
 
   const select = (coordinate: LatLng) => {
     if (disabled) return;
     setLocationError(null);
-    onChange({ latitude: coordinate.latitude, longitude: coordinate.longitude });
+    setPin({ latitude: coordinate.latitude, longitude: coordinate.longitude });
   };
 
   const handleUseCurrentLocation = async () => {
@@ -89,7 +149,7 @@ export default function ShopLocationPicker({
         longitude: current.coords.longitude,
       };
 
-      onChange(coordinate);
+      setPin(coordinate);
 
       mapRef.current?.animateToRegion(
         { ...coordinate, latitudeDelta: 0.008, longitudeDelta: 0.008 },
@@ -184,9 +244,11 @@ export default function ShopLocationPicker({
           <Ionicons name="checkmark-circle" size={18} color={ACCENT} />
           <View style={{ flex: 1 }}>
             <Text style={styles.selectedTitle}>Shop pin set</Text>
-            <Text style={styles.selectedCoords}>
-              {value.latitude.toFixed(6)}, {value.longitude.toFixed(6)}
-            </Text>
+            {resolving ? (
+              <Text style={styles.selectedCoords}>Finding the address of this pin…</Text>
+            ) : resolvedLabel ? (
+              <Text style={styles.selectedCoords}>{resolvedLabel}</Text>
+            ) : null}
             <Text style={styles.selectedHint}>Drag the pin or tap the map to adjust it.</Text>
           </View>
         </View>

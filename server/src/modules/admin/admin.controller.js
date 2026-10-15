@@ -61,6 +61,9 @@ export const getDashboard =
  * ?period=6m
  * ?period=1y
  * ?period=all
+ * ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ *   (custom Manila calendar days, both included;
+ *    overrides period)
  *
  * ADMIN ONLY
  * =========================================================
@@ -71,11 +74,19 @@ export const getReports =
     try {
       const {
         period = "today",
+        startDate,
+        endDate,
       } = req.query;
 
       const reports =
         await getAdminReports(
-          period
+          String(period),
+          {
+            startDate:
+              typeof startDate === "string" ? startDate : undefined,
+            endDate:
+              typeof endDate === "string" ? endDate : undefined,
+          }
         );
 
       return res.status(200).json({

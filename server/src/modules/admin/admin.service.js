@@ -32,8 +32,12 @@ const ACTIVE_ORDER_STATUSES = [
   "out_for_delivery",
 ];
 
+/*
+ * "Completed" = the customer confirmed receipt (or the
+ * order auto-confirmed 24 h after delivery), the same rule
+ * used for recognized sales in Reports.
+ */
 const COMPLETED_ORDER_STATUSES = [
-  "delivered",
   "completed",
 ];
 
@@ -564,13 +568,8 @@ export const getAdminDashboard =
       }),
 
       /*
-       * ONLINE SALES
-       *
-       * COD is excluded.
-       */
-
-      /*
-       * RECOGNIZED REVENUE (same rules as Reports)
+       * RECOGNIZED REVENUE (same rules as Reports):
+       * completed orders only, every payment method.
        */
 
       getRevenueSummary(),
@@ -632,12 +631,9 @@ export const getAdminDashboard =
      * RECOGNIZED SALES
      * =====================================================
      *
-     * Online:
-     * Count when successfully paid.
-     *
-     * COD:
-     * Count only when the rider remittance
-     * has been verified by the Admin.
+     * A sale counts when the order is COMPLETED (customer
+     * marked it received / pickup handed over), for Online,
+     * COD and Cash on Pickup alike. See revenue.service.js.
      * =====================================================
      */
 
@@ -657,10 +653,10 @@ export const getAdminDashboard =
     const todayOnlineSales =
       todayRevenue.online + todayRevenue.pickup;
 
-    const totalVerifiedCodSales =
+    const totalCodSales =
       allRevenue.cod;
 
-    const todayVerifiedCodSales =
+    const todayCodSales =
       todayRevenue.cod;
 
     const totalCommission =
@@ -749,11 +745,12 @@ export const getAdminDashboard =
        * "revenue.today" for compatibility
        * with the current Admin Dashboard.
        *
-       * They represent recognized sales:
+       * They represent recognized sales: what customers
+       * paid for COMPLETED orders (all payment methods).
        *
-       * online paid sales
-       * +
-       * Admin-verified COD remittances
+       * online.total keeps its old meaning (non-COD:
+       * PayMongo + Cash on Pickup); pickup is also given
+       * on its own.
        */
 
       revenue: {
@@ -773,10 +770,41 @@ export const getAdminDashboard =
 
         cod: {
           total:
-            totalVerifiedCodSales,
+            totalCodSales,
 
           today:
-            todayVerifiedCodSales,
+            todayCodSales,
+
+          /*
+           * Completed COD orders whose cash is still
+           * with Riders (remittance not verified yet).
+           */
+          awaitingRemittance:
+            allRevenue.codAwaitingRemittance,
+        },
+
+        pickup: {
+          total:
+            allRevenue.pickup,
+
+          today:
+            todayRevenue.pickup,
+        },
+
+        productSales: {
+          total:
+            allRevenue.productSales,
+
+          today:
+            todayRevenue.productSales,
+        },
+
+        deliveryFees: {
+          total:
+            allRevenue.deliveryFees,
+
+          today:
+            todayRevenue.deliveryFees,
         },
 
         commission: {

@@ -25,6 +25,7 @@ import {
 } from "../../services/admin";
 
 import RequirementDocumentsView from "../../components/admin/requirement-documents";
+import AdminContactActions from "../../components/admin/admin-contact-actions";
 import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
 
 const COLORS = {
@@ -911,6 +912,14 @@ export default function AdminRiderVerificationScreen() {
                         ?.phoneNumber ||
                       "Not provided"
                     }
+                  />
+
+                  <AdminContactActions
+                    phone={
+                      getOwner(selectedRider)
+                        ?.phoneNumber
+                    }
+                    compact
                   />
 
                   <ModalInfoRow

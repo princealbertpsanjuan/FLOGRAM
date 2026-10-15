@@ -4,6 +4,12 @@ import {
   validationResult,
 } from "express-validator";
 
+import {
+  PHONE_ERROR,
+  isValidPhone,
+  normalizePhone,
+} from "../../utils/contactFormats.js";
+
 /*
  * =========================================================
  * PROFILE
@@ -42,11 +48,60 @@ export const updateProfileValidation = [
   body("phoneNumber")
     .optional()
     .trim()
-    .matches(
-      /^(09|\+639)\d{9}$/
+    .custom((value) =>
+      isValidPhone(value)
     )
+    .withMessage(PHONE_ERROR)
+    .customSanitizer(
+      normalizePhone
+    ),
+];
+
+/*
+ * =========================================================
+ * SAVED ADDRESSES
+ * =========================================================
+ *
+ * The contact number on a saved address is optional;
+ * when given it must be a valid PH mobile number
+ * (stored as 09XXXXXXXXX).
+ * =========================================================
+ */
+
+export const updateAddressesValidation = [
+  body("addresses")
+    .isArray()
     .withMessage(
-      "Enter a valid Philippine phone number."
+      "Addresses must be a list."
+    ),
+
+  body("addresses.*.recipientPhoneNumber")
+    .optional({
+      values: "falsy",
+    })
+    .trim()
+    .custom((value) =>
+      isValidPhone(value)
+    )
+    /*
+     * The whole list is sent on every save, so name the
+     * address whose number is wrong (it may be an older
+     * saved address, not the one being edited).
+     */
+    .withMessage((_, { req, path }) => {
+      const index = Number(
+        /\[(\d+)\]/.exec(String(path))?.[1]
+      );
+
+      const label = Number.isInteger(index)
+        ? String(req.body?.addresses?.[index]?.label || "").trim() ||
+          `Address ${index + 1}`
+        : "Saved address";
+
+      return `${label}: ${PHONE_ERROR}`;
+    })
+    .customSanitizer(
+      normalizePhone
     ),
 ];
 

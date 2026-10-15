@@ -92,6 +92,7 @@ export type CheckoutFlower = {
 export type CheckoutFlorist = {
   _id: string;
   shopName?: string;
+  contactNumber?: string | null;
   address?: unknown;
   location?: {
     latitude?: number;
@@ -431,7 +432,13 @@ export type PayMongoCheckoutSession = {
 
   checkoutSessionId: string;
 
-  checkoutUrl: string;
+  /*
+   * null when PayMongo says the checkout was
+   * already paid (alreadyPaid: true).
+   */
+  checkoutUrl: string | null;
+
+  alreadyPaid?: boolean;
 
   paymentStatus: PaymentStatus;
 

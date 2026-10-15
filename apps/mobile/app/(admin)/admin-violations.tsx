@@ -16,6 +16,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DateRangeButton, isInRange, type DateRange } from '../../components/ui/date-range-picker';
 import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import ScreenHeader from '../../components/ui/screen-header';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
@@ -75,6 +76,8 @@ export default function AdminViolationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  // Optional issued-on date range (calendar). null = all dates.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   const [violationType, setViolationType] = useState<ViolationType | null>(null);
   const [penalty, setPenalty] = useState<Penalty>('warning');
@@ -178,7 +181,10 @@ export default function AdminViolationsScreen() {
   /*
    * Show 5 records + "See all"; collapses on filter change.
    */
-  const recordsSeeAll = useSeeAll(violations, { resetKey: `${filter}|${userId ?? ''}` });
+  const datedViolations = violations.filter(item => isInRange(item.createdAt, dateRange));
+  const recordsSeeAll = useSeeAll(datedViolations, {
+    resetKey: `${filter}|${userId ?? ''}|${dateRange ? `${dateRange.start}_${dateRange.end}` : ''}`,
+  });
 
   if (loading) {
     return <ScreenLoader role="admin" message="Loading violations..." />;
@@ -282,6 +288,8 @@ export default function AdminViolationsScreen() {
                 onPress={() => setFilter(item)}
               />
             ))}
+            <Chip label="All dates" active={!dateRange} onPress={() => setDateRange(null)} />
+            <DateRangeButton value={dateRange} onChange={setDateRange} role="admin" maxDate={new Date()} />
           </View>
         )}
 
@@ -289,12 +297,18 @@ export default function AdminViolationsScreen() {
 
         {error ? (
           <ErrorState role="admin" message={error} onRetry={() => void load()} />
-        ) : violations.length === 0 ? (
+        ) : datedViolations.length === 0 ? (
           <EmptyState
             role="admin"
             icon="shield-checkmark-outline"
             title="No violations"
-            message={userId ? 'This user has a clean record.' : 'To issue a penalty, open a user in Users or a dispute.'}
+            message={
+              dateRange
+                ? 'No violations in the selected dates.'
+                : userId
+                  ? 'This user has a clean record.'
+                  : 'To issue a penalty, open a user in Users or a dispute.'
+            }
           />
         ) : (
           <>
@@ -396,7 +410,7 @@ const styles = StyleSheet.create({
   card: { padding: 16, borderRadius: 18, borderWidth: 1, borderColor: BORDER, backgroundColor: '#FFFFFF' },
   cardTitle: { color: TEXT, fontSize: 16, fontWeight: '800' },
   label: { marginTop: 14, marginBottom: 8, color: TEXT, fontSize: 13, fontWeight: '800' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   chip: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 14, borderWidth: 1 },
   chipText: { fontSize: 12, fontWeight: '700' },
   input: {

@@ -1,3 +1,4 @@
+import { autoCompleteDeliveredOrders } from "../orders/order-auto-complete.js";
 import mongoose from "mongoose";
 
 import Florist from "../florists/florist.model.js";
@@ -14,7 +15,15 @@ import SellerPayout from "./seller-payout.model.js";
  * =========================================================
  */
 
-const SUCCESS_STATUSES = ["delivered", "completed"];
+/*
+ * Same rule as Admin Reports / Seller Reports
+ * (admin/revenue.service.js): earnings exist only once the
+ * order is COMPLETED (customer marked it received, or the
+ * pickup was handed over). A "delivered" order the customer
+ * has not confirmed yet is not earned. Refunded orders never
+ * count.
+ */
+const SUCCESS_STATUSES = ["completed"];
 
 const createError = (message, statusCode = 400) => {
   const error = new Error(message);
@@ -57,6 +66,7 @@ const classifyShopOrders = async (floristId, { periodStart = null, periodEnd = n
   const orders = await Order.find({
     florist: floristId,
     orderStatus: { $in: SUCCESS_STATUSES },
+    paymentStatus: { $ne: "refunded" },
   })
     .select("_id productName paymentMethod paymentStatus totalAmount deliveryFee completedAt deliveredAt updatedAt createdAt")
     .lean();
@@ -123,6 +133,8 @@ const sum = (items, key) => roundMoney(items.reduce((total, item) => total + Num
  * =========================================================
  */
 export const getSellerEarnings = async (sellerUserId) => {
+  await autoCompleteDeliveredOrders();
+
   const florist = await Florist.findOne({ owner: sellerUserId }).select("_id shopName").lean();
 
   if (!florist) {
@@ -182,6 +194,8 @@ export const getSellerPayoutForSeller = async (sellerUserId, payoutId) => {
  * =========================================================
  */
 export const getAdminSellerBalances = async () => {
+  await autoCompleteDeliveredOrders();
+
   const florists = await Florist.find({ verificationStatus: "approved" })
     .populate("owner", "firstName lastName email phoneNumber")
     .select("_id shopName owner isActive")
