@@ -20,6 +20,7 @@ import {
 } from "../../services/admin";
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import { isOnlineOrderNotPlaced } from '../../utils/order-status';
 import AdminContactActions from '../../components/admin/admin-contact-actions';
 
 import { formatAddOnsLine } from '../../services/addons';
@@ -544,7 +545,9 @@ export default function AdminOrderDetailsScreen() {
                     },
                   ]}
                 >
-                  {formatStatus(order.orderStatus)}
+                  {isOnlineOrderNotPlaced(order)
+                    ? 'Awaiting payment (not placed)'
+                    : formatStatus(order.orderStatus)}
                 </Text>
               </View>
             </View>

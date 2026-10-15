@@ -554,6 +554,25 @@ export default function AdminDashboardScreen() {
       today: 0,
     };
 
+  /*
+   * FLOGRAM revenue (all time) = commission + pre-order
+   * fees. Pre-order fees are not part of shop sales.
+   */
+  const commissionTotal =
+    Number(dashboard?.revenue?.commission?.total || 0);
+
+  const preOrderFeesTotal =
+    Number(dashboard?.revenue?.preOrderFees?.total || 0);
+
+  const platformRevenueTotal =
+    dashboard?.revenue?.platformRevenue?.total ??
+    Math.round(
+      (commissionTotal + preOrderFeesTotal) * 100
+    ) / 100;
+
+  const commissionPercentage =
+    dashboard?.revenue?.commission?.percentage;
+
   const verifications =
     dashboard?.verifications ?? {
       pendingSellers: 0,
@@ -1905,6 +1924,80 @@ export default function AdminDashboardScreen() {
                 revenue.total
               )}
             </Text>
+
+            <View
+              style={
+                styles.financialDivider
+              }
+            />
+
+            <View
+              style={
+                styles.financialBottom
+              }
+            >
+              <View>
+                <Text
+                  style={
+                    styles.financialSmallLabel
+                  }
+                >
+                  {commissionPercentage != null
+                    ? `Commission (${commissionPercentage}%)`
+                    : "Commission"}
+                </Text>
+
+                <Text
+                  style={
+                    styles.financialSmallValue
+                  }
+                >
+                  {formatCurrency(
+                    commissionTotal
+                  )}
+                </Text>
+              </View>
+
+              <View>
+                <Text
+                  style={
+                    styles.financialSmallLabel
+                  }
+                >
+                  Pre-order fees
+                </Text>
+
+                <Text
+                  style={
+                    styles.financialSmallValue
+                  }
+                >
+                  {formatCurrency(
+                    preOrderFeesTotal
+                  )}
+                </Text>
+              </View>
+
+              <View>
+                <Text
+                  style={
+                    styles.financialSmallLabel
+                  }
+                >
+                  FLOGRAM revenue
+                </Text>
+
+                <Text
+                  style={
+                    styles.financialSmallValue
+                  }
+                >
+                  {formatCurrency(
+                    platformRevenueTotal
+                  )}
+                </Text>
+              </View>
+            </View>
 
             <View
               style={

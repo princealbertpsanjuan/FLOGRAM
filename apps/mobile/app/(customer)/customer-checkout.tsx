@@ -39,6 +39,12 @@ import {
 import { apiRequest } from "../../services/api";
 
 import {
+  PAYMENT_NOT_COMPLETED_MESSAGE,
+  PAYMENT_NOT_COMPLETED_TITLE,
+  waitForOrderPayment,
+} from "../../services/orders";
+
+import {
   getSavedAddresses,
   type SavedAddress,
 } from "../../services/addresses";
@@ -2588,11 +2594,12 @@ export default function CustomerCheckoutScreen() {
 
         /*
          * Give PayMongo webhook time to reach
-         * the backend after browser checkout.
+         * the backend after browser checkout (the
+         * server also asks PayMongo directly).
          */
         for (
           let attempt = 0;
-          attempt < 10;
+          attempt < 5;
           attempt += 1
         ) {
           if (attempt > 0) {
@@ -2806,6 +2813,48 @@ export default function CustomerCheckoutScreen() {
       );
     };
 
+  const openMyOrders =
+    () => {
+      router.replace(
+        "/(customer)/customer-orders" as never
+      );
+    };
+
+  /*
+   * Closed / cancelled PayMongo without paying: the order
+   * is NOT placed (the shop does not see it) until paid.
+   */
+  const showPaymentNotCompleted =
+    (
+      onCheckAgain?: () => void
+    ) => {
+      Alert.alert(
+        PAYMENT_NOT_COMPLETED_TITLE,
+        PAYMENT_NOT_COMPLETED_MESSAGE,
+        [
+          ...(onCheckAgain
+            ? [
+                {
+                  text:
+                    "I already paid",
+
+                  onPress:
+                    onCheckAgain,
+                },
+              ]
+            : []),
+
+          {
+            text:
+              "My Orders",
+
+            onPress:
+              openMyOrders,
+          },
+        ]
+      );
+    };
+
   const showGroupedPaymentResult =
     (
       checkout: Checkout
@@ -2833,43 +2882,15 @@ export default function CustomerCheckoutScreen() {
         return;
       }
 
-      if (
+      showPaymentNotCompleted(
         checkout.paymentStatus ===
-        "failed"
-      ) {
-        Alert.alert(
-          "Payment not completed",
-          "PayMongo reported that the payment was not completed. Your checkout has been saved.",
-          [
-            {
-              text:
-                "OK",
-            },
-          ]
-        );
-
-        return;
-      }
-
-      Alert.alert(
-        "Payment verification pending",
-        "The payment page was closed, but FLOGRAM has not received PayMongo's successful payment confirmation yet. You can check the payment status again.",
-        [
-          {
-            text:
-              "Stay Here",
-          },
-
-          {
-            text:
-              "Check Again",
-
-            onPress:
-              () => {
-                void handleCheckPaymentAgain();
-              },
-          },
-        ]
+          "failed" ||
+          checkout.checkoutStatus ===
+            "cancelled"
+          ? undefined
+          : () => {
+              void handleCheckPaymentAgain();
+            }
       );
     };
 
@@ -2974,15 +2995,18 @@ export default function CustomerCheckoutScreen() {
             );
           } catch (paymentError) {
             Alert.alert(
-              "Checkout created",
-              `Your orders were created, but the PayMongo payment page could not be completed.\n\n${getErrorMessage(
+              "Order not placed yet",
+              `The PayMongo payment page could not be opened, so your order hasn't been placed yet.\n\n${getErrorMessage(
                 paymentError,
-                "You can pay later from My Orders with Pay Now."
+                "You can pay from My Orders with Pay Now within 30 minutes."
               )}`,
               [
                 {
                   text:
-                    "OK",
+                    "My Orders",
+
+                  onPress:
+                    openMyOrders,
                 },
               ]
             );
@@ -3010,10 +3034,53 @@ export default function CustomerCheckoutScreen() {
             await startCustomPayMongo(
               order._id
             );
-
+          } catch (
+            paymentError
+          ) {
             Alert.alert(
-              "Payment submitted",
-              "Your custom bouquet order was created. FLOGRAM will update the payment status after PayMongo confirms the payment.",
+              "Order not placed yet",
+              `The PayMongo payment page could not be opened, so your custom bouquet order hasn't been placed yet.\n\n${getErrorMessage(
+                paymentError,
+                "You can pay from My Orders with Pay Now within 30 minutes."
+              )}`,
+              [
+                {
+                  text:
+                    "My Orders",
+
+                  onPress:
+                    openMyOrders,
+                },
+              ]
+            );
+
+            return;
+          }
+
+          /*
+           * Back from PayMongo: placed only if paid.
+           */
+          setCheckingPayment(
+            true
+          );
+
+          let paid = false;
+
+          try {
+            paid =
+              await waitForOrderPayment(
+                order._id
+              );
+          } finally {
+            setCheckingPayment(
+              false
+            );
+          }
+
+          if (paid) {
+            Alert.alert(
+              "Payment successful",
+              "Your payment was received. Your custom bouquet order has been placed and sent to the shop.",
               [
                 {
                   text:
@@ -3024,22 +3091,8 @@ export default function CustomerCheckoutScreen() {
                 },
               ]
             );
-          } catch (
-            paymentError
-          ) {
-            Alert.alert(
-              "Order created",
-              `Your custom bouquet order was created, but the PayMongo payment page could not be opened.\n\n${getErrorMessage(
-                paymentError,
-                "You can pay later from My Orders with Pay Now."
-              )}`,
-              [
-                {
-                  text:
-                    "OK",
-                },
-              ]
-            );
+          } else {
+            showPaymentNotCompleted();
           }
 
           return;

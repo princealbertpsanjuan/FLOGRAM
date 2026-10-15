@@ -1,5 +1,9 @@
 import Checkout from "./checkout.model.js";
-import { notifySafely } from "../notifications/notify-helpers.js";
+import { notifyAdmins, notifySafely } from "../notifications/notify-helpers.js";
+import {
+  expireUnpaidOnlineOrders,
+  reviveExpiredOrders,
+} from "../orders/order-payment-expiry.js";
 
 import User from "../auth/auth.model.js";
 import Cart from "../cart/cart.model.js";
@@ -2343,6 +2347,48 @@ export const getCustomerCheckout =
       );
     }
 
+    /*
+     * Customer came back from PayMongo: if the webhook has
+     * not arrived yet, ask PayMongo directly so a paid
+     * checkout is placed right away.
+     */
+    if (
+      checkout.paymentMethod ===
+        "paymongo" &&
+      checkout.paymentStatus !==
+        "paid" &&
+      checkout.checkoutStatus !==
+        "cancelled" &&
+      checkout
+        .paymongoCheckoutSessionId
+    ) {
+      const existing =
+        await retrievePayMongoCheckoutSession(
+          checkout
+            .paymongoCheckoutSessionId
+        );
+
+      if (
+        existing?.paidPayment
+      ) {
+        const fresh =
+          await Checkout.findById(
+            checkout._id
+          );
+
+        if (fresh) {
+          await placePaidCheckout(
+            fresh,
+            existing
+          );
+
+          return populateCheckout(
+            checkout._id
+          );
+        }
+      }
+    }
+
     return checkout;
   };
 
@@ -2359,6 +2405,12 @@ export const getCustomerCheckouts =
     await getCustomer(
       customerId
     );
+
+    /*
+     * Cancel unpaid online checkouts whose payment time
+     * ran out ("Payment not completed").
+     */
+    await expireUnpaidOnlineOrders();
 
     return Checkout.find({
       customer:
@@ -3396,7 +3448,47 @@ const applyCheckoutPaid =
         sessionId;
     }
 
+    /*
+     * Atomic claim: the webhook, "Pay Now", the checkout
+     * poll and the expiry check may find the same payment
+     * at once. Only the winner places the orders and
+     * notifies (no duplicate notifications).
+     */
+    const claim =
+      await Checkout.updateOne(
+        {
+          _id:
+            checkout._id,
+
+          paymentStatus: {
+            $ne:
+              "paid",
+          },
+        },
+        {
+          $set: {
+            paymentStatus:
+              "paid",
+          },
+        }
+      );
+
+    if (
+      !claim.modifiedCount
+    ) {
+      return false;
+    }
+
     await checkout.save();
+
+    /*
+     * Paid after the order was auto-cancelled for
+     * non-payment (late webhook) → the customer paid, so
+     * the order is placed after all.
+     */
+    await reviveExpiredOrders(
+      orderIds
+    );
 
     await Order.updateMany(
       {
@@ -3437,13 +3529,45 @@ const applyCheckoutPaid =
     );
 
     /*
-     * Tell the customer and each shop that payment went
-     * through (the order is now visible to the shop).
+     * Online orders are only placed once paid: this is the
+     * moment the shop sees them and is notified.
      */
-    const paidOrders =
+    const allPaidOrders =
       await Order.find({ _id: { $in: orderIds } })
-        .select("_id seller productName totalAmount")
+        .select("_id seller productName totalAmount orderStatus")
         .lean();
+
+    const paidOrders =
+      allPaidOrders.filter(
+        (order) =>
+          order.orderStatus !==
+          "cancelled"
+      );
+
+    /*
+     * Cancelled by the customer before paying, but the
+     * payment still went through → Admin refunds it.
+     */
+    const cancelledPaid =
+      allPaidOrders.filter(
+        (order) =>
+          order.orderStatus ===
+          "cancelled"
+      );
+
+    if (cancelledPaid.length) {
+      await notifyAdmins({
+        type: "order_cancelled",
+        title: "Refund needed",
+        message: `An online payment arrived for ${cancelledPaid.length} cancelled order${cancelledPaid.length === 1 ? "" : "s"} (${cancelledPaid.map((order) => order.productName || "order").join(", ")}). Refund the customer.`.slice(0, 500),
+        order: cancelledPaid[0]._id,
+        metadata: { needsRefund: true, checkoutId: String(checkout._id) },
+      });
+    }
+
+    if (!paidOrders.length) {
+      return true;
+    }
 
     await notifySafely({
       recipient: checkout.customer?._id || checkout.customer,
@@ -3471,6 +3595,31 @@ const applyCheckoutPaid =
 
     return true;
   };
+
+/*
+ * PayMongo says this checkout's session was paid (found by
+ * the unpaid-order expiry check) → place the orders.
+ */
+export const placePaidCheckout =
+  async (
+    checkout,
+    existingSession
+  ) =>
+    applyCheckoutPaid({
+      checkout,
+
+      sessionId:
+        existingSession?.id ||
+        null,
+
+      paidPayment:
+        existingSession
+          ?.paidPayment ||
+        null,
+
+      eventId:
+        null,
+    });
 
 /*
  * =========================================================

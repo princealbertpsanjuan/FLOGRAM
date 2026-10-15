@@ -1759,6 +1759,16 @@ export default function SellerDashboardScreen() {
                 }
               )}
             </View>
+
+            <Text
+              style={
+                styles.revenueNote
+              }
+            >
+              Product sales of completed orders (bouquets and
+              add-ons). Delivery fees go to Riders; pre-order
+              fees go to FLOGRAM.
+            </Text>
           </View>
 
           {/* RECENT ORDERS */}
@@ -2723,6 +2733,13 @@ const styles =
       color: '#A4A4A6',
       fontSize: 7,
       marginTop: 5,
+    },
+
+    revenueNote: {
+      color: '#A4A4A6',
+      fontSize: 9,
+      lineHeight: 13,
+      marginTop: 8,
     },
 
     /*

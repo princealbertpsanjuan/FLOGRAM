@@ -26,6 +26,13 @@ import {
 } from "../../services/admin";
 
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+import { isOnlineOrderNotPlaced } from '../../utils/order-status';
+
+/*
+ * Online order not paid yet: kept in the list for
+ * monitoring, but it is not a placed / active order.
+ */
+const NOT_PLACED_ADMIN_LABEL = 'Awaiting payment (not placed)';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import {
   DateRangeButton,
@@ -579,6 +586,9 @@ export default function AdminOrdersScreen() {
         ACTIVE_STATUSES.includes(
           order.orderStatus ||
             ""
+        ) &&
+        !isOnlineOrderNotPlaced(
+          order
         )
     ).length;
 
@@ -1430,9 +1440,13 @@ export default function AdminOrdersScreen() {
                               },
                             ]}
                           >
-                            {formatStatus(
-                              order.orderStatus
-                            )}
+                            {isOnlineOrderNotPlaced(
+                              order
+                            )
+                              ? NOT_PLACED_ADMIN_LABEL
+                              : formatStatus(
+                                  order.orderStatus
+                                )}
                           </Text>
                         </View>
                       </View>

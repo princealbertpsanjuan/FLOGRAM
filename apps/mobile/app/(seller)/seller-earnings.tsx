@@ -21,6 +21,8 @@ import { getUploadUrl } from '../../utils/media';
  * SELLER EARNINGS & PAYOUTS
  * =========================================================
  *
+ * Product sales = order total − delivery fee − pre-order fee
+ *   (delivery fee → Rider, pre-order fee → FLOGRAM).
  * Earnings = product sales − platform commission.
  * Admin pays the unpaid balance per payout period.
  * =========================================================
@@ -36,6 +38,20 @@ const STATUS_COLORS: Record<SellerPayout['status'], string> = {
   paid: '#15803D',
   cancelled: '#6B7280',
 };
+
+/*
+ * Cash on Pickup product sales the shop already holds in
+ * cash: Product sales − Commission − COP pre-order fees
+ * − Payout. Makes the payout breakdown add up.
+ */
+const pickupSalesKept = (payout: SellerPayout) =>
+  Math.round(
+    (Number(payout.grossSales || 0) -
+      Number(payout.totalCommission || 0) -
+      Number(payout.pickupPreOrderFees || 0) -
+      Number(payout.totalAmount || 0)) *
+      100
+  ) / 100;
 
 const peso = (value?: number | null) =>
   `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -174,6 +190,15 @@ export default function SellerEarningsScreen() {
                       <View style={styles.details}>
                         <Line label="Product sales" value={peso(openPayout.grossSales)} />
                         <Line label="Commission" value={`− ${peso(openPayout.totalCommission)}`} />
+                        {Number(openPayout.pickupPreOrderFees || 0) > 0 ? (
+                          <Line
+                            label="Pre-order fees (Cash on Pickup, owed to FLOGRAM)"
+                            value={`− ${peso(openPayout.pickupPreOrderFees)}`}
+                          />
+                        ) : null}
+                        {pickupSalesKept(openPayout) > 0.005 ? (
+                          <Line label="Cash on Pickup sales already with you" value={`− ${peso(pickupSalesKept(openPayout))}`} />
+                        ) : null}
                         <Line label="Payout" value={peso(openPayout.totalAmount)} strong />
                         {openPayout.status === 'paid' ? (
                           <>
@@ -203,7 +228,7 @@ export default function SellerEarningsScreen() {
                               {PAYMENT_METHOD_LABELS[item.paymentMethod] || item.paymentMethod} · sales {peso(item.grossAmount)} · fee {peso(item.commission)}
                             </Text>
                             <Text style={[styles.itemNet, item.netAmount < 0 && { color: '#B45309' }]}>
-                              {item.netAmount < 0 ? `− ${peso(-item.netAmount)} (cash already with you)` : peso(item.netAmount)}
+                              {item.netAmount < 0 ? `− ${peso(-item.netAmount)} (cash already with you; owed to FLOGRAM)` : peso(item.netAmount)}
                             </Text>
                           </View>
                         ))}
@@ -235,7 +260,11 @@ export default function SellerEarningsScreen() {
                   <Text style={styles.meta}>
                     {shortDate(item.completedAt)} · {PAYMENT_METHOD_LABELS[item.paymentMethod] || item.paymentMethod}
                     {item.awaitingCodRemittance ? ' · waiting for COD remittance' : ''}
-                    {item.collectedBySeller ? ' · commission only' : ''}
+                    {item.collectedBySeller
+                      ? Number(item.preOrderFee || 0) > 0
+                        ? ' · commission + pre-order fee owed'
+                        : ' · commission owed'
+                      : ''}
                   </Text>
                 </View>
               ))
@@ -244,8 +273,9 @@ export default function SellerEarningsScreen() {
             <SeeAllButton state={unpaidList} role="seller" />
 
             <Text style={styles.footnote}>
-              Product sales = order total minus delivery fee (the delivery fee goes to the Rider). For Cash on Pickup you
-              already received the cash, so only the commission is deducted from your next payout.
+              Product sales = order total minus delivery fee and pre-order fee (the delivery fee goes to the Rider; the
+              pre-order fee goes to FLOGRAM and is not part of your sales). For Cash on Pickup you already received the
+              whole order total in cash, so the commission and any pre-order fee are deducted from your next payout.
             </Text>
           </>
         )}

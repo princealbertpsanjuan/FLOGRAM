@@ -973,7 +973,7 @@ const getRemittanceAnalytics =
  *
  * Ranked by recognized product sales in the period (same
  * money the Sales section counts), not by order totals that
- * still include Rider delivery fees.
+ * still include Rider delivery fees and FLOGRAM pre-order fees.
  */
 const getTopShops = async (entries) => {
   const byShop = new Map();
@@ -1155,6 +1155,13 @@ export const getAdminReports =
           revenue.productSales,
         commission:
           revenue.commission,
+        preOrderFees:
+          revenue.preOrderFees,
+        /*
+         * FLOGRAM revenue = commission + pre-order fees.
+         */
+        platformRevenue:
+          revenue.platformRevenue,
         sellerShare:
           revenue.sellerShare,
       },
@@ -1163,7 +1170,11 @@ export const getAdminReports =
         /*
          * total = everything customers paid for orders
          * completed in the period
-         * (products + delivery fees).
+         * (products + delivery fees + pre-order fees).
+         *
+         *   total = productSales + deliveryFees + preOrderFees
+         *   productSales = sellerShare + commission
+         *   platformRevenue = commission + preOrderFees
          */
         total:
           revenue.gross,
@@ -1180,7 +1191,8 @@ export const getAdminReports =
         productSales:
           revenue.productSales,
         /*
-         * Included in productSales (belongs to the shop).
+         * FLOGRAM revenue, NOT part of productSales (the
+         * shop's sales) and not subject to commission.
          */
         preOrderFees:
           revenue.preOrderFees,
@@ -1189,6 +1201,8 @@ export const getAdminReports =
         commissionPercentage,
         commission:
           revenue.commission,
+        platformRevenue:
+          revenue.platformRevenue,
         sellerShare:
           revenue.sellerShare,
         /*

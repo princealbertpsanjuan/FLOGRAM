@@ -36,9 +36,17 @@ import {
   cancelOrder,
   completeOrder,
   getOrderById,
+  PAYMENT_NOT_COMPLETED_MESSAGE,
+  PAYMENT_NOT_COMPLETED_TITLE,
   payOrderOnline,
+  waitForOrderPayment,
   type CustomerOrder,
 } from "../../services/orders";
+
+import {
+  isOnlineOrderNotPlaced,
+  NOT_PLACED_STATUS_LABEL,
+} from "../../utils/order-status";
 
 import {
   getCustomerDeliveries,
@@ -628,6 +636,26 @@ const getCheckoutDisplayStatus = (
     )
   ) {
     return "Cancelled";
+  }
+
+  /*
+   * Online payment not confirmed yet → not placed.
+   */
+  if (
+    orders.some(
+      (order) =>
+        isOnlineOrderNotPlaced({
+          paymentMethod:
+            checkout.paymentMethod,
+          paymentStatus:
+            order.paymentStatus ||
+            checkout.paymentStatus,
+          orderStatus:
+            order.orderStatus,
+        })
+    )
+  ) {
+    return NOT_PLACED_STATUS_LABEL;
   }
 
   if (
@@ -1228,10 +1256,11 @@ export default function CustomerOrderDetailsScreen() {
             targetOrderId
           );
 
-          await cancelOrder(
-            targetOrderId,
-            "Cancelled by customer."
-          );
+          const cancelled =
+            await cancelOrder(
+              targetOrderId,
+              "Cancelled by customer."
+            );
 
           await loadDetails(
             false
@@ -1239,7 +1268,12 @@ export default function CustomerOrderDetailsScreen() {
 
           Alert.alert(
             "Order Cancelled",
-            "The order has been cancelled successfully."
+            cancelled?.paymentMethod ===
+              "paymongo" &&
+              cancelled?.paymentStatus !==
+                "paid"
+              ? "Your order was not placed because it was not paid. Any bouquets from your cart were put back in your cart."
+              : "The order has been cancelled successfully."
           );
         } catch (
           error
@@ -1458,9 +1492,30 @@ export default function CustomerOrderDetailsScreen() {
             result.checkoutUrl
           );
 
+          /*
+           * Back from PayMongo (paid, cancelled or
+           * closed): check whether it was really paid.
+           */
+          const paid =
+            await waitForOrderPayment(
+              targetOrderId
+            );
+
           await loadDetails(
             false
           );
+
+          if (paid) {
+            Alert.alert(
+              "Payment successful",
+              "Your order has been placed and sent to the shop."
+            );
+          } else {
+            Alert.alert(
+              PAYMENT_NOT_COMPLETED_TITLE,
+              PAYMENT_NOT_COMPLETED_MESSAGE
+            );
+          }
         } catch (
           error
         ) {
@@ -2729,9 +2784,13 @@ function StandaloneOrderDetails({
                   },
                 ]}
               >
-                {formatStatus(
-                  order.orderStatus
-                )}
+                {isOnlineOrderNotPlaced(
+                  order
+                )
+                  ? NOT_PLACED_STATUS_LABEL
+                  : formatStatus(
+                      order.orderStatus
+                    )}
               </Text>
 
               <Text
@@ -3453,9 +3512,13 @@ function ChildOrderCard({
               },
             ]}
           >
-            {formatStatus(
-              order.orderStatus
-            )}
+            {isOnlineOrderNotPlaced(
+              order
+            )
+              ? NOT_PLACED_STATUS_LABEL
+              : formatStatus(
+                  order.orderStatus
+                )}
           </Text>
         </View>
       </View>

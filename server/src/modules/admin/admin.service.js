@@ -12,6 +12,7 @@ import PolicyViolation from "../violations/violation.model.js";
 import Review from "../reviews/review.model.js";
 import Flower from "../flowers/flower.model.js";
 import CustomBouquetRequest from "../bloomboard/customBouquet/customBouquetRequest.model.js";
+import { placedOrderMatch } from "../orders/order-payment-expiry.js";
 
 import {
   getPlatformCommissionRate,
@@ -548,11 +549,17 @@ export const getAdminDashboard =
 
       Order.countDocuments(),
 
+      /*
+       * Unpaid online orders are not placed yet, so they
+       * are not active orders.
+       */
       Order.countDocuments({
         orderStatus: {
           $in:
             ACTIVE_ORDER_STATUSES,
         },
+
+        ...placedOrderMatch(),
       }),
 
       Order.countDocuments({
@@ -639,7 +646,9 @@ export const getAdminDashboard =
 
     /*
      * Gross = what customers paid. Commission applies to
-     * product sales only (delivery fees go to Riders).
+     * product sales only: delivery fees go to Riders and
+     * pre-order fees go to FLOGRAM (not to the shop).
+     * FLOGRAM revenue = commission + pre-order fees.
      */
     const totalSales =
       allRevenue.gross;
@@ -822,6 +831,29 @@ export const getAdminDashboard =
 
           today:
             todayCommission,
+        },
+
+        /*
+         * Pre-order fees are FLOGRAM revenue (not part of
+         * the shop's product sales).
+         */
+        preOrderFees: {
+          total:
+            allRevenue.preOrderFees,
+
+          today:
+            todayRevenue.preOrderFees,
+        },
+
+        /*
+         * FLOGRAM revenue = commission + pre-order fees.
+         */
+        platformRevenue: {
+          total:
+            allRevenue.platformRevenue,
+
+          today:
+            todayRevenue.platformRevenue,
         },
 
         sellerShare: {

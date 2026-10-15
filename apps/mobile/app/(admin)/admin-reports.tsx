@@ -1086,6 +1086,21 @@ export default function AdminReportsScreen() {
   const codAwaiting =
     report.sales.codAwaitingRemittance;
 
+  /*
+   * FLOGRAM revenue = commission + pre-order fees
+   * (pre-order fees are not part of shop product sales).
+   */
+  const preOrderFees =
+    report.sales.preOrderFees ?? 0;
+
+  const platformRevenue =
+    report.sales.platformRevenue ??
+    Math.round(
+      (Number(report.sales.commission || 0) +
+        Number(preOrderFees)) *
+        100
+    ) / 100;
+
   const awaitingConfirmation =
     report.orders.awaitingConfirmation ?? 0;
 
@@ -1330,7 +1345,7 @@ export default function AdminReportsScreen() {
 
           <CollapsibleSection
             title="Analytics Overview"
-            subtitle="Sales, orders, users and commission at a glance"
+            subtitle="Sales, orders, users and FLOGRAM revenue at a glance"
             icon="grid-outline"
             role="admin"
           >
@@ -1373,12 +1388,11 @@ export default function AdminReportsScreen() {
 
               <StatCard
                 icon="wallet-outline"
-                label="Commission"
+                label="FLOGRAM Revenue"
                 value={formatCurrency(
-                  report.overview
-                    .commission
+                  platformRevenue
                 )}
-                detail={`${report.sales.commissionPercentage}% of product sales`}
+                detail={`${report.sales.commissionPercentage}% commission + pre-order fees`}
                 tone="yellow"
               />
             </View>
@@ -1386,7 +1400,7 @@ export default function AdminReportsScreen() {
 
           <CollapsibleSection
             title="Sales & Revenue"
-            subtitle="Completed orders, commission and seller share"
+            subtitle="Completed orders, FLOGRAM revenue and seller share"
             icon="cash-outline"
             role="admin"
           >
@@ -1482,7 +1496,14 @@ export default function AdminReportsScreen() {
               />
 
               <InfoRow
-                label="Product sales (bouquets, add-ons, pre-order fees)"
+                label="Less: pre-order fees (FLOGRAM revenue)"
+                value={`− ${formatCurrency(
+                  preOrderFees
+                )}`}
+              />
+
+              <InfoRow
+                label="Product sales (bouquets and add-ons)"
                 value={formatCurrency(
                   report.sales.productSales ??
                     report.sales.total
@@ -1506,6 +1527,26 @@ export default function AdminReportsScreen() {
                   report.sales
                     .sellerShare
                 )}
+              />
+
+              <InfoRow
+                label="Pre-order fees (FLOGRAM revenue)"
+                value={formatCurrency(
+                  preOrderFees
+                )}
+                valueColor={
+                  COLORS.purpleAccent
+                }
+              />
+
+              <InfoRow
+                label="FLOGRAM revenue (commission + pre-order fees)"
+                value={formatCurrency(
+                  platformRevenue
+                )}
+                valueColor={
+                  COLORS.purpleAccent
+                }
                 last
               />
             </View>
@@ -2172,10 +2213,12 @@ export default function AdminReportsScreen() {
                 Sales are recognized when an order is completed
                 (customer confirmed receipt or picked it up), for
                 every payment method. Product sales = order total −
-                delivery fee; commission = product sales ×{" "}
+                delivery fee − pre-order fee; commission = product
+                sales ×{" "}
                 {report.sales.commissionPercentage}%; seller share =
-                product sales − commission. Cancelled and refunded
-                orders never count.
+                product sales − commission; FLOGRAM revenue =
+                commission + pre-order fees. Delivery fees go to
+                Riders. Cancelled and refunded orders never count.
               </Text>
             </View>
           </View>

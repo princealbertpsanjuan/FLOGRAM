@@ -1343,7 +1343,7 @@ export default function AdminSettingsScreen() {
                   styles.helperText
                 }
               >
-                This rate is used when calculating the platform commission and seller share in Dashboard and Reports.
+                This rate is used when calculating the platform commission and seller share in Dashboard and Reports. It applies to product sales only; delivery fees go to Riders and pre-order fees go to FLOGRAM.
               </Text>
 
               <View
