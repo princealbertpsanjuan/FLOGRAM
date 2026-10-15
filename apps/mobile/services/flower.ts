@@ -67,6 +67,13 @@ export type FlowerListing = {
 
   isActive: boolean;
 
+  /*
+   * Hidden from customers by the FLOGRAM Admin.
+   */
+  hiddenByAdmin?: boolean;
+
+  adminHiddenReason?: string;
+
   createdAt: string;
 
   updatedAt: string;

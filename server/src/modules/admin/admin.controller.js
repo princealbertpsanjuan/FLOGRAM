@@ -7,6 +7,11 @@ import {
 } from "./admin-report.service.js";
 
 import {
+  getAdminFlowers,
+  setAdminFlowerVisibility,
+} from "./admin-product.service.js";
+
+import {
   getAdminSettings,
   updateAdminSettings,
 } from "./admin-settings.service.js";
@@ -154,6 +159,79 @@ export const updateSettings =
 
         data:
           settings,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * ADMIN PRODUCT LISTINGS
+ * =========================================================
+ *
+ * GET /api/v1/admin/flowers
+ *
+ * ?search=  ?florist=<id>  ?status=all|visible|hidden
+ *
+ * ADMIN ONLY
+ * =========================================================
+ */
+
+export const getFlowers =
+  async (req, res, next) => {
+    try {
+      const result =
+        await getAdminFlowers(
+          req.query
+        );
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "Seller listings retrieved successfully.",
+
+        data:
+          result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/*
+ * =========================================================
+ * HIDE / RESTORE A LISTING
+ * =========================================================
+ *
+ * PATCH /api/v1/admin/flowers/:flowerId/visibility
+ *
+ * { "isActive": false, "reason": "..." }
+ *
+ * ADMIN ONLY
+ * =========================================================
+ */
+
+export const updateFlowerVisibility =
+  async (req, res, next) => {
+    try {
+      const flower =
+        await setAdminFlowerVisibility(
+          req.params.flowerId,
+          req.body || {}
+        );
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          flower.isActive
+            ? "Listing restored."
+            : "Listing hidden from customers.",
+
+        data:
+          flower,
       });
     } catch (error) {
       next(error);

@@ -42,6 +42,8 @@ import AdminScreenHeader, {
 
 import { getUploadUrl } from '../../utils/media';
 
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 import {
   PAYOUT_STATUS_LABELS,
   formatPayoutPeriod,
@@ -178,6 +180,14 @@ export default function AdminRiderPayoutsScreen() {
   const pendingPayouts = payouts.filter(item => item.status === 'pending');
   const totalPending = pendingPayouts.reduce((sum, item) => sum + item.totalAmount, 0);
   const historyPayouts = payouts.filter(item => item.status !== 'pending');
+
+  /*
+   * Show 5 records + "See all"; collapses on tab change.
+   */
+  const owedSeeAll = useSeeAll(owedRiders, { resetKey: tab });
+  const payoutSeeAll = useSeeAll(tab === 'pending' ? pendingPayouts : historyPayouts, {
+    resetKey: tab,
+  });
 
   /*
    * -------------------------------------------------------
@@ -434,7 +444,8 @@ export default function AdminRiderPayoutsScreen() {
           owedRiders.length === 0 ? (
             <Empty text="No Rider is owed delivery fees right now." />
           ) : (
-            owedRiders.map(balance => (
+            <>
+            {owedSeeAll.visible.map(balance => (
               <View
                 key={balance.riderId}
                 style={styles.card}
@@ -468,7 +479,9 @@ export default function AdminRiderPayoutsScreen() {
                   )}
                 </Pressable>
               </View>
-            ))
+            ))}
+            <SeeAllButton state={owedSeeAll} role="admin" />
+            </>
           )
         ) : (tab === 'pending' ? pendingPayouts : historyPayouts).length === 0 ? (
           <Empty
@@ -479,7 +492,8 @@ export default function AdminRiderPayoutsScreen() {
             }
           />
         ) : (
-          (tab === 'pending' ? pendingPayouts : historyPayouts).map(payout => {
+          <>
+          {payoutSeeAll.visible.map(payout => {
             const statusStyle = STATUS_STYLE[payout.status] ?? STATUS_STYLE.pending;
             return (
               <Pressable
@@ -510,7 +524,9 @@ export default function AdminRiderPayoutsScreen() {
                 </View>
               </Pressable>
             );
-          })
+          })}
+          <SeeAllButton state={payoutSeeAll} role="admin" />
+          </>
         )}
       </ScrollView>
 
@@ -522,7 +538,7 @@ export default function AdminRiderPayoutsScreen() {
         onRequestClose={() => setSelected(null)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'web' ? undefined : 'padding'}
           style={styles.backdrop}
         >
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>

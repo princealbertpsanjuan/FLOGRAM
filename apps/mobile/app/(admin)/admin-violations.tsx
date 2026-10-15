@@ -16,7 +16,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import ScreenHeader from '../../components/ui/screen-header';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import { EmptyState, ErrorState, ScreenLoader } from '../../components/ui/state-views';
 import {
   PENALTY_COLORS,
@@ -173,6 +175,11 @@ export default function AdminViolationsScreen() {
     }
   };
 
+  /*
+   * Show 5 records + "See all"; collapses on filter change.
+   */
+  const recordsSeeAll = useSeeAll(violations, { resetKey: `${filter}|${userId ?? ''}` });
+
   if (loading) {
     return <ScreenLoader role="admin" message="Loading violations..." />;
   }
@@ -185,6 +192,7 @@ export default function AdminViolationsScreen() {
         subtitle={userId ? `${userName || 'User'} · ${userRole}` : 'Warnings, suspensions and bans'}
       />
 
+      <KeyboardSafeView>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
@@ -289,7 +297,8 @@ export default function AdminViolationsScreen() {
             message={userId ? 'This user has a clean record.' : 'To issue a penalty, open a user in Users or a dispute.'}
           />
         ) : (
-          violations.map(violation => (
+          <>
+          {recordsSeeAll.visible.map(violation => (
             <View
               key={violation._id}
               style={[styles.card, violation.status === 'lifted' && { opacity: 0.65 }]}
@@ -360,9 +369,12 @@ export default function AdminViolationsScreen() {
                 )
               ) : null}
             </View>
-          ))
+          ))}
+          <SeeAllButton state={recordsSeeAll} role="admin" />
+          </>
         )}
       </ScrollView>
+      </KeyboardSafeView>
     </View>
   );
 }

@@ -1479,6 +1479,76 @@ export const getRiderWallet =
     const orderedKeys =
       [...shiftGroups.keys()].sort();
 
+    /*
+     * Delivery -> submitted/verified remittance id. A
+     * pending/rejected day must never re-list a delivery
+     * that was carried into (and remitted with) another
+     * day, or it would be counted twice and could never be
+     * resubmitted.
+     */
+    const lockedRemittances =
+      await RiderRemittance.find({
+        rider:
+          rider._id,
+
+        riderUser:
+          userId,
+
+        status: {
+          $in: [
+            "submitted",
+            "verified",
+          ],
+        },
+      })
+        .select(
+          "items.delivery"
+        )
+        .lean();
+
+    const lockedDeliveryOwner =
+      new Map();
+
+    lockedRemittances.forEach(
+      (entry) => {
+        (entry.items || []).forEach(
+          (entryItem) => {
+            lockedDeliveryOwner.set(
+              String(
+                entryItem.delivery
+              ),
+              String(
+                entry._id
+              )
+            );
+          }
+        );
+      }
+    );
+
+    const withoutRemittedElsewhere =
+      (
+        groupItems,
+        remittanceId = null
+      ) =>
+        groupItems.filter(
+          (item) => {
+            const owner =
+              lockedDeliveryOwner.get(
+                String(item.delivery)
+              );
+
+            return (
+              !owner ||
+              (remittanceId &&
+                owner ===
+                  String(
+                    remittanceId
+                  ))
+            );
+          }
+        );
+
     for (
       let keyIndex = 0;
       keyIndex < orderedKeys.length;
@@ -1502,6 +1572,15 @@ export const getRiderWallet =
         });
 
       if (!existing) {
+        const freshItems =
+          withoutRemittedElsewhere(
+            group.items
+          );
+
+        if (!freshItems.length) {
+          continue;
+        }
+
         const remittance =
           new RiderRemittance({
             rider:
@@ -1514,7 +1593,7 @@ export const getRiderWallet =
               group.shiftDate,
 
             items:
-              group.items,
+              freshItems,
 
             status:
               "pending",
@@ -1580,7 +1659,10 @@ export const getRiderWallet =
       }
 
       existing.items =
-        group.items;
+        withoutRemittedElsewhere(
+          group.items,
+          existing._id
+        );
 
       await existing.save();
     }
@@ -2298,6 +2380,48 @@ export const submitRiderRemittance =
     const validatedItems =
       [];
 
+    /*
+     * Deliveries already in ANOTHER submitted/verified
+     * remittance cannot be remitted twice.
+     */
+    const otherRemitted =
+      await RiderRemittance.find({
+        _id: {
+          $ne:
+            remittance._id,
+        },
+
+        rider:
+          rider._id,
+
+        riderUser:
+          userId,
+
+        status: {
+          $in: [
+            "submitted",
+            "verified",
+          ],
+        },
+      })
+        .select(
+          "items.delivery"
+        )
+        .lean();
+
+    const remittedElsewhere =
+      new Set(
+        otherRemitted.flatMap(
+          (entry) =>
+            (entry.items || []).map(
+              (entryItem) =>
+                String(
+                  entryItem.delivery
+                )
+            )
+        )
+      );
+
     for (
       const item
       of items
@@ -2417,19 +2541,44 @@ export const submitRiderRemittance =
           remittance.shiftDate
         );
 
+      /*
+       * The wallet carries COD collected after a day was
+       * already submitted/verified into the NEXT day's
+       * remittance, so a delivery may belong to this day
+       * or to any EARLIER day — never a later one.
+       * (YYYY-MM-DD keys compare correctly as strings.)
+       */
       if (
         !deliveryShiftKey ||
         !remittanceShiftKey ||
-        deliveryShiftKey !==
+        deliveryShiftKey >
           remittanceShiftKey
       ) {
         const error =
           new Error(
-            "A delivery does not belong to this Rider shift remittance."
+            "A delivery does not belong to this Rider shift remittance. Please reopen Wallet to refresh your remittances and try again."
           );
 
         error.statusCode =
           400;
+
+        throw error;
+      }
+
+      if (
+        remittedElsewhere.has(
+          String(
+            delivery._id
+          )
+        )
+      ) {
+        const error =
+          new Error(
+            "A delivery in this remittance was already included in another submitted remittance. Please reopen Wallet to refresh your remittances and try again."
+          );
+
+        error.statusCode =
+          409;
 
         throw error;
       }

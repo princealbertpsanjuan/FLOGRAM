@@ -3,9 +3,7 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -20,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 
 import {
   MAX_SAVED_ADDRESSES,
@@ -141,6 +141,7 @@ export default function CustomerAddressesScreen() {
   const setDefault = (index: number) =>
     void persist(addresses.map((item, i) => ({ ...item, isDefault: i === index })));
 
+  // Form inputs; only rendered inside the address sheet's KeyboardSafeView.
   const field = (key: keyof SavedAddress, label: string, placeholder?: string) => (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -268,10 +269,7 @@ export default function CustomerAddressesScreen() {
         transparent
         onRequestClose={() => setEditingIndex(null)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.backdrop}
-        >
+        <KeyboardSafeView style={styles.backdrop}>
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>{editingIndex === -1 ? 'New Address' : 'Edit Address'}</Text>
@@ -321,7 +319,7 @@ export default function CustomerAddressesScreen() {
               </Pressable>
             </ScrollView>
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardSafeView>
       </Modal>
     </View>
   );

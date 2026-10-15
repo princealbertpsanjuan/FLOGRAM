@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
+  useFocusEffect,
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
@@ -13,6 +14,7 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -542,6 +544,115 @@ const openedRouteConversationRef =
   ] = useState<
     ProposalContext | null
   >(null);
+
+  /*
+   * AI image message IDs that already have an
+   * active custom request (one request per
+   * design) → that request's ID.
+   */
+  const [
+    requestedSourceIds,
+    setRequestedSourceIds,
+  ] = useState<
+    Record<string, string>
+  >({});
+
+  /*
+   * Android Back inside an open chat returns to the
+   * conversation list (registered after the Customer
+   * layout's handler, so it runs first).
+   */
+  useEffect(() => {
+    if (!selectedConversation) {
+      return;
+    }
+
+    const subscription =
+      BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          setSelectedConversation(null);
+          setMessages([]);
+          setMessageText("");
+          setCustomBouquetRequest(null);
+          setProposalContext(null);
+          return true;
+        }
+      );
+
+    return () => subscription.remove();
+  }, [selectedConversation]);
+
+  /* =======================================================
+   * LOAD DESIGNS ALREADY REQUESTED
+   * ===================================================== */
+
+  const loadRequestedSources =
+    useCallback(async () => {
+      try {
+        const response =
+          await apiRequest<{
+            data?: {
+              requests?: {
+                _id: string;
+                status?: string;
+                sourceMessage?:
+                  | { _id: string }
+                  | string
+                  | null;
+              }[];
+            };
+          }>(
+            "/bloomboard/custom-bouquet-requests/mine",
+            {
+              authenticated: true,
+            }
+          );
+
+        const next: Record<
+          string,
+          string
+        > = {};
+
+        for (const request of response
+          ?.data?.requests ?? []) {
+          const sourceId =
+            typeof request.sourceMessage ===
+            "string"
+              ? request.sourceMessage
+              : request.sourceMessage?._id;
+
+          if (
+            sourceId &&
+            ![
+              "cancelled",
+              "rejected",
+              "customer_declined",
+            ].includes(
+              String(
+                request.status ?? ""
+              )
+            )
+          ) {
+            next[sourceId] =
+              request._id;
+          }
+        }
+
+        setRequestedSourceIds(next);
+      } catch {
+        /*
+         * Not critical: the server still
+         * blocks duplicate requests.
+         */
+      }
+    }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadRequestedSources();
+    }, [loadRequestedSources])
+  );
 
   /* =======================================================
    * LOAD CONVERSATIONS
@@ -1219,6 +1330,19 @@ useEffect(() => {
       return;
     }
 
+    if (
+      requestedSourceIds[
+        message._id
+      ]
+    ) {
+      Alert.alert(
+        "Request already sent",
+        "You already sent a request for this design. Florist offers will appear in this conversation."
+      );
+
+      return;
+    }
+
     router.push({
       pathname:
         "/(customer)/customer-custom-request",
@@ -1739,12 +1863,23 @@ useEffect(() => {
                       message
                     )
                   }
-                  style={
-                    styles.useImageButton
-                  }
+                  style={[
+                    styles.useImageButton,
+
+                    requestedSourceIds[
+                      message._id
+                    ] &&
+                      styles.useImageButtonSent,
+                  ]}
                 >
                   <Ionicons
-                    name="flower-outline"
+                    name={
+                      requestedSourceIds[
+                        message._id
+                      ]
+                        ? "checkmark-circle"
+                        : "flower-outline"
+                    }
                     size={18}
                     color="#FFFFFF"
                   />
@@ -1754,7 +1889,11 @@ useEffect(() => {
                       styles.useImageButtonText
                     }
                   >
-                    Use for Custom Request
+                    {requestedSourceIds[
+                      message._id
+                    ]
+                      ? "Request already sent"
+                      : "Use for Custom Request"}
                   </Text>
                 </Pressable>
               </View>
@@ -2587,11 +2726,7 @@ useEffect(() => {
 
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         {selectedConversation ? (
           renderChatScreen()
@@ -3346,6 +3481,10 @@ const styles =
       gap: 7,
       backgroundColor:
         COLORS.primary,
+    },
+
+    useImageButtonSent: {
+      opacity: 0.6,
     },
 
     useImageButtonText: {

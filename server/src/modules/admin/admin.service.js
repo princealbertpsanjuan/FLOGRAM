@@ -51,7 +51,7 @@ const getRecentOrders = async () => {
     .sort({
       updatedAt: -1,
     })
-    .limit(5)
+    .limit(15)
     .select(
       "_id productName totalAmount orderStatus paymentStatus paymentMethod createdAt updatedAt"
     )
@@ -124,7 +124,7 @@ const fullName = (person) =>
 const peso = (value) => `₱${Number(value || 0).toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
 
 const getRecentPlatformEvents = async () => {
-  const LIMIT = 5;
+  const LIMIT = 12;
 
   const [users, disputes, shifts, riderPayouts, sellerPayouts, reviews, violations, customRequests, flowers] =
     await Promise.all([
@@ -147,13 +147,13 @@ const getRecentPlatformEvents = async () => {
         .lean(),
       RiderPayout.find({})
         .sort({ updatedAt: -1 })
-        .limit(3)
+        .limit(LIMIT)
         .select("status totalAmount riderUser createdAt updatedAt")
         .populate("riderUser", "firstName lastName")
         .lean(),
       SellerPayout.find({})
         .sort({ updatedAt: -1 })
-        .limit(3)
+        .limit(LIMIT)
         .select("status totalAmount florist createdAt updatedAt")
         .populate("florist", "shopName")
         .lean(),
@@ -166,19 +166,19 @@ const getRecentPlatformEvents = async () => {
         .lean(),
       PolicyViolation.find({})
         .sort({ updatedAt: -1 })
-        .limit(3)
+        .limit(LIMIT)
         .select("penalty status user createdAt updatedAt")
         .populate("user", "firstName lastName")
         .lean(),
       CustomBouquetRequest.find({})
         .sort({ createdAt: -1 })
-        .limit(3)
+        .limit(LIMIT)
         .select("occasion budget status customer createdAt")
         .populate("customer", "firstName lastName")
         .lean(),
       Flower.find({})
         .sort({ createdAt: -1 })
-        .limit(3)
+        .limit(LIMIT)
         .select("name price florist createdAt")
         .populate("florist", "shopName")
         .lean(),
@@ -301,7 +301,7 @@ const getRecentSellerApplications =
         .sort({
           createdAt: -1,
         })
-        .limit(3)
+        .limit(10)
         .populate(
           "owner",
           "firstName lastName email phoneNumber role verificationStatus"
@@ -353,7 +353,7 @@ const getRecentRiderApplications =
         .sort({
           createdAt: -1,
         })
-        .limit(3)
+        .limit(10)
         .populate(
           "owner",
           "firstName lastName email phoneNumber role verificationStatus"
@@ -412,7 +412,7 @@ const getRecentRemittances =
         .sort({
           submittedAt: -1,
         })
-        .limit(3)
+        .limit(10)
         .populate(
           "riderUser",
           "firstName lastName email phoneNumber"
@@ -707,7 +707,7 @@ export const getAdminDashboard =
 
         return dateB - dateA;
       })
-      .slice(0, 20);
+      .slice(0, 50);
 
     /*
      * =====================================================

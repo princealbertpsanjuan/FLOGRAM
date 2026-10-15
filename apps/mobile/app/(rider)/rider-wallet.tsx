@@ -50,6 +50,10 @@ import RiderEarningsPanel from '../../components/rider/rider-earnings-panel';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
+
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 /*
  * =========================================================
  * RIDER WALLET
@@ -363,6 +367,21 @@ export default function RiderWalletScreen() {
       null
     );
 
+  /*
+   * Photo just taken/picked, shown full-screen so the Rider
+   * confirms it before it becomes the remittance proof.
+   */
+  const [
+    pendingProof,
+    setPendingProof,
+  ] =
+    useState<{
+      asset: ImagePicker.ImagePickerAsset;
+      source: 'camera' | 'library';
+    } | null>(
+      null
+    );
+
   const [
     submittingRemittance,
     setSubmittingRemittance,
@@ -571,6 +590,15 @@ export default function RiderWalletScreen() {
       ]
     );
 
+  const remittancesSeeAll =
+    useSeeAll(
+      remittances,
+      {
+        resetKey:
+          walletTab,
+      }
+    );
+
   /*
    * -----------------------------------------------------
    * SUMMARY VALUES
@@ -628,6 +656,10 @@ export default function RiderWalletScreen() {
       );
 
       setProofImage(
+        null
+      );
+
+      setPendingProof(
         null
       );
     }, []);
@@ -742,9 +774,11 @@ export default function RiderWalletScreen() {
           result.assets
             .length > 0
         ) {
-          setProofImage(
-            result.assets[0]
-          );
+          setPendingProof({
+            asset:
+              result.assets[0],
+            source: 'camera',
+          });
         }
       } catch (error) {
         Alert.alert(
@@ -800,9 +834,11 @@ export default function RiderWalletScreen() {
           result.assets
             .length > 0
         ) {
-          setProofImage(
-            result.assets[0]
-          );
+          setPendingProof({
+            asset:
+              result.assets[0],
+            source: 'library',
+          });
         }
       } catch (error) {
         Alert.alert(
@@ -813,6 +849,48 @@ export default function RiderWalletScreen() {
         );
       }
     }, []);
+
+  /*
+   * -----------------------------------------------------
+   * PROOF PREVIEW
+   * -----------------------------------------------------
+   */
+
+  const confirmPendingProof =
+    useCallback(() => {
+      if (pendingProof) {
+        setProofImage(
+          pendingProof.asset
+        );
+      }
+
+      setPendingProof(
+        null
+      );
+    }, [pendingProof]);
+
+  const discardPendingProof =
+    useCallback(() => {
+      setPendingProof(
+        null
+      );
+    }, []);
+
+  const retakePendingProof =
+    useCallback(() => {
+      if (
+        pendingProof?.source ===
+        'library'
+      ) {
+        void chooseProofPhoto();
+      } else {
+        void takeProofPhoto();
+      }
+    }, [
+      chooseProofPhoto,
+      pendingProof?.source,
+      takeProofPhoto,
+    ]);
 
   /*
    * -----------------------------------------------------
@@ -1572,21 +1650,30 @@ export default function RiderWalletScreen() {
                 </Text>
               </View>
             ) : (
-              remittances.map(
-                remittance => (
-                  <DailyRemittanceCard
-                    key={
-                      remittance.id
-                    }
-                    remittance={
-                      remittance
-                    }
-                    onSubmit={
-                      openRemittanceModal
-                    }
-                  />
-                )
-              )
+              <>
+                {remittancesSeeAll.visible.map(
+                  remittance => (
+                    <DailyRemittanceCard
+                      key={
+                        remittance.id
+                      }
+                      remittance={
+                        remittance
+                      }
+                      onSubmit={
+                        openRemittanceModal
+                      }
+                    />
+                  )
+                )}
+
+                <SeeAllButton
+                  state={
+                    remittancesSeeAll
+                  }
+                  role="rider"
+                />
+              </>
             )}
           </View>
 
@@ -1605,6 +1692,9 @@ export default function RiderWalletScreen() {
             transactions={
               codTransactions
             }
+            resetKey={
+              walletTab
+            }
           />
 
           {/*
@@ -1621,6 +1711,9 @@ export default function RiderWalletScreen() {
             iconType="online"
             transactions={
               onlineTransactions
+            }
+            resetKey={
+              walletTab
             }
           />
 
@@ -1697,7 +1790,7 @@ export default function RiderWalletScreen() {
           closeRemittanceModal
         }
       >
-        <View
+        <KeyboardSafeView
           style={
             styles.modalOverlay
           }
@@ -2158,7 +2251,163 @@ export default function RiderWalletScreen() {
               </Pressable>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardSafeView>
+
+        {/*
+         * Full-screen proof preview. Rendered INSIDE the
+         * remittance Modal so it stacks on top of it on
+         * Android and iOS.
+         */}
+        <Modal
+          visible={Boolean(
+            pendingProof
+          )}
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={
+            discardPendingProof
+          }
+        >
+          <View
+            style={
+              styles.proofConfirmScreen
+            }
+          >
+            <View
+              style={
+                styles.proofConfirmHeader
+              }
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+                style={
+                  styles.proofConfirmClose
+                }
+                onPress={
+                  discardPendingProof
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={WHITE}
+                />
+              </Pressable>
+
+              <Text
+                style={
+                  styles.proofConfirmTitle
+                }
+              >
+                Check your proof photo
+              </Text>
+            </View>
+
+            {pendingProof?.asset
+              .uri ? (
+              <Image
+                source={{
+                  uri:
+                    pendingProof
+                      .asset.uri,
+                }}
+                style={
+                  styles.proofConfirmImage
+                }
+                resizeMode="contain"
+              />
+            ) : (
+              <View
+                style={
+                  styles.proofConfirmImage
+                }
+              />
+            )}
+
+            <Text
+              style={
+                styles.proofConfirmHint
+              }
+            >
+              Make sure the reference number
+              and amount are clearly readable.
+            </Text>
+
+            <View
+              style={
+                styles.proofConfirmActions
+              }
+            >
+              <Pressable
+                accessibilityRole="button"
+                style={({
+                  pressed,
+                }) => [
+                  styles.proofConfirmSecondary,
+                  pressed && {
+                    opacity: 0.8,
+                  },
+                ]}
+                onPress={
+                  retakePendingProof
+                }
+              >
+                <Ionicons
+                  name={
+                    pendingProof?.source ===
+                    'library'
+                      ? 'images-outline'
+                      : 'camera-reverse-outline'
+                  }
+                  size={18}
+                  color={WHITE}
+                />
+
+                <Text
+                  style={
+                    styles.proofConfirmSecondaryText
+                  }
+                >
+                  {pendingProof?.source ===
+                  'library'
+                    ? 'Choose again'
+                    : 'Retake'}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Use this photo"
+                style={({
+                  pressed,
+                }) => [
+                  styles.proofConfirmPrimary,
+                  pressed && {
+                    opacity: 0.85,
+                  },
+                ]}
+                onPress={
+                  confirmPendingProof
+                }
+              >
+                <Ionicons
+                  name="checkmark"
+                  size={22}
+                  color={WHITE}
+                />
+
+                <Text
+                  style={
+                    styles.proofConfirmPrimaryText
+                  }
+                >
+                  Use this photo
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </Modal>
 
       <RiderBottomNav
@@ -2750,8 +2999,11 @@ function WalletSection({
   total,
   iconType,
   transactions,
+  resetKey,
 }: {
   title: string;
+
+  resetKey?: unknown;
 
   total: number;
 
@@ -2764,6 +3016,14 @@ function WalletSection({
 }) {
   const isOnline =
     iconType === 'online';
+
+  const seeAll =
+    useSeeAll(
+      transactions,
+      {
+        resetKey,
+      }
+    );
 
   return (
     <View
@@ -2901,7 +3161,7 @@ function WalletSection({
             styles.transactionList
           }
         >
-          {transactions.map(
+          {seeAll.visible.map(
             (
               transaction,
               index
@@ -2918,12 +3178,17 @@ function WalletSection({
                 }
                 isLast={
                   index ===
-                  transactions.length -
+                  seeAll.visible.length -
                     1
                 }
               />
             )
           )}
+
+          <SeeAllButton
+            state={seeAll}
+            role="rider"
+          />
         </View>
       )}
     </View>
@@ -4266,6 +4531,93 @@ const styles =
     /*
      * MODAL
      */
+
+    proofConfirmScreen: {
+      flex: 1,
+      paddingTop: 48,
+      paddingBottom: 36,
+      paddingHorizontal: 16,
+      backgroundColor: '#000000',
+    },
+
+    proofConfirmHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 12,
+    },
+
+    proofConfirmClose: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor:
+        'rgba(255,255,255,0.16)',
+    },
+
+    proofConfirmTitle: {
+      flex: 1,
+      color: WHITE,
+      fontSize: 17,
+      fontWeight: '800',
+    },
+
+    proofConfirmImage: {
+      flex: 1,
+      width: '100%',
+      borderRadius: 12,
+    },
+
+    proofConfirmHint: {
+      marginTop: 12,
+      color: 'rgba(255,255,255,0.75)',
+      fontSize: 13,
+      textAlign: 'center',
+    },
+
+    proofConfirmActions: {
+      flexDirection: 'row',
+      gap: 12,
+      marginTop: 16,
+    },
+
+    proofConfirmSecondary: {
+      flex: 1,
+      height: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor:
+        'rgba(255,255,255,0.45)',
+    },
+
+    proofConfirmSecondaryText: {
+      color: WHITE,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+
+    proofConfirmPrimary: {
+      flex: 1.4,
+      height: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: 14,
+      backgroundColor: '#C49317',
+    },
+
+    proofConfirmPrimaryText: {
+      color: WHITE,
+      fontSize: 16,
+      fontWeight: '800',
+    },
 
     modalOverlay: {
       flex: 1,

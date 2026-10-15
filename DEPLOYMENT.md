@@ -167,9 +167,12 @@ XAI_API_KEY
 PAYMONGO_SECRET_KEY
 PAYMONGO_WEBHOOK_SECRET
 OPENROUTESERVICE_API_KEY
-EMAIL_USER
-EMAIL_PASSWORD
+BREVO_API_KEY
+EMAIL_FROM
 ```
+
+`EMAIL_USER` and `EMAIL_PASSWORD` (Gmail) are only a local-development
+fallback; on Render, password reset emails go through Brevo (section 4f).
 
 For the current deployment:
 
@@ -217,6 +220,34 @@ than a localhost address.
 >
 > Before the capstone defense, open the API health endpoint, Admin portal, and
 > other deployed services several minutes before presenting.
+
+### 4f. Password reset email (Brevo)
+
+Render's free plan blocks outgoing SMTP ports, so Gmail SMTP
+(`EMAIL_USER` + `EMAIL_PASSWORD`) cannot send from `flogram-api`: the
+"Forgot password" request would just time out. On Render the API sends the
+reset code through **Brevo's HTTPS API** instead (free plan: 300 emails/day).
+
+1. Create a free account at [brevo.com](https://www.brevo.com).
+2. **Senders, domains & dedicated IPs → Senders → Add a sender**: enter the
+   address the emails should come from (for example your Gmail) and click the
+   verification link Brevo emails to it.
+3. **SMTP & API → API keys → Generate a new API key**. Copy it (it is shown once).
+4. Render → `flogram-api` → **Environment**, add:
+
+```text
+BREVO_API_KEY=xkeysib-...
+EMAIL_FROM=the-verified-sender@gmail.com
+```
+
+5. Save and redeploy `flogram-api`.
+6. Test: in the app, **Forgot password** → enter a registered email → the
+   six-digit code should arrive within a minute (check Spam the first time).
+
+When `BREVO_API_KEY` is set the server always uses Brevo; without it, it falls
+back to Gmail SMTP, which works locally but not on Render free. If sending
+fails, the app shows "We couldn't send the email right now" and the real
+reason (for example an unverified sender) appears in the Render logs.
 
 ---
 
@@ -342,22 +373,44 @@ Do not commit Admin credentials or `.env` files to GitHub.
 
 ---
 
-## 7. Delivery Routing
+## 7. Maps and Delivery Routing
 
-FLOGRAM uses **OpenRouteService** for its routing functionality.
+FLOGRAM uses two different services for maps. Both are needed:
 
-The routing API key is configured on the backend as:
+| What | Service | Key | Where the key lives |
+| --- | --- | --- | --- |
+| The map itself (tiles, pins) in checkout, order tracking and rider delivery | **Google Maps SDK for Android** | `GOOGLE_MAPS_API_KEY` | EAS environment variable (built into the APK) |
+| Route line, distance and ETA | **OpenRouteService** | `OPENROUTESERVICE_API_KEY` | Render `flogram-api` environment (server only) |
 
-```text
-OPENROUTESERVICE_API_KEY
+### 7a. Google Maps key (APK)
+
+Expo Go has its own Google Maps key, but the APK needs yours. Without it,
+the APK would crash when a map opens, so FLOGRAM shows a
+"Map preview is unavailable" box instead.
+
+1. Google Cloud Console → your project → **APIs & Services → Library** →
+   enable **Maps SDK for Android**.
+2. **Credentials** → your API key → **Application restrictions: Android apps**
+   → add package `com.flogram.app` with the SHA-1 shown by
+   `eas credentials -p android` (keystore → SHA1 Fingerprint).
+   **API restrictions:** Maps SDK for Android.
+   (Restrictions are recommended but optional. If the map shows only a grey
+   grid, the package/SHA-1 does not match. Remove the app restriction to test.)
+3. Save the key in EAS (not in GitHub):
+
+```powershell
+cd apps/mobile
+eas env:create --name GOOGLE_MAPS_API_KEY --value "YOUR_KEY" --environment preview --visibility sensitive
+eas env:list --environment preview
 ```
 
-The key is stored in the Render `flogram-api` environment variables.
+4. Rebuild the APK (section 8d). The build log shows a
+   `GOOGLE_MAPS_API_KEY is not set` warning if the key was not picked up.
 
-It should remain server-side and should not be placed inside the Android APK.
+### 7b. OpenRouteService key (server)
 
-The current FLOGRAM deployment does not require the old
-`GOOGLE_MAPS_API_KEY` EAS setup described in earlier deployment instructions.
+`OPENROUTESERVICE_API_KEY` stays in the Render `flogram-api` environment
+variables. It must not be placed inside the Android APK.
 
 ---
 
@@ -516,6 +569,7 @@ XAI_API_KEY
 PAYMONGO_SECRET_KEY
 PAYMONGO_WEBHOOK_SECRET
 OPENROUTESERVICE_API_KEY
+BREVO_API_KEY
 EMAIL_PASSWORD
 ```
 
@@ -559,6 +613,7 @@ Before considering the deployment complete, verify:
 - [ ] Complete a PayMongo Test Mode payment through the Customer app.
 - [ ] Confirm the paid order automatically updates after the PayMongo webhook.
 - [ ] Verify delivery/routing functionality from the deployed mobile app.
+- [ ] Request a password reset code and confirm the Brevo email arrives.
 
 ---
 

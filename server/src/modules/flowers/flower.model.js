@@ -79,6 +79,23 @@ const flowerSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    /*
+     * Set when the FLOGRAM Admin hides the listing
+     * (isActive is false too). Lets the seller still see
+     * it with the reason, and keeps "removed by seller"
+     * listings from being restored by mistake.
+     */
+    hiddenByAdmin: {
+      type: Boolean,
+      default: false,
+    },
+
+    adminHiddenReason: {
+      type: String,
+      trim: true,
+      default: "",
+    },
   },
   {
     timestamps: true,

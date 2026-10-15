@@ -39,6 +39,7 @@ const SECTIONS: { title: string; links: Link[] }[] = [
     links: [
       { label: 'Users', route: '/admin-users', icon: 'people-outline' },
       { label: 'Orders', route: '/admin-orders', icon: 'receipt-outline' },
+      { label: 'Products', route: '/admin-products', icon: 'flower-outline' },
       { label: 'Seller Verification', route: '/admin-seller-verification', icon: 'storefront-outline' },
       { label: 'Rider Verification', route: '/admin-rider-verification', icon: 'bicycle-outline' },
     ],

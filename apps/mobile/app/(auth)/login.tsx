@@ -16,10 +16,13 @@ import {
 } from 'react-native';
 
 import {
+  getHomeRouteForUser,
   login,
   logout,
   type AuthUser,
 } from '../../services/auth';
+
+import { replaceHistory } from '../../services/navigation';
 
 /*
  * The web build is the FLOGRAM Admin portal only.
@@ -50,53 +53,34 @@ export default function LoginScreen() {
    * Each stakeholder has a completely
    * separate mobile interface.
    *
-   * customer
-   *   -> Customer Dashboard
+   * customer -> Customer Dashboard
+   * seller   -> Seller Dashboard
+   * rider    -> Rider Dashboard
+   * admin    -> Admin Dashboard
    *
-   * seller
-   *   -> Seller Dashboard
+   * Pending or rejected Sellers/Riders go to their
+   * application instead (see getHomeRouteForUser).
    *
-   * rider
-   *   -> Rider Dashboard
-   *
-   * admin
-   *   -> Admin Dashboard
+   * replaceHistory() clears Welcome/Login from the
+   * history so Back cannot return here while signed in.
    * =========================================================
    */
   const redirectUser = (
     user: AuthUser
   ) => {
-    switch (user.role) {
-      case 'customer':
-        router.replace(
-          '/(customer)/customer-dashboard'
-        );
-        break;
+    const route =
+      getHomeRouteForUser(user);
 
-      case 'seller':
-        router.replace(
-          '/(seller)/seller-dashboard'
-        );
-        break;
+    if (!route) {
+      Alert.alert(
+        'Login Error',
+        'Unable to determine the account role.'
+      );
 
-      case 'rider':
-        router.replace(
-          '/(rider)/rider-dashboard'
-        );
-        break;
-
-      case 'admin':
-        router.replace(
-          '/(admin)/admin-dashboard'
-        );
-        break;
-
-      default:
-        Alert.alert(
-          'Login Error',
-          'Unable to determine the account role.'
-        );
+      return;
     }
+
+    replaceHistory(route);
   };
 
   /*
@@ -173,41 +157,15 @@ export default function LoginScreen() {
          * SELLER / RIDER VERIFICATION
          * =====================================================
          *
-         * Customers do not require
-         * verification.
+         * Customers do not require verification and
+         * Admin accounts are created internally.
          *
-         * Admin accounts are created
-         * internally.
-         *
-         * Seller and rider accounts must
-         * be approved before accessing
-         * their stakeholder interface.
+         * Seller and rider accounts must be approved
+         * before accessing their stakeholder interface;
+         * until then redirectUser() opens their
+         * application (upload requirements, see review
+         * status or resubmit).
          * =====================================================
-         */
-        if (
-          (
-            user.role === 'seller' ||
-            user.role === 'rider'
-          ) &&
-          user.verificationStatus !==
-            'approved'
-        ) {
-          /*
-           * Pending or rejected Sellers/Riders go to
-           * their application: upload requirements,
-           * see review status or resubmit.
-           */
-          router.replace(
-            '/(auth)/application' as never
-          );
-
-          return;
-        }
-
-        /*
-         * Authentication succeeded and
-         * stakeholder access requirements
-         * have been satisfied.
          */
         redirectUser(
           user
@@ -230,11 +188,7 @@ export default function LoginScreen() {
     >
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         <ScrollView
           contentContainerStyle={
@@ -481,9 +435,17 @@ export default function LoginScreen() {
               style={
                 styles.backButton
               }
-              onPress={() =>
-                router.back()
-              }
+              onPress={() => {
+                /*
+                 * After logout Login is the only screen
+                 * in the history: go to Welcome instead.
+                 */
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/');
+                }
+              }}
             >
               <Text
                 style={styles.backText}

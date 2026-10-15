@@ -9,9 +9,45 @@ if (!API_URL) {
   );
 }
 
+/*
+ * Error with the HTTP status and response body, so screens
+ * can react to specific cases (e.g. 409 duplicate).
+ */
+export class ApiError extends Error {
+  status: number;
+
+  data: unknown;
+
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
 type ApiRequestOptions = RequestInit & {
   authenticated?: boolean;
+
+  /*
+   * Milliseconds before the request is aborted.
+   * Defaults: 60 s for JSON, 120 s for FormData uploads.
+   */
+  timeoutMs?: number;
 };
+
+/*
+ * Render's free plan sleeps the API when idle and the
+ * first request after that can take ~50 s to wake it, so
+ * the default is generous enough not to fail a cold start
+ * while still guaranteeing that a dead request ends.
+ */
+const DEFAULT_TIMEOUT_MS = 60000;
+
+const UPLOAD_TIMEOUT_MS = 120000;
+
+const TIMEOUT_MESSAGE =
+  'The server is taking too long to respond. Please check your connection and try again.';
 
 export async function apiRequest<T>(
   endpoint: string,
@@ -20,6 +56,7 @@ export async function apiRequest<T>(
   const {
     authenticated = false,
     headers,
+    timeoutMs,
     ...requestOptions
   } = options;
 
@@ -100,29 +137,94 @@ export async function apiRequest<T>(
    * =========================================================
    */
 
-  const response =
-    await fetch(
-      `${API_URL}${endpoint}`,
-      {
-        ...requestOptions,
-        headers: requestHeaders,
-      }
-    );
-
   /*
-   * =========================================================
-   * READ RESPONSE
-   * =========================================================
+   * A request that never answers (sleeping server, dead
+   * connection) is aborted so spinners always stop.
+   * A caller's own AbortSignal still cancels the request.
    */
+  const controller =
+    new AbortController();
+
+  let timedOut = false;
+
+  const timeout = setTimeout(
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
+    timeoutMs ??
+      (isFormData
+        ? UPLOAD_TIMEOUT_MS
+        : DEFAULT_TIMEOUT_MS)
+  );
+
+  const callerSignal =
+    requestOptions.signal;
+
+  const abortFromCaller = () =>
+    controller.abort();
+
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      controller.abort();
+    } else {
+      callerSignal.addEventListener(
+        'abort',
+        abortFromCaller
+      );
+    }
+  }
+
+  let response: Response;
 
   let data: any;
 
   try {
-    data =
-      await response.json();
-  } catch {
-    throw new Error(
-      'Unable to read the server response.'
+    response =
+      await fetch(
+        `${API_URL}${endpoint}`,
+        {
+          ...requestOptions,
+          headers: requestHeaders,
+          signal: controller.signal,
+        }
+      );
+
+    /*
+     * =========================================================
+     * READ RESPONSE
+     * =========================================================
+     *
+     * The body is read inside the timeout too: a stalled
+     * body would otherwise hang just like a stalled request.
+     */
+
+    try {
+      data =
+        await response.json();
+    } catch (error) {
+      if (timedOut) {
+        throw error;
+      }
+
+      throw new Error(
+        'Unable to read the server response.'
+      );
+    }
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(
+        TIMEOUT_MESSAGE
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+
+    callerSignal?.removeEventListener(
+      'abort',
+      abortFromCaller
     );
   }
 
@@ -165,9 +267,11 @@ export async function apiRequest<T>(
       );
     }
 
-    throw new Error(
+    throw new ApiError(
       data?.message ||
-        'Something went wrong.'
+        'Something went wrong.',
+      response.status,
+      data
     );
   }
 

@@ -38,6 +38,11 @@ import {
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
 import {
+  SeeAllButton,
+  useSeeAll,
+} from '../../components/ui/see-all';
+
+import {
   getShopRevenue,
 } from '../../utils/order-status';
 
@@ -503,6 +508,14 @@ export default function SellerReportsScreen() {
       .charAt(0)
       .toUpperCase() ||
     'F';
+
+  /*
+   * Recent reviews: show 5, then "See all (N)".
+   */
+  const recentReviews =
+    useSeeAll(
+      reviews?.reviews
+    );
 
   /*
    * =======================================================
@@ -1308,11 +1321,7 @@ export default function SellerReportsScreen() {
                   styles.reviewList
                 }
               >
-                {reviews.reviews
-                  .slice(
-                    0,
-                    3
-                  )
+                {recentReviews.visible
                   .map(
                     (
                       review,
@@ -1345,12 +1354,9 @@ export default function SellerReportsScreen() {
                             styles.reviewRow,
 
                             index ===
-                              Math.min(
-                                reviews
-                                  .reviews
-                                  .length,
-                                3
-                              ) -
+                              recentReviews
+                                .visible
+                                .length -
                                 1 &&
                               styles.reviewRowLast,
                           ]}
@@ -1421,6 +1427,13 @@ export default function SellerReportsScreen() {
                     }
                   )}
               </View>
+
+              <SeeAllButton
+                state={
+                  recentReviews
+                }
+                role="seller"
+              />
             </View>
           ) : null}
 

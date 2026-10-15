@@ -24,6 +24,12 @@ import {
   createSellerFlower,
 } from '../../services/flower';
 
+import OptionChips from '../../components/seller/option-chips';
+import {
+  PRODUCT_CATEGORIES,
+  PRODUCT_OCCASIONS,
+} from '../../constants/product-options';
+
 export default function SellerAddProductScreen() {
   const [name, setName] =
     useState('');
@@ -37,8 +43,8 @@ export default function SellerAddProductScreen() {
   const [category, setCategory] =
     useState('');
 
-  const [occasion, setOccasion] =
-    useState('');
+  const [occasions, setOccasions] =
+    useState<string[]>([]);
 
   const [flowerTypes, setFlowerTypes] =
     useState('');
@@ -275,7 +281,7 @@ export default function SellerAddProductScreen() {
     if (!trimmedCategory) {
       Alert.alert(
         'Missing Category',
-        'Please enter a product category.'
+        'Please choose a product category.'
       );
 
       return;
@@ -292,8 +298,7 @@ export default function SellerAddProductScreen() {
         category:
           trimmedCategory,
 
-        occasion:
-          parseList(occasion),
+        occasion: occasions,
 
         flowerTypes:
           parseList(flowerTypes),
@@ -340,11 +345,7 @@ export default function SellerAddProductScreen() {
     >
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         <View style={styles.header}>
           <Pressable
@@ -505,22 +506,44 @@ export default function SellerAddProductScreen() {
             keyboardType="decimal-pad"
           />
 
-          <Field
-            label="Category"
-            value={category}
-            onChangeText={setCategory}
-            placeholder="e.g. Bouquet"
-          />
+          <View style={styles.field}>
+            <Text style={styles.label}>
+              Category
+            </Text>
 
-          <Field
-            label="Occasions"
-            value={occasion}
-            onChangeText={
-              setOccasion
-            }
-            placeholder="Birthday, Anniversary"
-            helper="Separate multiple values with commas."
-          />
+            <OptionChips
+              options={PRODUCT_CATEGORIES}
+              value={category}
+              onChange={setCategory}
+              disabled={saving}
+            />
+
+            <Text
+              style={styles.fieldHelper}
+            >
+              Choose one.
+            </Text>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>
+              Occasions
+            </Text>
+
+            <OptionChips
+              multiple
+              options={PRODUCT_OCCASIONS}
+              value={occasions}
+              onChange={setOccasions}
+              disabled={saving}
+            />
+
+            <Text
+              style={styles.fieldHelper}
+            >
+              Tap all that apply.
+            </Text>
+          </View>
 
           <Field
             label="Flower Types"

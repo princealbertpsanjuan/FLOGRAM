@@ -22,6 +22,8 @@ import {
 
 import { getUploadUrl } from '../../utils/media';
 
+import { SeeAllButton, useSeeAll } from '../ui/see-all';
+
 import {
   PAYOUT_STATUS_LABELS,
   formatPayoutPeriod,
@@ -115,6 +117,12 @@ export default function RiderEarningsPanel({ refreshKey }: Props) {
     }
   }, []);
 
+  /*
+   * Show 5 payouts, then "See all (N)". The panel remounts
+   * whenever the Wallet tab changes, which collapses it.
+   */
+  const payoutsSeeAll = useSeeAll(data?.payouts);
+
   if (loading && !data) {
     return (
       <View style={styles.centered}>
@@ -199,7 +207,7 @@ export default function RiderEarningsPanel({ refreshKey }: Props) {
           </Text>
         </View>
       ) : (
-        payouts.map(payout => {
+        payoutsSeeAll.visible.map(payout => {
           const colors = STATUS_COLORS[payout.status] ?? STATUS_COLORS.pending;
 
           return (
@@ -237,6 +245,11 @@ export default function RiderEarningsPanel({ refreshKey }: Props) {
           );
         })
       )}
+
+      <SeeAllButton
+        state={payoutsSeeAll}
+        role="rider"
+      />
 
       {/* PAYOUT DETAILS */}
       <Modal

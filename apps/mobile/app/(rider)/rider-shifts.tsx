@@ -14,16 +14,19 @@ import {
 
 import { Ionicons } from '@expo/vector-icons';
 
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  getRiderAvailableShifts,
   getRiderShiftHistory,
+  getRiderShiftOverview,
   requestRiderShift,
+  type RiderCodStatus,
   type RiderShift,
 } from '../../services/delivery';
+
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 
 import RiderScreenHeader from '../../components/rider/rider-screen-header';
 
@@ -86,17 +89,19 @@ export default function RiderShiftsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [codStatus, setCodStatus] = useState<RiderCodStatus | null>(null);
 
   const load = useCallback(async () => {
     try {
       setError(null);
 
-      const [available, mine] = await Promise.all([
-        getRiderAvailableShifts(),
+      const [overview, mine] = await Promise.all([
+        getRiderShiftOverview(),
         getRiderShiftHistory(),
       ]);
 
-      setUpcoming(available);
+      setUpcoming(overview.shifts);
+      setCodStatus(overview.codStatus);
       setHistory(mine.filter(shift => shift.timeStatus === 'ended'));
     } catch (loadError) {
       setError(getErrorMessage(loadError));
@@ -174,6 +179,12 @@ export default function RiderShiftsScreen() {
     [upcoming]
   );
 
+  const historySeeAll = useSeeAll(history, { resetKey: tab });
+
+  const goToWallet = useCallback(() => {
+    router.push('/(rider)/rider-wallet' as never);
+  }, []);
+
   return (
     <View style={styles.screen}>
       <StatusBar
@@ -240,6 +251,58 @@ export default function RiderShiftsScreen() {
             </View>
           ) : null}
 
+          {codStatus?.blocked ? (
+            <View style={styles.codBanner}>
+              <View style={styles.codBannerRow}>
+                <Ionicons
+                  name="warning-outline"
+                  size={20}
+                  color={RED}
+                />
+                <Text style={styles.codBannerTitle}>
+                  {codStatus.rejected
+                    ? 'Remittance rejected'
+                    : 'Unremitted COD'}
+                </Text>
+              </View>
+
+              <Text style={styles.codBannerText}>
+                {codStatus.message ||
+                  'Please submit your COD remittance in Wallet before requesting a new shift.'}
+              </Text>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={goToWallet}
+                style={({ pressed }) => [
+                  styles.codBannerButton,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Ionicons
+                  name="wallet-outline"
+                  size={16}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.codBannerButtonText}>Go to Wallet</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {codStatus && codStatus.pendingVerification.count > 0 ? (
+            <View style={styles.codInfo}>
+              <Ionicons
+                name="information-circle-outline"
+                size={18}
+                color={RIDER_GOLD_DARK}
+              />
+              <Text style={styles.codInfoText}>
+                Remittance submitted — waiting for Admin verification. You can
+                still request shifts.
+              </Text>
+            </View>
+          ) : null}
+
           {tab === 'upcoming' ? (
             <>
               <Text style={styles.sectionTitle}>My Shift Requests</Text>
@@ -274,12 +337,18 @@ export default function RiderShiftsScreen() {
           ) : history.length === 0 ? (
             <EmptyCard text="Your completed shifts will appear here." />
           ) : (
-            history.map(shift => (
-              <ShiftCard
-                key={shift._id}
-                shift={shift}
+            <>
+              {historySeeAll.visible.map(shift => (
+                <ShiftCard
+                  key={shift._id}
+                  shift={shift}
+                />
+              ))}
+              <SeeAllButton
+                state={historySeeAll}
+                role="rider"
               />
-            ))
+            </>
           )}
         </ScrollView>
       )}
@@ -423,6 +492,61 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 4,
+  },
+  codBanner: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#FDECEC',
+    borderWidth: 1,
+    borderColor: '#F5C2C2',
+  },
+  codBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  codBannerTitle: {
+    color: RED,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  codBannerText: {
+    marginTop: 6,
+    color: TEXT,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  codBannerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 42,
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: RIDER_GOLD,
+  },
+  codBannerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  codInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: RIDER_GOLD_LIGHT,
+  },
+  codInfoText: {
+    flex: 1,
+    color: RIDER_GOLD_DARK,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   sectionTitle: {
     marginTop: 18,

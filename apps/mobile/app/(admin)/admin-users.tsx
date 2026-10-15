@@ -28,6 +28,7 @@ import {
 } from "../../services/admin";
 
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 
 type RoleFilter = "all" | AdminUserRole;
 
@@ -688,6 +689,14 @@ const handleHeaderRefresh = useCallback(async () => {
       registrationPeriod,
     ]);
 
+  /*
+   * Show 5 users + "See all"; collapses again when the
+   * role, period or search filter changes.
+   */
+  const seeAll = useSeeAll(filteredUsers, {
+    resetKey: `${roleFilter}|${registrationPeriod ?? "all"}|${search.trim().toLowerCase()}`,
+  });
+
   /* =======================================================
    * COUNTS
    * =====================================================*/
@@ -1252,7 +1261,7 @@ const handleHeaderRefresh = useCallback(async () => {
 
           {/* USER CARDS */}
 
-          {filteredUsers.map(
+          {seeAll.visible.map(
             (user) => {
               /*
                * Sellers/Riders not yet approved show as
@@ -1489,6 +1498,8 @@ const handleHeaderRefresh = useCallback(async () => {
               );
             }
           )}
+
+          <SeeAllButton state={seeAll} role="admin" />
         </View>
       </ScrollView>
 

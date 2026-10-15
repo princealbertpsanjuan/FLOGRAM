@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -25,6 +26,7 @@ import {
 } from "../../services/admin";
 
 import RequirementDocumentsView from "../../components/admin/requirement-documents";
+import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
 
 const COLORS = {
   purple: "#312E81",
@@ -52,6 +54,45 @@ const COLORS = {
 /* =========================================================
  * HELPERS
  * =======================================================*/
+
+/*
+ * The seller's map pin (needed for delivery quotes), or
+ * null when it has not been set.
+ */
+const getPinnedLocation = (florist: AdminFlorist) => {
+  const latitude = Number(florist.location?.latitude);
+  const longitude = Number(florist.location?.longitude);
+
+  if (
+    florist.location?.latitude == null ||
+    florist.location?.longitude == null ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+
+  return { latitude, longitude };
+};
+
+const openPinInMaps = (latitude: number, longitude: number) => {
+  void Linking.openURL(
+    `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
+  ).catch(() =>
+    Alert.alert("Unable to open Maps", "Please try again on another device.")
+  );
+};
+
+const formatShopAddress = (florist: AdminFlorist) =>
+  [
+    florist.address?.street,
+    florist.address?.barangay,
+    florist.address?.city,
+    florist.address?.province,
+    florist.address?.postalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
 function getFloristId(florist: AdminFlorist) {
   return florist._id || florist.id || "";
@@ -295,6 +336,11 @@ export default function AdminSellerVerificationScreen() {
     []
   );
 
+  /*
+   * Show 5 applications + "See all".
+   */
+  const seeAll = useSeeAll(florists);
+
   /* =======================================================
    * APPROVE
    * =======================================================*/
@@ -310,18 +356,29 @@ export default function AdminSellerVerificationScreen() {
       return;
     }
 
+    /*
+     * Approving without a map pin is allowed, but the Admin
+     * is warned first: customers can't get delivery quotes
+     * until the seller sets it.
+     */
+    const hasPin = Boolean(getPinnedLocation(florist));
+
     Alert.alert(
-      "Approve Seller",
-      `Approve ${
-        florist.shopName || getOwnerName(florist)
-      } as a verified FLOGRAM seller?`,
+      hasPin ? "Approve Seller" : "Approve Without Map Pin?",
+      hasPin
+        ? `Approve ${
+            florist.shopName || getOwnerName(florist)
+          } as a verified FLOGRAM seller?`
+        : `${
+            florist.shopName || getOwnerName(florist)
+          } has not pinned the shop on the map yet. Customers can't get delivery quotes for this shop until the seller sets the pin in their shop profile.\n\nApprove anyway?`,
       [
         {
           text: "Cancel",
           style: "cancel",
         },
         {
-          text: "Approve",
+          text: hasPin ? "Approve" : "Approve Anyway",
           onPress: async () => {
             try {
               setProcessingId(floristId);
@@ -639,7 +696,7 @@ export default function AdminSellerVerificationScreen() {
             </View>
           ) : null}
 
-          {florists.map((florist) => {
+          {seeAll.visible.map((florist) => {
             const floristId = getFloristId(florist);
             const owner = getOwner(florist);
             const processing =
@@ -802,6 +859,8 @@ export default function AdminSellerVerificationScreen() {
               </View>
             );
           })}
+
+          <SeeAllButton state={seeAll} role="admin" />
 
           <View style={styles.bottomSpace} />
         </View>
@@ -1020,6 +1079,110 @@ export default function AdminSellerVerificationScreen() {
                       styles.modalSectionTitle
                     }
                   >
+                    Shop Location
+                  </Text>
+
+                  {(() => {
+                    const pin =
+                      getPinnedLocation(
+                        selectedFlorist
+                      );
+                    const address =
+                      formatShopAddress(
+                        selectedFlorist
+                      );
+
+                    return (
+                      <View
+                        style={[
+                          styles.locationCard,
+                          !pin &&
+                            styles.locationCardWarning,
+                        ]}
+                      >
+                        {address ? (
+                          <Text
+                            style={
+                              styles.locationAddress
+                            }
+                          >
+                            {address}
+                          </Text>
+                        ) : null}
+
+                        <View
+                          style={
+                            styles.locationRow
+                          }
+                        >
+                          <Ionicons
+                            name={
+                              pin
+                                ? "location"
+                                : "warning-outline"
+                            }
+                            size={16}
+                            color={
+                              pin
+                                ? COLORS.green
+                                : COLORS.yellow
+                            }
+                          />
+
+                          <Text
+                            style={[
+                              styles.locationStatus,
+                              {
+                                color: pin
+                                  ? COLORS.green
+                                  : COLORS.yellow,
+                              },
+                            ]}
+                          >
+                            {pin
+                              ? `Map pin set (${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)})`
+                              : "No map pin — customers can't get delivery quotes until the seller sets it."}
+                          </Text>
+                        </View>
+
+                        {pin ? (
+                          <Pressable
+                            style={
+                              styles.locationLink
+                            }
+                            onPress={() =>
+                              openPinInMaps(
+                                pin.latitude,
+                                pin.longitude
+                              )
+                            }
+                          >
+                            <Ionicons
+                              name="map-outline"
+                              size={14}
+                              color={
+                                COLORS.purpleAccent
+                              }
+                            />
+
+                            <Text
+                              style={
+                                styles.locationLinkText
+                              }
+                            >
+                              Open in Maps
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    );
+                  })()}
+
+                  <Text
+                    style={
+                      styles.modalSectionTitle
+                    }
+                  >
                     Shop Description
                   </Text>
 
@@ -1134,11 +1297,7 @@ export default function AdminSellerVerificationScreen() {
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
-          behavior={
-            Platform.OS === "ios"
-              ? "padding"
-              : undefined
-          }
+          behavior={Platform.OS === 'web' ? undefined : 'padding'}
         >
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -1994,6 +2153,58 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "right",
     maxWidth: "53%",
+  },
+
+  locationCard: {
+    backgroundColor: "#FAFAFC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 15,
+    gap: 8,
+  },
+
+  locationCardWarning: {
+    backgroundColor: COLORS.yellowBackground,
+    borderColor: "#F1DFA8",
+  },
+
+  locationAddress: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+  },
+
+  locationStatus: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+
+  locationLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: COLORS.purpleLight,
+  },
+
+  locationLinkText: {
+    color: COLORS.purpleAccent,
+    fontSize: 11,
+    fontWeight: "800",
   },
 
   descriptionModalCard: {

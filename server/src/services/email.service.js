@@ -1,37 +1,50 @@
 import nodemailer from "nodemailer";
 
-const getEmailTransporter = () => {
-  const emailUser = process.env.EMAIL_USER;
-  const emailPassword = process.env.EMAIL_PASSWORD;
+/*
+ * =========================================================
+ * EMAIL DELIVERY
+ * =========================================================
+ *
+ * 1. Brevo HTTPS API (used when BREVO_API_KEY is set).
+ *    Render's free plan blocks outgoing SMTP ports, so
+ *    Gmail SMTP hangs there. Brevo sends over HTTPS (443),
+ *    which is never blocked.
+ *
+ * 2. Gmail SMTP through nodemailer (fallback, e.g. local
+ *    development with EMAIL_USER + EMAIL_PASSWORD). Short
+ *    timeouts make a blocked connection fail quickly
+ *    instead of hanging the request.
+ * =========================================================
+ */
 
-  if (!emailUser || !emailPassword) {
-    throw new Error(
-      "EMAIL_USER and EMAIL_PASSWORD must be configured in the environment variables."
-    );
-  }
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
+const BREVO_TIMEOUT_MS = 15000;
 
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: emailUser,
-      pass: emailPassword,
-    },
-  });
-};
+const escapeHtml = (value) =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
-export const sendPasswordResetCode = async ({
-  email,
-  firstName,
-  resetCode,
-}) => {
-  const transporter = getEmailTransporter();
+const getSenderEmail = () =>
+  process.env.EMAIL_FROM || process.env.EMAIL_USER;
 
-  await transporter.sendMail({
-    from: `"FLOGRAM" <${process.env.EMAIL_USER}>`,
-    to: email,
+/*
+ * =========================================================
+ * PASSWORD RESET CONTENT
+ * =========================================================
+ */
+const buildPasswordResetEmail = ({ firstName, resetCode }) => {
+  const name = firstName || "FLOGRAM User";
+  const safeName = escapeHtml(name);
+  const safeCode = escapeHtml(resetCode);
+
+  return {
     subject: "FLOGRAM Password Reset Code",
     text: [
-      `Hello ${firstName || "FLOGRAM User"},`,
+      `Hello ${name},`,
       "",
       "We received a request to reset your FLOGRAM password.",
       "",
@@ -47,7 +60,7 @@ export const sendPasswordResetCode = async ({
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #18181b;">
         <h2 style="color: #e91e63;">FLOGRAM</h2>
 
-        <p>Hello ${firstName || "FLOGRAM User"},</p>
+        <p>Hello ${safeName},</p>
 
         <p>
           We received a request to reset your FLOGRAM password.
@@ -68,7 +81,7 @@ export const sendPasswordResetCode = async ({
             color: #be185d;
           "
         >
-          ${resetCode}
+          ${safeCode}
         </div>
 
         <p>
@@ -85,5 +98,134 @@ export const sendPasswordResetCode = async ({
         </p>
       </div>
     `,
+  };
+};
+
+/*
+ * =========================================================
+ * BREVO (HTTPS API)
+ * =========================================================
+ */
+const sendWithBrevo = async ({ to, toName, subject, html, text }) => {
+  const senderEmail = getSenderEmail();
+
+  if (!senderEmail) {
+    throw new Error(
+      "EMAIL_FROM (a sender verified in Brevo) must be configured when BREVO_API_KEY is set."
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BREVO_TIMEOUT_MS);
+
+  let response;
+
+  try {
+    response = await fetch(BREVO_API_URL, {
+      method: "POST",
+      headers: {
+        "api-key": process.env.BREVO_API_KEY,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: "FLOGRAM", email: senderEmail },
+        to: [{ email: to, ...(toName ? { name: toName } : {}) }],
+        subject,
+        htmlContent: html,
+        textContent: text,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(
+        `Brevo did not respond within ${BREVO_TIMEOUT_MS / 1000} seconds.`
+      );
+    }
+
+    throw new Error(`Could not reach Brevo: ${error?.message || error}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    let detail = "";
+
+    try {
+      const data = await response.json();
+      detail = data?.message || data?.code || "";
+    } catch {
+      // Body was not JSON; the status code is enough.
+    }
+
+    throw new Error(
+      `Brevo rejected the email (HTTP ${response.status})${
+        detail ? `: ${detail}` : "."
+      }`
+    );
+  }
+};
+
+/*
+ * =========================================================
+ * GMAIL SMTP (FALLBACK)
+ * =========================================================
+ */
+const getEmailTransporter = () => {
+  const emailUser = process.env.EMAIL_USER;
+  const emailPassword = process.env.EMAIL_PASSWORD;
+
+  if (!emailUser || !emailPassword) {
+    throw new Error(
+      "Email is not configured. Set BREVO_API_KEY + EMAIL_FROM, or EMAIL_USER + EMAIL_PASSWORD."
+    );
+  }
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: emailUser,
+      pass: emailPassword,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  });
+};
+
+const sendWithGmail = async ({ to, subject, html, text }) => {
+  const transporter = getEmailTransporter();
+
+  await transporter.sendMail({
+    from: `"FLOGRAM" <${getSenderEmail()}>`,
+    to,
+    subject,
+    text,
+    html,
+  });
+};
+
+const sendEmail = (message) =>
+  process.env.BREVO_API_KEY
+    ? sendWithBrevo(message)
+    : sendWithGmail(message);
+
+export const sendPasswordResetCode = async ({
+  email,
+  firstName,
+  resetCode,
+}) => {
+  const { subject, html, text } = buildPasswordResetEmail({
+    firstName,
+    resetCode,
+  });
+
+  await sendEmail({
+    to: email,
+    toName: firstName || undefined,
+    subject,
+    html,
+    text,
   });
 };

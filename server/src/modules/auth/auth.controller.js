@@ -77,11 +77,26 @@ export const forgotPassword = async (req, res, next) => {
     const result = await createPasswordResetCode(req.body.email);
 
     if (result.userExists) {
-      await sendPasswordResetCode({
-        email: result.email,
-        firstName: result.firstName,
-        resetCode: result.resetCode,
-      });
+      try {
+        await sendPasswordResetCode({
+          email: result.email,
+          firstName: result.firstName,
+          resetCode: result.resetCode,
+        });
+      } catch (emailError) {
+        /*
+         * Log the real cause (bad API key, unverified
+         * sender, blocked SMTP...) and give the app a
+         * friendly message instead of a raw 500.
+         */
+        console.error("Password reset email failed:", emailError);
+
+        const error = new Error(
+          "We couldn't send the email right now. Please try again in a few minutes."
+        );
+        error.statusCode = 503;
+        throw error;
+      }
     }
 
     res.status(200).json({

@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import * as SecureStore from '../../services/storage';
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,6 +16,7 @@ import {
 } from "react-native";
 
 import { apiRequest } from "../../services/api";
+import { logout } from "../../services/auth";
 import {
   AdminSettingsData,
   getAdminSettings,
@@ -878,38 +878,20 @@ export default function AdminSettingsScreen() {
   const performLogout =
     useCallback(async () => {
       try {
+        /*
+         * Shared logout(): clears the saved session keys
+         * (flogram_access_token / flogram_user). The
+         * Welcome screen redirects any saved session back
+         * to the dashboard, so the right keys must go.
+         */
         try {
-          await apiRequest(
-            "/auth/logout",
-            {
-              method: "POST",
-              authenticated: true,
-            }
-          );
+          await logout();
         } catch (error) {
           console.warn(
             "Server logout request failed:",
             error
           );
         }
-
-        await Promise.all([
-          SecureStore.deleteItem(
-            "token"
-          ),
-
-          SecureStore.deleteItem(
-            "authToken"
-          ),
-
-          SecureStore.deleteItem(
-            "accessToken"
-          ),
-
-          SecureStore.deleteItem(
-            "user"
-          ),
-        ]);
 
         router.replace("/login");
       } catch (error) {
@@ -957,18 +939,18 @@ export default function AdminSettingsScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : undefined
+    <View
+      style={
+        styles.container
       }
     >
-      <View
-        style={
-          styles.container
-        }
+      {/*
+       * The bottom nav stays outside the keyboard wrapper
+       * so it is not pushed above the keyboard.
+       */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         <ScrollView
           style={
@@ -2121,10 +2103,10 @@ export default function AdminSettingsScreen() {
             </Pressable>
           </View>
         </ScrollView>
+      </KeyboardAvoidingView>
 
-        <AdminBottomNav active="settings" />
-      </View>
-    </KeyboardAvoidingView>
+      <AdminBottomNav active="settings" />
+    </View>
   );
 }
 

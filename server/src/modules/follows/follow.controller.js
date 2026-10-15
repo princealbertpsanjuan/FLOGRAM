@@ -1,4 +1,10 @@
-import { followShop, getFollowStatus, getFollowedShops, unfollowShop } from "./follow.service.js";
+import {
+  followShop,
+  getFollowStatus,
+  getFollowedShops,
+  getMyShopFollowers,
+  unfollowShop,
+} from "./follow.service.js";
 
 const wrap = (handler, message) => async (req, res, next) => {
   try {
@@ -26,4 +32,9 @@ export const unfollow = wrap(
 export const mine = wrap(
   async (req) => ({ shops: await getFollowedShops(req.user.userId) }),
   "Followed shops retrieved successfully."
+);
+
+export const sellerFollowers = wrap(
+  (req) => getMyShopFollowers(req.user.userId),
+  "Shop followers retrieved successfully."
 );

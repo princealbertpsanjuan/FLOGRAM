@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 
 import AdminWebSidebar from "../../components/admin/admin-web-sidebar";
 import { useDesktopWeb } from "../../hooks/use-desktop-web";
+import { useRoleBackHandler } from "../../hooks/use-role-back-handler";
 
 /*
  * Phone and narrow windows: plain stack with the bottom
@@ -13,6 +14,12 @@ import { useDesktopWeb } from "../../hooks/use-desktop-web";
  */
 export default function AdminLayout() {
   const desktop = useDesktopWeb();
+
+  /*
+   * Android app: Back never leaves the Admin area (see
+   * the hook). No effect on iOS or the web portal.
+   */
+  useRoleBackHandler("(admin)", "admin-dashboard");
 
   const stack = (
     <Stack

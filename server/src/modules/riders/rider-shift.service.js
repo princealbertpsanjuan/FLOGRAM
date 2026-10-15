@@ -12,7 +12,33 @@ import { notifyAdmins, notifyAllRiders, notifySafely } from "../notifications/no
  * Cash collected on delivered COD orders that is not yet in
  * a submitted or verified remittance. A Rider with unremitted
  * COD cannot reserve another shift.
+ *
+ * A remittance that is "submitted" (awaiting Admin
+ * verification) counts as remitted and NEVER blocks shift
+ * requests. A "rejected" remittance blocks until the Rider
+ * resubmits it.
  */
+const formatPeso = (amount) =>
+  `₱${Number(amount || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const formatRemittanceDate = (value) => {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "a previous day";
+  }
+
+  return date.toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 export const getUnremittedCod = async (riderUserId) => {
   const deliveries = await Delivery.find({ riderUser: riderUserId, status: "delivered" })
     .select("order deliveredAt")
@@ -29,24 +55,70 @@ export const getUnremittedCod = async (riderUserId) => {
       delivery.order?.paymentStatus === "paid"
   );
 
-  if (!codDeliveries.length) {
-    return { count: 0, amount: 0 };
-  }
-
-  const remitted = await RiderRemittance.find({
+  const remittances = await RiderRemittance.find({
     riderUser: riderUserId,
-    status: { $in: ["submitted", "verified"] },
+    status: { $in: ["submitted", "verified", "rejected"] },
   })
-    .select("items.order")
+    .select("status shiftDate items.order totalAmount adminRemarks submittedAt")
+    .sort({ shiftDate: 1 })
     .lean();
 
-  const remittedOrders = new Set(remitted.flatMap((entry) => (entry.items || []).map((item) => String(item.order))));
+  const awaiting = remittances.filter((entry) => entry.status === "submitted");
+
+  const pendingVerification = {
+    count: awaiting.length,
+    amount: awaiting.reduce((sum, entry) => sum + Number(entry.totalAmount || 0), 0),
+  };
+
+  const remittedOrders = new Set(
+    remittances
+      .filter((entry) => ["submitted", "verified"].includes(entry.status))
+      .flatMap((entry) => (entry.items || []).map((item) => String(item.order)))
+  );
 
   const outstanding = codDeliveries.filter((delivery) => !remittedOrders.has(String(delivery.order._id)));
 
+  const outstandingOrders = new Set(outstanding.map((delivery) => String(delivery.order._id)));
+
+  /*
+   * Oldest rejected remittance that still holds outstanding
+   * COD — the Rider must fix and resubmit it.
+   */
+  const rejected =
+    remittances.find(
+      (entry) =>
+        entry.status === "rejected" &&
+        (entry.items || []).some((item) => outstandingOrders.has(String(item.order)))
+    ) || null;
+
+  const count = outstanding.length;
+  const amount = outstanding.reduce((sum, delivery) => sum + Number(delivery.order.totalAmount || 0), 0);
+
+  let message = "";
+
+  if (count > 0) {
+    message = rejected
+      ? `Your remittance for ${formatRemittanceDate(rejected.shiftDate)} was rejected${
+          rejected.adminRemarks ? `: ${rejected.adminRemarks}` : ""
+        }. Please resubmit it in Wallet.`
+      : `You have ${formatPeso(amount)} in unremitted COD from ${count} deliver${
+          count === 1 ? "y" : "ies"
+        }. Open Wallet and submit your COD remittance — you can request shifts again as soon as it is submitted (Admin approval is not required).`;
+  }
+
   return {
-    count: outstanding.length,
-    amount: outstanding.reduce((sum, delivery) => sum + Number(delivery.order.totalAmount || 0), 0),
+    count,
+    amount,
+    blocked: count > 0,
+    message,
+    rejected: rejected
+      ? {
+          id: String(rejected._id),
+          shiftDate: rejected.shiftDate,
+          reason: rejected.adminRemarks || "",
+        }
+      : null,
+    pendingVerification,
   };
 };
 
@@ -793,7 +865,7 @@ export const requestRiderShift =
 
     if (unremitted.count > 0) {
       throw createError(
-        `Please remit your COD collections first (₱${unremitted.amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })} from ${unremitted.count} deliver${unremitted.count === 1 ? "y" : "ies"}) in Wallet before requesting a new shift.`,
+        unremitted.message,
         409
       );
     }

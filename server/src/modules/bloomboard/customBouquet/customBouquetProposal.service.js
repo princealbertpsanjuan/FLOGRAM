@@ -559,7 +559,11 @@ export const createCustomBouquetProposal =
           florist._id,
       });
 
-    if (existingProposal) {
+    if (
+      existingProposal &&
+      existingProposal.status !==
+        "withdrawn"
+    ) {
       throw createError(
         "Your florist has already submitted a proposal for this bouquet request.",
         409
@@ -568,14 +572,49 @@ export const createCustomBouquetProposal =
 
     /*
      * =====================================================
-     * CREATE PROPOSAL
+     * CREATE PROPOSAL (OR RE-SUBMIT A WITHDRAWN ONE)
+     * =====================================================
+     *
+     * The unique florist + request index keeps
+     * the withdrawn row, so a seller who withdrew
+     * and makes a new offer re-opens that same
+     * proposal with the new values.
      * =====================================================
      */
 
     let proposal;
 
+    if (existingProposal) {
+      existingProposal.seller =
+        sellerId;
+
+      existingProposal.quotedPrice =
+        quotedPrice;
+
+      existingProposal.sellerResponse =
+        sellerResponse;
+
+      existingProposal.proposalImage =
+        normalizeOptionalString(
+          proposalData.proposalImage
+        );
+
+      existingProposal.status =
+        "submitted";
+
+      existingProposal.selectedAt =
+        null;
+
+      existingProposal.withdrawnAt =
+        null;
+
+      proposal =
+        await existingProposal.save();
+    }
+
     try {
       proposal =
+        proposal ||
         await CustomBouquetProposal.create({
           request:
             request._id,

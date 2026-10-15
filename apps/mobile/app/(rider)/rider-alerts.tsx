@@ -33,6 +33,8 @@ import RiderBottomNav, {
   useRiderBottomNavSpace,
 } from '../../components/rider/rider-bottom-nav';
 
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 /*
  * =========================================================
  * RIDER ALERTS
@@ -561,6 +563,14 @@ export default function RiderAlertsScreen() {
     );
 
   /*
+   * Show 5 alerts, then "See all (N)".
+   */
+  const notificationsSeeAll =
+    useSeeAll(
+      notifications
+    );
+
+  /*
    * =========================================================
    * SCREEN
    * =========================================================
@@ -773,29 +783,38 @@ export default function RiderAlertsScreen() {
           >
             {notifications.length >
             0 ? (
-              notifications.map(
-                (
-                  notification
-                ) => (
-                  <NotificationCard
-                    key={
-                      notification.id
-                    }
-                    notification={
-                      notification
-                    }
-                    loading={
-                      readingNotificationId ===
-                      notification.id
-                    }
-                    onPress={() =>
-                      handleNotificationPress(
+              <>
+                {notificationsSeeAll.visible.map(
+                  (
+                    notification
+                  ) => (
+                    <NotificationCard
+                      key={
+                        notification.id
+                      }
+                      notification={
                         notification
-                      )
-                    }
-                  />
-                )
-              )
+                      }
+                      loading={
+                        readingNotificationId ===
+                        notification.id
+                      }
+                      onPress={() =>
+                        handleNotificationPress(
+                          notification
+                        )
+                      }
+                    />
+                  )
+                )}
+
+                <SeeAllButton
+                  state={
+                    notificationsSeeAll
+                  }
+                  role="rider"
+                />
+              </>
             ) : (
               <View
                 style={

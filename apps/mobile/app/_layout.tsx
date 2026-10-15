@@ -13,6 +13,13 @@ installWebAlert();
  * their _layout files).
  */
 
+const SIGNED_IN_GROUPS = [
+  '(customer)',
+  '(seller)',
+  '(rider)',
+  '(admin)',
+] as const;
+
 export default function RootLayout() {
   const stack = (
     <>
@@ -20,7 +27,25 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
         }}
-      />
+      >
+        {/*
+         * Signed-in areas: the iOS edge swipe must not pop
+         * the whole role group and reveal Welcome/Login
+         * underneath (it looked like being logged out).
+         * Screens pushed inside a group keep their swipe
+         * because each group has its own Stack. Android
+         * back is handled in each group's _layout.
+         */}
+        {SIGNED_IN_GROUPS.map(name => (
+          <Stack.Screen
+            key={name}
+            name={name}
+            options={{
+              gestureEnabled: false,
+            }}
+          />
+        ))}
+      </Stack>
 
       <StatusBar style="auto" />
     </>

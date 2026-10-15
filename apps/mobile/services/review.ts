@@ -2,6 +2,11 @@ import {
   apiRequest,
 } from './api';
 
+import {
+  getMyOrders,
+  type CustomerOrder,
+} from './orders';
+
 /*
  * =========================================================
  * REVIEW TYPES
@@ -748,4 +753,126 @@ export const getSellerReviews =
       );
 
     return response.data;
+  };
+
+/*
+ * =========================================================
+ * CUSTOMER
+ * REVIEW OVERVIEW (TO REVIEW + REVIEWED)
+ * =========================================================
+ *
+ * Same rule as the backend's canReview:
+ * a completed order that has no review yet.
+ *
+ * Used by the profile badge ("2 to review") and the
+ * My Reviews screen. Two requests instead of one
+ * review-status call per completed order.
+ * =========================================================
+ */
+
+export type ReviewOverview = {
+  toReview:
+    CustomerOrder[];
+
+  reviews:
+    Review[];
+
+  /*
+   * Completed orders by ID, used to show product
+   * images for reviewed orders.
+   */
+  ordersById:
+    Record<string, CustomerOrder>;
+};
+
+export const reviewOrderIdOf =
+  (
+    review:
+      Review
+  ): string => {
+    const order =
+      review.order as
+        | ReviewOrder
+        | string
+        | null
+        | undefined;
+
+    if (!order) {
+      return '';
+    }
+
+    return typeof order ===
+      'string'
+      ? order
+      : String(
+          order._id ||
+          ''
+        );
+  };
+
+export const getReviewOverview =
+  async (): Promise<ReviewOverview> => {
+    const [
+      orders,
+      mine,
+    ] =
+      await Promise.all([
+        getMyOrders({
+          status:
+            'completed',
+        }),
+
+        getMyReviews(),
+      ]);
+
+    const reviews =
+      Array.isArray(
+        mine?.reviews
+      )
+        ? mine.reviews
+        : [];
+
+    const reviewedOrderIds =
+      new Set(
+        reviews
+          .map(
+            reviewOrderIdOf
+          )
+          .filter(Boolean)
+      );
+
+    const completed =
+      (Array.isArray(orders)
+        ? orders
+        : []
+      ).filter(
+        (order) =>
+          order.orderStatus ===
+          'completed'
+      );
+
+    const ordersById:
+      Record<string, CustomerOrder> = {};
+
+    completed.forEach(
+      (order) => {
+        ordersById[
+          String(order._id)
+        ] = order;
+      }
+    );
+
+    return {
+      toReview:
+        completed.filter(
+          (order) =>
+            !reviewedOrderIds.has(
+              String(order._id)
+            )
+        ),
+
+      reviews,
+
+      ordersById,
+    };
   };

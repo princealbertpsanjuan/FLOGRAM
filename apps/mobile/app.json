@@ -4,7 +4,9 @@
     "slug": "flogram",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",  
+    "icon": "./assets/images/icon.png",
+    "scheme": "flogram",
+    "userInterfaceStyle": "light",
     "android": {
       "package": "com.flogram.app",
       "versionCode": 1,

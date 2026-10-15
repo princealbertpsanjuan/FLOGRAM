@@ -58,6 +58,33 @@ export const getFollowedShops = async (customerId) => {
 };
 
 /*
+ * SELLER
+ * Customers following the seller's own shop.
+ */
+export const getMyShopFollowers = async (sellerId) => {
+  const florist = await Florist.findOne({ owner: sellerId }).select("_id");
+
+  if (!florist) {
+    throw createError("Florist profile was not found.", 404);
+  }
+
+  const follows = await ShopFollow.find({ florist: florist._id })
+    .populate("customer", "firstName lastName profileImage")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const followers = follows
+    .filter((follow) => follow.customer)
+    .map((follow) => ({
+      _id: follow._id,
+      customer: follow.customer,
+      followedAt: follow.createdAt,
+    }));
+
+  return { count: followers.length, followers };
+};
+
+/*
  * Tell every follower that the shop posted a new bouquet.
  * Never blocks product creation.
  */

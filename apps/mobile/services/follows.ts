@@ -48,3 +48,31 @@ export const getFollowedShops = async () =>
       authenticated: true,
     })
   ).data.shops;
+
+/*
+ * SELLER: customers following my shop
+ * GET /follows/seller/mine
+ */
+export type ShopFollower = {
+  _id: string;
+  followedAt: string;
+  customer: {
+    _id: string;
+    firstName?: string;
+    lastName?: string;
+    profileImage?: string | null;
+  };
+};
+
+export type ShopFollowers = {
+  count: number;
+  followers: ShopFollower[];
+};
+
+export const getMyShopFollowers = async () =>
+  (
+    await apiRequest<Wrapped<ShopFollowers>>('/follows/seller/mine', {
+      method: 'GET',
+      authenticated: true,
+    })
+  ).data;

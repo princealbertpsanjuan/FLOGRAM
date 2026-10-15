@@ -460,6 +460,33 @@ const customBouquetRequestSchema =
         default:
           null,
       },
+
+      /*
+       * =====================================================
+       * SELLER DISMISSALS
+       * =====================================================
+       *
+       * Requests are broadcast to every approved
+       * florist. A florist that is not interested
+       * can remove the request from their own
+       * list; it stays visible to everyone else.
+       * =====================================================
+       */
+
+      dismissedBy: {
+        type: [
+          {
+            type:
+              mongoose.Schema.Types.ObjectId,
+
+            ref:
+              "Florist",
+          },
+        ],
+
+        default:
+          [],
+      },
     },
     {
       timestamps:

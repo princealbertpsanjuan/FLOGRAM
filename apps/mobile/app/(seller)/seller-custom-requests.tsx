@@ -19,9 +19,12 @@ import { useLocalSearchParams } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import ScreenHeader from '../../components/ui/screen-header';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import { EmptyState, ErrorState, ScreenLoader } from '../../components/ui/state-views';
 import {
+  dismissCustomRequest,
   getMyProposals,
   getSellerCustomRequests,
   requestIdOf,
@@ -106,7 +109,31 @@ export default function SellerCustomRequestsScreen() {
     return map;
   }, [proposals]);
 
-  const openRequests = requests.filter(request => request.status === 'open');
+  // A request opened from a notification goes first so "See all" never hides it.
+  const openRequests = useMemo(() => {
+    const open = requests.filter(request => request.status === 'open');
+    const focused = open.find(request => request._id === focusId);
+    return focused ? [focused, ...open.filter(request => request !== focused)] : open;
+  }, [requests, focusId]);
+
+  const offerRequests = useMemo(
+    () =>
+      proposals
+        .filter(proposal => proposal.status !== 'withdrawn')
+        .map(proposal => ({
+          proposal,
+          request:
+            typeof proposal.request === 'object' && proposal.request
+              ? proposal.request
+              : requests.find(request => request._id === requestIdOf(proposal)),
+        }))
+        .filter((entry): entry is { proposal: SellerProposal; request: CustomRequest } => Boolean(entry.request)),
+    [proposals, requests]
+  );
+
+  // Show 5 + "See all" per tab; collapse again when the tab changes.
+  const openSeeAll = useSeeAll(openRequests, { resetKey: tab });
+  const offersSeeAll = useSeeAll(offerRequests, { resetKey: tab });
 
   const submit = async (request: CustomRequest) => {
     const quotedPrice = Number(price);
@@ -152,6 +179,31 @@ export default function SellerCustomRequestsScreen() {
         },
       },
     ]);
+  };
+
+  const remove = (request: CustomRequest) => {
+    Alert.alert(
+      'Remove request',
+      "Remove this request? You won't see it again and the customer won't receive an offer from you.",
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dismissCustomRequest(request._id);
+              setRequests(current => current.filter(item => item._id !== request._id));
+              if (openForm === request._id) {
+                setOpenForm(null);
+              }
+            } catch (removeError) {
+              Alert.alert('Could not remove', removeError instanceof Error ? removeError.message : 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -257,31 +309,25 @@ export default function SellerCustomRequestsScreen() {
             </View>
           </View>
         ) : request.status === 'open' ? (
-          <Pressable
-            onPress={() => {
-              setPrice('');
-              setNote('');
-              setOpenForm(request._id);
-            }}
-            style={styles.button}
-          >
-            <Text style={styles.buttonText}>Make an Offer</Text>
-          </Pressable>
+          <View style={styles.formActions}>
+            <Pressable onPress={() => remove(request)} style={[styles.button, styles.ghost, styles.removeButton]}>
+              <Text style={[styles.buttonText, { color: '#C2413B' }]}>Remove</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setPrice('');
+                setNote('');
+                setOpenForm(request._id);
+              }}
+              style={styles.button}
+            >
+              <Text style={styles.buttonText}>Make an Offer</Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
     );
   };
-
-  const offerRequests = proposals
-    .filter(proposal => proposal.status !== 'withdrawn')
-    .map(proposal => ({
-      proposal,
-      request:
-        typeof proposal.request === 'object' && proposal.request
-          ? proposal.request
-          : requests.find(request => request._id === requestIdOf(proposal)),
-    }))
-    .filter((entry): entry is { proposal: SellerProposal; request: CustomRequest } => Boolean(entry.request));
 
   return (
     <View style={styles.screen}>
@@ -300,39 +346,47 @@ export default function SellerCustomRequestsScreen() {
         ))}
       </View>
 
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            tintColor={GREEN}
-            onRefresh={() => {
-              setRefreshing(true);
-              void load();
-            }}
-          />
-        }
-      >
-        {error ? (
-          <ErrorState role="seller" message={error} onRetry={() => void load()} />
-        ) : tab === 'open' ? (
-          openRequests.length === 0 ? (
-            <EmptyState
-              role="seller"
-              icon="color-wand-outline"
-              title="No open requests"
-              message="When a customer asks for a custom bouquet, it shows up here."
+      <KeyboardSafeView>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={GREEN}
+              onRefresh={() => {
+                setRefreshing(true);
+                void load();
+              }}
             />
+          }
+        >
+          {error ? (
+            <ErrorState role="seller" message={error} onRetry={() => void load()} />
+          ) : tab === 'open' ? (
+            openRequests.length === 0 ? (
+              <EmptyState
+                role="seller"
+                icon="color-wand-outline"
+                title="No open requests"
+                message="When a customer asks for a custom bouquet, it shows up here."
+              />
+            ) : (
+              <>
+                {openSeeAll.visible.map(request => renderRequest(request, proposalByRequest.get(request._id)))}
+                <SeeAllButton state={openSeeAll} role="seller" />
+              </>
+            )
+          ) : offerRequests.length === 0 ? (
+            <EmptyState role="seller" icon="pricetags-outline" title="No offers yet" message="Offers you send appear here." />
           ) : (
-            openRequests.map(request => renderRequest(request, proposalByRequest.get(request._id)))
-          )
-        ) : offerRequests.length === 0 ? (
-          <EmptyState role="seller" icon="pricetags-outline" title="No offers yet" message="Offers you send appear here." />
-        ) : (
-          offerRequests.map(({ request, proposal }) => renderRequest(request, proposal))
-        )}
-      </ScrollView>
+            <>
+              {offersSeeAll.visible.map(({ request, proposal }) => renderRequest(request, proposal))}
+              <SeeAllButton state={offersSeeAll} role="seller" />
+            </>
+          )}
+        </ScrollView>
+      </KeyboardSafeView>
     </View>
   );
 }
@@ -384,5 +438,6 @@ const styles = StyleSheet.create({
     backgroundColor: GREEN,
   },
   ghost: { borderWidth: 1.5, borderColor: GREEN, backgroundColor: '#FFFFFF' },
+  removeButton: { flex: 0, paddingHorizontal: 18, borderColor: '#E7B9B6' },
   buttonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });

@@ -914,7 +914,7 @@ const getTopShops = async (entries) => {
 
   const ranked = [...byShop.entries()]
     .sort((a, b) => b[1].productSales - a[1].productSales || b[1].orders - a[1].orders)
-    .slice(0, 10);
+    .slice(0, 25);
 
   if (!ranked.length) return [];
 

@@ -221,11 +221,7 @@ export default function ResetPasswordScreen() {
     >
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         <ScrollView
           contentContainerStyle={

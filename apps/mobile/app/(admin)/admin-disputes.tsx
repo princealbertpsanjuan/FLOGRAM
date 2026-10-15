@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenHeader from '../../components/ui/screen-header';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import { EmptyState, ErrorState, ScreenLoader } from '../../components/ui/state-views';
 import {
   DISPUTE_PARTY_LABELS,
@@ -61,6 +62,11 @@ export default function AdminDisputesScreen() {
     void load();
   }, [load]);
 
+  /*
+   * Show 5 disputes + "See all"; collapses on filter change.
+   */
+  const seeAll = useSeeAll(disputes, { resetKey: filter });
+
   if (loading) {
     return <ScreenLoader role="admin" message="Loading disputes..." />;
   }
@@ -93,7 +99,7 @@ export default function AdminDisputesScreen() {
       </View>
 
       <FlatList
-        data={disputes}
+        data={seeAll.visible}
         keyExtractor={item => item._id}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
         refreshControl={
@@ -106,6 +112,7 @@ export default function AdminDisputesScreen() {
             }}
           />
         }
+        ListFooterComponent={<SeeAllButton state={seeAll} role="admin" />}
         ListEmptyComponent={
           error ? (
             <ErrorState role="admin" message={error} onRetry={() => void load()} />

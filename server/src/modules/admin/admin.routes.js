@@ -2,8 +2,10 @@ import { Router } from "express";
 
 import {
   getDashboard,
+  getFlowers,
   getReports,
   getSettings,
+  updateFlowerVisibility,
   updateSettings,
 } from "./admin.controller.js";
 
@@ -103,6 +105,50 @@ adminRouter.patch(
   authenticate,
   authorize("admin"),
   updateSettings
+);
+
+/*
+ * =========================================================
+ * ADMIN PRODUCT LISTINGS
+ * =========================================================
+ *
+ * GET /api/v1/admin/flowers
+ *
+ * ?search=  ?florist=<id>  ?status=all|visible|hidden
+ *
+ * ADMIN ONLY
+ *
+ * =========================================================
+ */
+
+adminRouter.get(
+  "/flowers",
+  authenticate,
+  authorize("admin"),
+  getFlowers
+);
+
+/*
+ * =========================================================
+ * HIDE / RESTORE A LISTING
+ * =========================================================
+ *
+ * PATCH /api/v1/admin/flowers/:flowerId/visibility
+ *
+ * { "isActive": false, "reason": "..." }
+ *
+ * The seller is notified.
+ *
+ * ADMIN ONLY
+ *
+ * =========================================================
+ */
+
+adminRouter.patch(
+  "/flowers/:flowerId/visibility",
+  authenticate,
+  authorize("admin"),
+  updateFlowerVisibility
 );
 
 export default adminRouter; 

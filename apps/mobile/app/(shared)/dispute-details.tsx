@@ -17,6 +17,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import ScreenHeader from '../../components/ui/screen-header';
 import { ErrorState, ROLE_ACCENT, ScreenLoader, type Role } from '../../components/ui/state-views';
 import { getStoredUser } from '../../services/auth';
@@ -156,196 +157,199 @@ export default function DisputeDetailsScreen() {
         subtitle={dispute.order?.productName || 'Order report'}
       />
 
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            tintColor={accent}
-            onRefresh={() => {
-              setRefreshing(true);
-              void load();
-            }}
-          />
-        }
-      >
-        <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <View style={[styles.badge, { backgroundColor: `${DISPUTE_STATUS_COLORS[dispute.status]}1A` }]}>
-              <Text style={[styles.badgeText, { color: DISPUTE_STATUS_COLORS[dispute.status] }]}>
-                {DISPUTE_STATUS_LABELS[dispute.status]}
+      {/* Inputs scroll above the keyboard. */}
+      <KeyboardSafeView>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={accent}
+              onRefresh={() => {
+                setRefreshing(true);
+                void load();
+              }}
+            />
+          }
+        >
+          <View style={styles.card}>
+            <View style={styles.rowBetween}>
+              <View style={[styles.badge, { backgroundColor: `${DISPUTE_STATUS_COLORS[dispute.status]}1A` }]}>
+                <Text style={[styles.badgeText, { color: DISPUTE_STATUS_COLORS[dispute.status] }]}>
+                  {DISPUTE_STATUS_LABELS[dispute.status]}
+                </Text>
+              </View>
+              <Text style={styles.muted}>{formatDate(dispute.createdAt)}</Text>
+            </View>
+
+            <Info label="Filed by" value={`${personName(dispute.filedBy)} (${dispute.filedByRole})`} />
+            <Info
+              label="About"
+              value={`${DISPUTE_PARTY_LABELS[dispute.against]}${dispute.againstUser ? ` — ${personName(dispute.againstUser)}` : ''}`}
+            />
+            {dispute.florist?.shopName ? <Info label="Shop" value={dispute.florist.shopName} /> : null}
+            {dispute.order ? (
+              <Info
+                label="Order"
+                value={`${dispute.order.productName || 'Order'} · ₱${Number(dispute.order.totalAmount || 0).toFixed(2)} · ${dispute.order.orderStatus || ''}`}
+              />
+            ) : null}
+
+            <Text style={styles.sectionLabel}>Details</Text>
+            <Text style={styles.body}>{dispute.details}</Text>
+
+            {dispute.images.length ? (
+              <View style={styles.photos}>
+                {dispute.images.map(path => (
+                  <Image
+                    key={path}
+                    source={{ uri: getUploadUrl(path) || undefined }}
+                    style={styles.photo}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </View>
+
+          {closed ? (
+            <View style={[styles.card, { borderColor: DISPUTE_STATUS_COLORS[dispute.status] }]}>
+              <Text style={styles.cardTitle}>Admin decision</Text>
+              {dispute.status === 'resolved' ? (
+                <Info label="Action" value={DISPUTE_ACTION_LABELS[dispute.resolutionAction]} />
+              ) : null}
+              <Text style={styles.body}>{dispute.resolution}</Text>
+              <Text style={[styles.muted, { marginTop: 8 }]}>
+                {personName(dispute.resolvedBy)} · {formatDate(dispute.resolvedAt)}
               </Text>
             </View>
-            <Text style={styles.muted}>{formatDate(dispute.createdAt)}</Text>
-          </View>
-
-          <Info label="Filed by" value={`${personName(dispute.filedBy)} (${dispute.filedByRole})`} />
-          <Info
-            label="About"
-            value={`${DISPUTE_PARTY_LABELS[dispute.against]}${dispute.againstUser ? ` — ${personName(dispute.againstUser)}` : ''}`}
-          />
-          {dispute.florist?.shopName ? <Info label="Shop" value={dispute.florist.shopName} /> : null}
-          {dispute.order ? (
-            <Info
-              label="Order"
-              value={`${dispute.order.productName || 'Order'} · ₱${Number(dispute.order.totalAmount || 0).toFixed(2)} · ${dispute.order.orderStatus || ''}`}
-            />
           ) : null}
 
-          <Text style={styles.sectionLabel}>Details</Text>
-          <Text style={styles.body}>{dispute.details}</Text>
+          {isAdmin && !closed ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Decide</Text>
 
-          {dispute.images.length ? (
-            <View style={styles.photos}>
-              {dispute.images.map(path => (
-                <Image
-                  key={path}
-                  source={{ uri: getUploadUrl(path) || undefined }}
-                  style={styles.photo}
-                />
-              ))}
-            </View>
-          ) : null}
-        </View>
+              {dispute.status === 'open' ? (
+                <Pressable
+                  disabled={saving}
+                  onPress={() => void decide('under_review')}
+                  style={[styles.outlineButton, { borderColor: accent }]}
+                >
+                  <Text style={[styles.outlineText, { color: accent }]}>Mark as under review</Text>
+                </Pressable>
+              ) : null}
 
-        {closed ? (
-          <View style={[styles.card, { borderColor: DISPUTE_STATUS_COLORS[dispute.status] }]}>
-            <Text style={styles.cardTitle}>Admin decision</Text>
-            {dispute.status === 'resolved' ? (
-              <Info label="Action" value={DISPUTE_ACTION_LABELS[dispute.resolutionAction]} />
-            ) : null}
-            <Text style={styles.body}>{dispute.resolution}</Text>
-            <Text style={[styles.muted, { marginTop: 8 }]}>
-              {personName(dispute.resolvedBy)} · {formatDate(dispute.resolvedAt)}
-            </Text>
-          </View>
-        ) : null}
-
-        {isAdmin && !closed ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Decide</Text>
-
-            {dispute.status === 'open' ? (
-              <Pressable
-                disabled={saving}
-                onPress={() => void decide('under_review')}
-                style={[styles.outlineButton, { borderColor: accent }]}
-              >
-                <Text style={[styles.outlineText, { color: accent }]}>Mark as under review</Text>
-              </Pressable>
-            ) : null}
-
-            <Text style={styles.sectionLabel}>Action taken</Text>
-            <View style={styles.chips}>
-              {ACTIONS.map(item => {
-                const active = action === item;
-                return (
-                  <Pressable
-                    key={item}
-                    onPress={() => setAction(item)}
-                    style={[styles.chip, { borderColor: accent }, active && { backgroundColor: accent }]}
-                  >
-                    <Text style={[styles.chipText, { color: active ? '#FFFFFF' : accent }]}>
-                      {DISPUTE_ACTION_LABELS[item]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text style={styles.sectionLabel}>Decision (sent to both sides)</Text>
-            <TextInput
-              value={resolution}
-              onChangeText={setResolution}
-              placeholder="e.g. Refund approved after checking the delivery photo."
-              placeholderTextColor="#A9A3AA"
-              multiline
-              maxLength={2000}
-              style={styles.input}
-            />
-
-            <View style={styles.buttonRow}>
-              <Pressable
-                disabled={saving}
-                onPress={() => void decide('rejected')}
-                style={[styles.button, { backgroundColor: '#6B7280' }]}
-              >
-                <Text style={styles.buttonText}>Reject</Text>
-              </Pressable>
-              <Pressable
-                disabled={saving}
-                onPress={() => void decide('resolved')}
-                style={[styles.button, { backgroundColor: accent }]}
-              >
-                {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Resolve</Text>}
-              </Pressable>
-            </View>
-
-            {dispute.againstUser?._id ? (
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: '/(admin)/admin-violations',
-                    params: {
-                      userId: dispute.againstUser?._id,
-                      userName: personName(dispute.againstUser),
-                      userRole: dispute.againstUser?.role || dispute.against,
-                      disputeId: dispute._id,
-                    },
-                  } as never)
-                }
-                style={[styles.outlineButton, { borderColor: '#DC2626', marginTop: 12 }]}
-              >
-                <Text style={[styles.outlineText, { color: '#DC2626' }]}>
-                  Issue penalty to {personName(dispute.againstUser)}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Messages</Text>
-
-          {dispute.messages.length === 0 ? (
-            <Text style={styles.muted}>No messages yet.</Text>
-          ) : (
-            dispute.messages.map(item => (
-              <View
-                key={item._id}
-                style={[styles.message, item.authorRole === 'admin' && { backgroundColor: '#EEEEFB' }]}
-              >
-                <Text style={styles.messageAuthor}>
-                  {item.authorRole === 'admin' ? 'FLOGRAM Admin' : personName(item.author)} · {formatDate(item.createdAt)}
-                </Text>
-                <Text style={styles.body}>{item.message}</Text>
+              <Text style={styles.sectionLabel}>Action taken</Text>
+              <View style={styles.chips}>
+                {ACTIONS.map(item => {
+                  const active = action === item;
+                  return (
+                    <Pressable
+                      key={item}
+                      onPress={() => setAction(item)}
+                      style={[styles.chip, { borderColor: accent }, active && { backgroundColor: accent }]}
+                    >
+                      <Text style={[styles.chipText, { color: active ? '#FFFFFF' : accent }]}>
+                        {DISPUTE_ACTION_LABELS[item]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-            ))
-          )}
 
-          {!closed ? (
-            <View style={styles.composer}>
+              <Text style={styles.sectionLabel}>Decision (sent to both sides)</Text>
               <TextInput
-                value={message}
-                onChangeText={setMessage}
-                placeholder={isAdmin ? 'Ask for more details...' : 'Add information for Admin...'}
+                value={resolution}
+                onChangeText={setResolution}
+                placeholder="e.g. Refund approved after checking the delivery photo."
                 placeholderTextColor="#A9A3AA"
                 multiline
                 maxLength={2000}
-                style={[styles.input, { flex: 1, minHeight: 44 }]}
+                style={styles.input}
               />
-              <Pressable
-                disabled={sending || !message.trim()}
-                onPress={send}
-                style={[styles.sendButton, { backgroundColor: accent }, (sending || !message.trim()) && { opacity: 0.5 }]}
-              >
-                {sending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Send</Text>}
-              </Pressable>
+
+              <View style={styles.buttonRow}>
+                <Pressable
+                  disabled={saving}
+                  onPress={() => void decide('rejected')}
+                  style={[styles.button, { backgroundColor: '#6B7280' }]}
+                >
+                  <Text style={styles.buttonText}>Reject</Text>
+                </Pressable>
+                <Pressable
+                  disabled={saving}
+                  onPress={() => void decide('resolved')}
+                  style={[styles.button, { backgroundColor: accent }]}
+                >
+                  {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Resolve</Text>}
+                </Pressable>
+              </View>
+
+              {dispute.againstUser?._id ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(admin)/admin-violations',
+                      params: {
+                        userId: dispute.againstUser?._id,
+                        userName: personName(dispute.againstUser),
+                        userRole: dispute.againstUser?.role || dispute.against,
+                        disputeId: dispute._id,
+                      },
+                    } as never)
+                  }
+                  style={[styles.outlineButton, { borderColor: '#DC2626', marginTop: 12 }]}
+                >
+                  <Text style={[styles.outlineText, { color: '#DC2626' }]}>
+                    Issue penalty to {personName(dispute.againstUser)}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
-        </View>
-      </ScrollView>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Messages</Text>
+
+            {dispute.messages.length === 0 ? (
+              <Text style={styles.muted}>No messages yet.</Text>
+            ) : (
+              dispute.messages.map(item => (
+                <View
+                  key={item._id}
+                  style={[styles.message, item.authorRole === 'admin' && { backgroundColor: '#EEEEFB' }]}
+                >
+                  <Text style={styles.messageAuthor}>
+                    {item.authorRole === 'admin' ? 'FLOGRAM Admin' : personName(item.author)} · {formatDate(item.createdAt)}
+                  </Text>
+                  <Text style={styles.body}>{item.message}</Text>
+                </View>
+              ))
+            )}
+
+            {!closed ? (
+              <View style={styles.composer}>
+                <TextInput
+                  value={message}
+                  onChangeText={setMessage}
+                  placeholder={isAdmin ? 'Ask for more details...' : 'Add information for Admin...'}
+                  placeholderTextColor="#A9A3AA"
+                  multiline
+                  maxLength={2000}
+                  style={[styles.input, { flex: 1, minHeight: 44 }]}
+                />
+                <Pressable
+                  disabled={sending || !message.trim()}
+                  onPress={send}
+                  style={[styles.sendButton, { backgroundColor: accent }, (sending || !message.trim()) && { opacity: 0.5 }]}
+                >
+                  {sending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Send</Text>}
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
+      </KeyboardSafeView>
     </View>
   );
 }
