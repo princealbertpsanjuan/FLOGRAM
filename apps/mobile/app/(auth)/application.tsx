@@ -23,6 +23,7 @@ import { router } from 'expo-router';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import AddressAutocomplete from '../../components/ui/address-autocomplete';
 import { ScreenLoader } from '../../components/ui/state-views';
 import ShopLocationPicker, { type ShopCoordinate } from '../../components/seller/shop-location-picker';
 import {
@@ -39,7 +40,18 @@ import {
   type VerificationRecord,
 } from '../../services/application';
 import { getCurrentUser, getStoredUser, logout } from '../../services/auth';
+import type { AddressSuggestion } from '../../services/geo';
 import { replaceHistory } from '../../services/navigation';
+import {
+  LICENSE_ERROR,
+  PHONE_ERROR,
+  formatLicenseInput,
+  isValidLicense,
+  isValidPhone,
+  normalizeLicense,
+  normalizePhone,
+  sanitizePhoneInput,
+} from '../../utils/validation';
 
 /*
  * =========================================================
@@ -67,7 +79,10 @@ const COLORS = {
 
 type Stage = 'details' | 'documents' | 'review' | 'rejected';
 
-const PH_PHONE = /^(09|\+639)\d{9}$/;
+// Plate number: letters and digits, 2-8 characters (e.g. ABC1234)
+const PLATE_ERROR = 'Enter a valid plate number: 2 to 8 letters and numbers (e.g. ABC1234).';
+const formatPlateInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+const isValidPlate = (value: string) => /^[A-Z0-9]{2,8}$/.test(formatPlateInput(value));
 
 export default function ApplicationScreen() {
   const insets = useSafeAreaInsets();
@@ -162,6 +177,21 @@ export default function ApplicationScreen() {
 
   const set = (key: keyof typeof form) => (value: string) => setForm(current => ({ ...current, [key]: value }));
 
+  /*
+   * Seller shop address: fill street / barangay / city /
+   * province / postal from an address suggestion or from
+   * the map pin. Empty parts keep what was typed.
+   */
+  const fillShopAddress = (address: AddressSuggestion) =>
+    setForm(current => ({
+      ...current,
+      street: address.street || current.street,
+      barangay: address.barangay || current.barangay,
+      city: address.city || current.city,
+      province: address.province || current.province,
+      postalCode: address.postalCode || current.postalCode,
+    }));
+
   const signOut = async () => {
     try {
       await logout();
@@ -192,7 +222,7 @@ export default function ApplicationScreen() {
 
       if (role === 'seller') {
         if (!form.shopName.trim()) throw new Error('Enter your shop name.');
-        if (!PH_PHONE.test(form.contactNumber.trim())) throw new Error('Enter a valid shop contact number (09XXXXXXXXX).');
+        if (!isValidPhone(form.contactNumber)) throw new Error(PHONE_ERROR);
         if (!/^\S+@\S+\.\S+$/.test(form.businessEmail.trim())) throw new Error('Enter a valid business email.');
         if (!shopLocation) {
           setShopLocationError('Place your shop pin on the map so customers can order with delivery.');
@@ -204,23 +234,24 @@ export default function ApplicationScreen() {
         await createSellerProfile({
           shopName: form.shopName.trim(),
           description: form.description.trim(),
-          contactNumber: form.contactNumber.trim(),
+          contactNumber: normalizePhone(form.contactNumber),
           businessEmail: form.businessEmail.trim(),
           address,
           location: shopLocation,
         });
       } else {
+        if (form.vehiclePlateNumber.trim() && !isValidPlate(form.vehiclePlateNumber)) throw new Error(PLATE_ERROR);
         if (!form.driverLicenseNumber.trim()) throw new Error("Enter your driver's license number.");
+        if (!isValidLicense(form.driverLicenseNumber)) throw new Error(LICENSE_ERROR);
         if (!form.emergencyContactName.trim()) throw new Error('Enter an emergency contact name.');
-        if (!PH_PHONE.test(form.emergencyContactNumber.trim()))
-          throw new Error('Enter a valid emergency contact number (09XXXXXXXXX).');
+        if (!isValidPhone(form.emergencyContactNumber)) throw new Error(PHONE_ERROR);
 
         await createRiderProfile({
           vehicleType: form.vehicleType,
-          vehiclePlateNumber: form.vehiclePlateNumber.trim(),
-          driverLicenseNumber: form.driverLicenseNumber.trim(),
+          vehiclePlateNumber: formatPlateInput(form.vehiclePlateNumber),
+          driverLicenseNumber: normalizeLicense(form.driverLicenseNumber),
           emergencyContactName: form.emergencyContactName.trim(),
-          emergencyContactNumber: form.emergencyContactNumber.trim(),
+          emergencyContactNumber: normalizePhone(form.emergencyContactNumber),
           address,
         });
       }
@@ -350,10 +381,13 @@ export default function ApplicationScreen() {
                   <Field
                     label="Shop contact number"
                     value={form.contactNumber}
-                    onChangeText={set('contactNumber')}
+                    onChangeText={value => set('contactNumber')(sanitizePhoneInput(value))}
                     keyboardType="phone-pad"
                     placeholder="09XXXXXXXXX"
                   />
+                  {form.contactNumber && !isValidPhone(form.contactNumber) ? (
+                    <Text style={styles.fieldError}>{PHONE_ERROR}</Text>
+                  ) : null}
                   <Field
                     label="Business email"
                     value={form.businessEmail}
@@ -380,12 +414,28 @@ export default function ApplicationScreen() {
                       );
                     })}
                   </View>
-                  <Field label="Plate number" value={form.vehiclePlateNumber} onChangeText={set('vehiclePlateNumber')} />
+                  <Field
+                    label="Plate number (optional)"
+                    value={form.vehiclePlateNumber}
+                    onChangeText={value => set('vehiclePlateNumber')(formatPlateInput(value))}
+                    autoCapitalize="characters"
+                    maxLength={8}
+                    placeholder="ABC1234"
+                  />
+                  {form.vehiclePlateNumber && !isValidPlate(form.vehiclePlateNumber) ? (
+                    <Text style={styles.fieldError}>{PLATE_ERROR}</Text>
+                  ) : null}
                   <Field
                     label="Driver's license number"
                     value={form.driverLicenseNumber}
-                    onChangeText={set('driverLicenseNumber')}
+                    onChangeText={value => set('driverLicenseNumber')(formatLicenseInput(value))}
+                    autoCapitalize="characters"
+                    maxLength={13}
+                    placeholder="A01-23-456789"
                   />
+                  {form.driverLicenseNumber && !isValidLicense(form.driverLicenseNumber) ? (
+                    <Text style={styles.fieldError}>{LICENSE_ERROR}</Text>
+                  ) : null}
                   <Field
                     label="Emergency contact name"
                     value={form.emergencyContactName}
@@ -394,17 +444,45 @@ export default function ApplicationScreen() {
                   <Field
                     label="Emergency contact number"
                     value={form.emergencyContactNumber}
-                    onChangeText={set('emergencyContactNumber')}
+                    onChangeText={value => set('emergencyContactNumber')(sanitizePhoneInput(value))}
                     keyboardType="phone-pad"
+                    maxLength={11}
                     placeholder="09XXXXXXXXX"
                   />
+                  {form.emergencyContactNumber && !isValidPhone(form.emergencyContactNumber) ? (
+                    <Text style={styles.fieldError}>{PHONE_ERROR}</Text>
+                  ) : null}
                 </>
               )}
 
               <Text style={[styles.cardTitle, { marginTop: 18 }]}>
                 {role === 'seller' ? 'Shop address' : 'Home address'}
               </Text>
-              <Field label="Street / building" value={form.street} onChangeText={set('street')} />
+              {role === 'seller' ? (
+                <>
+                  <Text style={styles.label}>Street / building</Text>
+                  <AddressAutocomplete
+                    role="seller"
+                    value={form.street}
+                    onChangeText={set('street')}
+                    onSelect={suggestion => {
+                      fillShopAddress(suggestion);
+                      // What was typed was only the search text
+                      set('street')(suggestion.street);
+
+                      if (suggestion.latitude != null && suggestion.longitude != null) {
+                        setShopLocation({ latitude: suggestion.latitude, longitude: suggestion.longitude });
+                        setShopLocationError(null);
+                      }
+                    }}
+                    placeholder="Start typing, e.g. Tabuco"
+                    placeholderTextColor="#A9A3AA"
+                    style={styles.input}
+                  />
+                </>
+              ) : (
+                <Field label="Street / building" value={form.street} onChangeText={set('street')} />
+              )}
               <Field label="Barangay" value={form.barangay} onChangeText={set('barangay')} />
               <Field label="City" value={form.city} onChangeText={set('city')} />
               <Field label="Province" value={form.province} onChangeText={set('province')} />
@@ -426,6 +504,7 @@ export default function ApplicationScreen() {
                     }}
                     disabled={saving}
                     error={shopLocationError}
+                    onAddressResolved={fillShopAddress}
                   />
                 </>
               ) : null}
@@ -539,6 +618,8 @@ function Field({
   placeholder?: string;
   multiline?: boolean;
   keyboardType?: 'default' | 'phone-pad' | 'email-address' | 'number-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  maxLength?: number;
 }) {
   return (
     <>
@@ -546,7 +627,7 @@ function Field({
       <TextInput
         {...props}
         multiline={multiline}
-        autoCapitalize={props.keyboardType === 'email-address' ? 'none' : 'sentences'}
+        autoCapitalize={props.autoCapitalize ?? (props.keyboardType === 'email-address' ? 'none' : 'sentences')}
         placeholderTextColor="#A9A3AA"
         style={[styles.input, multiline && { minHeight: 80, textAlignVertical: 'top' }]}
       />
@@ -608,6 +689,7 @@ const styles = StyleSheet.create({
   card: { padding: 16, borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, backgroundColor: '#FFFFFF' },
   cardTitle: { color: COLORS.text, fontSize: 16, fontWeight: '800' },
   label: { marginTop: 12, marginBottom: 6, color: COLORS.muted, fontSize: 13, fontWeight: '700' },
+  fieldError: { marginTop: 4, color: COLORS.danger, fontSize: 12, fontWeight: '600' },
   input: {
     paddingHorizontal: 12,
     paddingVertical: 10,

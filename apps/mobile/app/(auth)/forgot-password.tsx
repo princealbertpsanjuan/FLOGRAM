@@ -32,6 +32,10 @@ export default function ForgotPasswordScreen() {
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [resendingCode, setResendingCode] = useState(false);
 
+  // Shown under the button so the result is clear even
+  // if the alert is dismissed.
+  const [sendError, setSendError] = useState<string | null>(null);
+
   const normalizedEmail = email.trim().toLowerCase();
 
   const isValidEmail = (value: string) => {
@@ -44,6 +48,25 @@ export default function ForgotPasswordScreen() {
     }
 
     return 'Something went wrong. Please try again.';
+  };
+
+  /*
+   * Sending a reset code waits for the email provider.
+   * Turn timeouts / network failures into a clear next
+   * step instead of a generic error.
+   */
+  const getSendErrorMessage = (error: unknown) => {
+    const message = getErrorMessage(error);
+
+    if (/taking too long|timed out|timeout/i.test(message)) {
+      return 'We could not send the code in time. The server may still be starting up — please wait a few seconds and tap Send Reset Code again. Also check your spam folder in case the email already arrived.';
+    }
+
+    if (/network request failed|failed to fetch|network/i.test(message)) {
+      return 'No connection to FLOGRAM. Check your internet connection and try again.';
+    }
+
+    return message;
   };
 
   const handleSendCode = async () => {
@@ -64,6 +87,7 @@ export default function ForgotPasswordScreen() {
     }
 
     try {
+      setSendError(null);
       setSendingCode(true);
 
       const response = await forgotPassword({
@@ -78,9 +102,13 @@ export default function ForgotPasswordScreen() {
           'If an account exists for this email address, a password reset code has been sent.'
       );
     } catch (error) {
+      const message = getSendErrorMessage(error);
+
+      setSendError(message);
+
       Alert.alert(
         'Unable to Send Code',
-        getErrorMessage(error)
+        message
       );
     } finally {
       setSendingCode(false);
@@ -160,7 +188,7 @@ export default function ForgotPasswordScreen() {
     } catch (error) {
       Alert.alert(
         'Unable to Resend Code',
-        getErrorMessage(error)
+        getSendErrorMessage(error)
       );
     } finally {
       setResendingCode(false);
@@ -277,6 +305,26 @@ export default function ForgotPasswordScreen() {
                 )}
               </Pressable>
 
+              {sendingCode ? (
+                <Text style={styles.codeHint}>
+                  Sending your code... this can take up to a minute if the server was idle.
+                </Text>
+              ) : null}
+
+              {!sendingCode && sendError ? (
+                <View style={styles.errorBox}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={18}
+                    color="#C2413B"
+                  />
+
+                  <Text style={styles.errorText}>
+                    {sendError}
+                  </Text>
+                </View>
+              ) : null}
+
               <Pressable
                 style={styles.loginLink}
                 onPress={() =>
@@ -343,7 +391,7 @@ export default function ForgotPasswordScreen() {
 
               <View style={styles.resendContainer}>
                 <Text style={styles.resendText}>
-                  Didnt receive the code?
+                  Didn't receive the code?
                 </Text>
 
                 <Pressable
@@ -394,6 +442,23 @@ const styles = StyleSheet.create({
 
   keyboardView: {
     flex: 1,
+  },
+
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FDECEC',
+  },
+
+  errorText: {
+    flex: 1,
+    color: '#C2413B',
+    fontSize: 13,
+    lineHeight: 19,
   },
 
   scrollContent: {

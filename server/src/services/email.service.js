@@ -20,6 +20,46 @@ import nodemailer from "nodemailer";
 const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 const BREVO_TIMEOUT_MS = 15000;
 
+/*
+ * Hard ceiling for one email send, whatever the
+ * provider does (DNS hang, SMTP stall...). Keeps the
+ * whole forgot-password request well under the app's
+ * own request timeout.
+ */
+export const EMAIL_SEND_TIMEOUT_MS = 18000;
+
+/*
+ * Rejects with a clear message when the wrapped promise
+ * does not settle in time. The slow promise is left to
+ * finish (or fail) in the background and is ignored.
+ */
+export const withTimeout = (promise, ms, message) => {
+  let timer;
+
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(message);
+      error.code = "ETIMEOUT";
+      reject(error);
+    }, ms);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+};
+
+/*
+ * True when at least one delivery method is configured:
+ * Brevo (BREVO_API_KEY + a sender) or Gmail SMTP
+ * (EMAIL_USER + EMAIL_PASSWORD).
+ */
+export const isEmailConfigured = () => {
+  if (process.env.BREVO_API_KEY) {
+    return Boolean(getSenderEmail());
+  }
+
+  return Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD);
+};
+
 const escapeHtml = (value) =>
   String(value)
     .replace(/&/g, "&amp;")
@@ -188,9 +228,10 @@ const getEmailTransporter = () => {
       user: emailUser,
       pass: emailPassword,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 12000,
+    dnsTimeout: 5000,
   });
 };
 
@@ -207,9 +248,15 @@ const sendWithGmail = async ({ to, subject, html, text }) => {
 };
 
 const sendEmail = (message) =>
-  process.env.BREVO_API_KEY
-    ? sendWithBrevo(message)
-    : sendWithGmail(message);
+  withTimeout(
+    process.env.BREVO_API_KEY
+      ? sendWithBrevo(message)
+      : sendWithGmail(message),
+    EMAIL_SEND_TIMEOUT_MS,
+    `The email provider did not respond within ${
+      EMAIL_SEND_TIMEOUT_MS / 1000
+    } seconds.`
+  );
 
 export const sendPasswordResetCode = async ({
   email,

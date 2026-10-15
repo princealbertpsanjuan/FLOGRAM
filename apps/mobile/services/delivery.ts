@@ -2457,3 +2457,48 @@ export const getMyRiderProfile =
       .data
       .rider;
   };
+
+/*
+ * =========================================================
+ * UPDATE RIDER SETTINGS
+ * =========================================================
+ *
+ * PATCH /api/v1/riders/me
+ *
+ * Only these fields are accepted. phoneNumber is
+ * saved on the User account; the rest on the Rider
+ * profile. Changing vehicle/license details notifies
+ * the Admin.
+ * =========================================================
+ */
+
+export type RiderSettingsInput = {
+  phoneNumber?: string;
+
+  vehicleType?: string;
+
+  vehiclePlateNumber?: string;
+
+  driverLicenseNumber?: string;
+};
+
+export const updateMyRiderProfile =
+  async (
+    input: RiderSettingsInput
+  ) => {
+    const response =
+      await apiRequest<RiderProfileResponse>(
+        '/riders/me',
+        {
+          method: 'PATCH',
+
+          authenticated: true,
+
+          body: JSON.stringify(input),
+        }
+      );
+
+    return response
+      .data
+      .rider;
+  };

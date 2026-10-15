@@ -55,6 +55,8 @@ import { formatAddOnsLine } from '../../services/addons';
 
 import ReportProblemLink from '../../components/ui/report-problem-link';
 
+import ContactActions from '../../components/ui/contact-actions';
+
 /*
  * =========================================================
  * TYPES
@@ -173,6 +175,66 @@ const formatDate = (
   return date.toLocaleDateString(
     'en-PH',
     {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }
+  );
+};
+
+/*
+ * Pre-orders can be released to riders only on their
+ * scheduled day (Manila time, UTC+8). Returns the date
+ * label while release is still locked, otherwise null.
+ * The server checks the same rule.
+ */
+const MANILA_OFFSET_MS =
+  8 * 60 * 60 * 1000;
+
+const manilaDayKey = (
+  date: Date
+) =>
+  new Date(
+    date.getTime() +
+      MANILA_OFFSET_MS
+  )
+    .toISOString()
+    .slice(0, 10);
+
+const getPreOrderReleaseLock = (
+  order: CustomerOrder
+) => {
+  if (
+    !order.isPreOrder ||
+    !order.requestedDeliveryDate
+  ) {
+    return null;
+  }
+
+  const scheduled =
+    new Date(
+      order.requestedDeliveryDate
+    );
+
+  if (
+    Number.isNaN(
+      scheduled.getTime()
+    ) ||
+    manilaDayKey(
+      new Date()
+    ) >=
+      manilaDayKey(
+        scheduled
+      )
+  ) {
+    return null;
+  }
+
+  return scheduled.toLocaleDateString(
+    'en-PH',
+    {
+      timeZone:
+        'Asia/Manila',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -885,6 +947,20 @@ useEffect(() => {
         return;
       }
 
+      const releaseLock =
+        getPreOrderReleaseLock(
+          order
+        );
+
+      if (releaseLock) {
+        Alert.alert(
+          'Pre-order',
+          `This is a pre-order for ${releaseLock}. You can release it for delivery on that day.`
+        );
+
+        return;
+      }
+
       Alert.alert(
         'Release for Delivery',
         'Release this order so an available rider can accept it?',
@@ -1451,6 +1527,12 @@ function OrderCard({
     deliveryStatus === 'picked_up' ||
     deliveryStatus === 'out_for_delivery';
 
+  // Pre-order not yet on its scheduled day
+  const releaseLock =
+    getPreOrderReleaseLock(
+      order
+    );
+
   /*
    * The shop can decline a new order or cancel an accepted
    * one, but not after preparation starts.
@@ -1484,6 +1566,18 @@ function OrderCard({
     getCustomerName(
       order.customer
     );
+
+  const customerPhone =
+    typeof order.customer ===
+      'object' &&
+    order.customer
+      ? order.customer
+          .phoneNumber || null
+      : null;
+
+  const riderPhone =
+    order.delivery?.rider
+      ?.phoneNumber || null;
 
   const fulfillment =
     order.fulfillmentType ===
@@ -1617,6 +1711,26 @@ function OrderCard({
               customerName
             }
           </Text>
+
+          {customerPhone ? (
+            <>
+              <Text
+                style={
+                  styles.contactNumberText
+                }
+              >
+                {customerPhone}
+              </Text>
+
+              <ContactActions
+                phone={
+                  customerPhone
+                }
+                role="seller"
+                compact
+              />
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -2061,6 +2175,12 @@ function OrderCard({
                   ? 'The rider is on the way to your shop to pick up the bouquet.'
                   : 'The rider has picked up the bouquet.'}
               </Text>
+              {riderPhone ? (
+                <>
+                  <Text style={styles.contactNumberText}>Rider: {riderPhone}</Text>
+                  <ContactActions phone={riderPhone} role="seller" compact />
+                </>
+              ) : null}
             </View>
           ) : (
             <>
@@ -2083,21 +2203,24 @@ function OrderCard({
                     styles.successNoticeText
                   }
                 >
-                  The bouquet is
-                  prepared. Release
-                  this order so an
-                  available rider can
-                  accept the delivery.
+                  {releaseLock
+                    ? `The bouquet is prepared. This is a pre-order for ${releaseLock} — you can release it to riders on that day.`
+                    : 'The bouquet is prepared. Release this order so an available rider can accept the delivery.'}
                 </Text>
               </View>
 
               <ActionButton
-                label="Release for Delivery"
+                label={
+                  releaseLock
+                    ? `Release available on ${releaseLock}`
+                    : 'Release for Delivery'
+                }
                 loading={
                   releasing
                 }
                 disabled={
-                  isBusy
+                  isBusy ||
+                  !!releaseLock
                 }
                 onPress={
                   onRelease
@@ -2140,6 +2263,13 @@ function OrderCard({
               currently delivering
               this order.
             </Text>
+
+            {riderPhone ? (
+              <>
+                <Text style={styles.contactNumberText}>Rider: {riderPhone}</Text>
+                <ContactActions phone={riderPhone} role="seller" compact />
+              </>
+            ) : null}
           </View>
         </View>
       ) : null}
@@ -2978,6 +3108,17 @@ const styles =
     infoContent: {
       flex:
         1,
+    },
+
+    contactNumberText: {
+      marginTop:
+        4,
+      color:
+        '#5E9874',
+      fontSize:
+        12,
+      fontWeight:
+        '700',
     },
 
     infoLabel: {

@@ -623,6 +623,95 @@ const getDeliveryAvailableAt =
 
 /*
  * =========================================================
+ * PRE-ORDER RELEASE DAY
+ * =========================================================
+ *
+ * A pre-order may be released for delivery only on (or
+ * after) its scheduled day, counted in Manila time
+ * (UTC+8, no daylight saving).
+ */
+const MANILA_OFFSET_MS =
+  8 * 60 * 60 * 1000;
+
+const manilaDayKey = (
+  date
+) =>
+  new Date(
+    date.getTime() +
+      MANILA_OFFSET_MS
+  )
+    .toISOString()
+    .slice(0, 10);
+
+const formatManilaDate = (
+  date
+) =>
+  date.toLocaleDateString(
+    "en-PH",
+    {
+      timeZone:
+        "Asia/Manila",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }
+  );
+
+const assertPreOrderReleaseDay =
+  (
+    order
+  ) => {
+    if (
+      !order?.isPreOrder ||
+      !order
+        ?.requestedDeliveryDate
+    ) {
+      return;
+    }
+
+    const scheduledDelivery =
+      new Date(
+        order
+          .requestedDeliveryDate
+      );
+
+    if (
+      Number.isNaN(
+        scheduledDelivery.getTime()
+      )
+    ) {
+      return;
+    }
+
+    if (
+      manilaDayKey(
+        new Date()
+      ) >=
+      manilaDayKey(
+        scheduledDelivery
+      )
+    ) {
+      return;
+    }
+
+    const date =
+      formatManilaDate(
+        scheduledDelivery
+      );
+
+    const error =
+      new Error(
+        `This is a pre-order for ${date}. You can release it for delivery on that day.`
+      );
+
+    error.statusCode =
+      400;
+
+    throw error;
+  };
+
+/*
+ * =========================================================
  * SELLER
  * CREATE DELIVERY REQUEST
  * =========================================================
@@ -727,6 +816,11 @@ export const createDeliveryRequest =
         existingDelivery._id
       );
     }
+
+    // Pre-orders: not before the scheduled day.
+    assertPreOrderReleaseDay(
+      order
+    );
 
     const deliveryAddress =
       order.deliveryAddress ||

@@ -9,6 +9,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -22,10 +23,28 @@ import { logout } from '../../services/auth';
 
 import {
   getMyRiderProfile,
+  updateMyRiderProfile,
   type RiderProfile,
 } from '../../services/delivery';
 
+import { VEHICLE_TYPES } from '../../services/application';
+
 import RiderScreenHeader from '../../components/rider/rider-screen-header';
+
+import CollapsibleSection from '../../components/ui/collapsible-section';
+
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
+
+import {
+  LICENSE_ERROR,
+  PHONE_ERROR,
+  formatLicenseInput,
+  isValidLicense,
+  isValidPhone,
+  normalizeLicense,
+  normalizePhone,
+  sanitizePhoneInput,
+} from '../../utils/validation';
 
 import {
   RIDER_GOLD,
@@ -85,6 +104,22 @@ const formatVehicle = (value?: string) => {
     .replace(/\b\w/g, letter => letter.toUpperCase());
 };
 
+/*
+ * Plate number: letters and digits, 2-8 characters,
+ * uppercase (e.g. ABC1234). Same rule as the server.
+ */
+const PLATE_ERROR =
+  'Enter a valid plate number: 2 to 8 letters and numbers (e.g. ABC1234).';
+
+const formatPlateInput = (value: string) =>
+  value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8);
+
+const isValidPlate = (value: string) =>
+  /^[A-Z0-9]{2,8}$/.test(formatPlateInput(value));
+
 const VERIFICATION_LABELS: Record<string, string> = {
   approved: 'Verified Rider',
   pending: 'Verification Pending',
@@ -99,6 +134,25 @@ export default function RiderProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  /*
+   * Editable settings: Contact Information and
+   * Vehicle & License. Each section has its own
+   * Edit → Save / Cancel.
+   */
+  const [editingContact, setEditingContact] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState('');
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [savingContact, setSavingContact] = useState(false);
+
+  const [editingVehicle, setEditingVehicle] = useState(false);
+  const [vehicleDraft, setVehicleDraft] = useState({
+    vehicleType: 'motorcycle',
+    vehiclePlateNumber: '',
+    driverLicenseNumber: '',
+  });
+  const [vehicleError, setVehicleError] = useState<string | null>(null);
+  const [savingVehicle, setSavingVehicle] = useState(false);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -162,6 +216,82 @@ export default function RiderProfileScreen() {
     );
   }, [performLogout]);
 
+  const startContactEdit = () => {
+    setPhoneDraft(sanitizePhoneInput(normalizePhone(profile?.owner?.phoneNumber)));
+    setContactError(null);
+    setEditingContact(true);
+  };
+
+  const saveContact = async () => {
+    if (!isValidPhone(phoneDraft)) {
+      setContactError(PHONE_ERROR);
+      return;
+    }
+
+    try {
+      setSavingContact(true);
+      setContactError(null);
+
+      const updated = await updateMyRiderProfile({
+        phoneNumber: normalizePhone(phoneDraft),
+      });
+
+      setProfile(updated);
+      setEditingContact(false);
+      Alert.alert('Saved', 'Your contact number was updated.');
+    } catch (saveError) {
+      setContactError(getErrorMessage(saveError));
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
+  const startVehicleEdit = () => {
+    setVehicleDraft({
+      vehicleType: profile?.vehicleType || 'motorcycle',
+      vehiclePlateNumber: formatPlateInput(profile?.vehiclePlateNumber || ''),
+      driverLicenseNumber: formatLicenseInput(profile?.driverLicenseNumber || ''),
+    });
+    setVehicleError(null);
+    setEditingVehicle(true);
+  };
+
+  const saveVehicle = async () => {
+    const plate = formatPlateInput(vehicleDraft.vehiclePlateNumber);
+
+    if (plate && !isValidPlate(plate)) {
+      setVehicleError(PLATE_ERROR);
+      return;
+    }
+
+    if (!isValidLicense(vehicleDraft.driverLicenseNumber)) {
+      setVehicleError(LICENSE_ERROR);
+      return;
+    }
+
+    try {
+      setSavingVehicle(true);
+      setVehicleError(null);
+
+      const updated = await updateMyRiderProfile({
+        vehicleType: vehicleDraft.vehicleType,
+        vehiclePlateNumber: plate,
+        driverLicenseNumber: normalizeLicense(vehicleDraft.driverLicenseNumber),
+      });
+
+      setProfile(updated);
+      setEditingVehicle(false);
+      Alert.alert(
+        'Saved',
+        'Your vehicle and license details were updated. FLOGRAM Admin has been notified and may re-check them.'
+      );
+    } catch (saveError) {
+      setVehicleError(getErrorMessage(saveError));
+    } finally {
+      setSavingVehicle(false);
+    }
+  };
+
   const owner = profile?.owner;
 
   const fullName =
@@ -183,7 +313,7 @@ export default function RiderProfileScreen() {
     'Verification status unavailable';
 
   return (
-    <View style={styles.screen}>
+    <KeyboardSafeView style={styles.screen}>
       <StatusBar
         barStyle="light-content"
         backgroundColor={RIDER_GOLD}
@@ -208,6 +338,7 @@ export default function RiderProfileScreen() {
             styles.content,
             { paddingBottom: insets.bottom + 32 },
           ]}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -258,45 +389,194 @@ export default function RiderProfileScreen() {
             ) : null}
           </View>
 
-          {/* CONTACT */}
-          <Section title="Contact Information">
-            <InfoRow
-              icon="mail-outline"
-              label="Email"
-              value={owner?.email || 'Not provided'}
-            />
-            <InfoRow
+          {/* CONTACT (editable dropdown) */}
+          <View style={styles.section}>
+            <CollapsibleSection
+              title="Contact Information"
+              subtitle={owner?.phoneNumber || 'Add your contact number'}
               icon="call-outline"
-              label="Phone Number"
-              value={owner?.phoneNumber || 'Not provided'}
-            />
-            <InfoRow
-              icon="home-outline"
-              label="Address"
-              value={formatAddress(profile?.address)}
-              last
-            />
-          </Section>
+              role="rider"
+              style={styles.collapsible}
+            >
+              <InfoRow
+                icon="mail-outline"
+                label="Email (cannot be changed here)"
+                value={owner?.email || 'Not provided'}
+              />
 
-          {/* VEHICLE */}
-          <Section title="Vehicle & License">
-            <InfoRow
+              {editingContact ? (
+                <View style={[styles.editBlock, styles.rowDivider]}>
+                  <Text style={styles.rowLabel}>Phone Number</Text>
+                  <TextInput
+                    style={[styles.input, contactError ? styles.inputError : null]}
+                    value={phoneDraft}
+                    onChangeText={value => {
+                      setPhoneDraft(sanitizePhoneInput(value));
+                      setContactError(null);
+                    }}
+                    placeholder="09171234567"
+                    placeholderTextColor="#B5B5B5"
+                    keyboardType="phone-pad"
+                    maxLength={11}
+                    editable={!savingContact}
+                  />
+                  {phoneDraft && !isValidPhone(phoneDraft) && !contactError ? (
+                    <Text style={styles.fieldError}>{PHONE_ERROR}</Text>
+                  ) : null}
+                </View>
+              ) : (
+                <InfoRow
+                  icon="call-outline"
+                  label="Phone Number"
+                  value={owner?.phoneNumber || 'Not provided'}
+                />
+              )}
+
+              <InfoRow
+                icon="home-outline"
+                label="Address"
+                value={formatAddress(profile?.address)}
+                last
+              />
+
+              <EditActions
+                editing={editingContact}
+                saving={savingContact}
+                error={contactError}
+                disabled={!profile}
+                onEdit={startContactEdit}
+                onCancel={() => {
+                  setEditingContact(false);
+                  setContactError(null);
+                }}
+                onSave={() => void saveContact()}
+              />
+            </CollapsibleSection>
+          </View>
+
+          {/* VEHICLE (editable dropdown) */}
+          <View style={styles.sectionTight}>
+            <CollapsibleSection
+              title="Vehicle & License"
+              subtitle={[
+                formatVehicle(profile?.vehicleType),
+                profile?.vehiclePlateNumber,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
               icon="bicycle-outline"
-              label="Vehicle Type"
-              value={formatVehicle(profile?.vehicleType)}
-            />
-            <InfoRow
-              icon="card-outline"
-              label="Plate Number"
-              value={profile?.vehiclePlateNumber || 'Not provided'}
-            />
-            <InfoRow
-              icon="document-text-outline"
-              label="Driver's License No."
-              value={profile?.driverLicenseNumber || 'Not provided'}
-              last
-            />
-          </Section>
+              role="rider"
+              style={styles.collapsible}
+            >
+              {editingVehicle ? (
+                <View style={styles.editBlock}>
+                  <Text style={styles.rowLabel}>Vehicle Type</Text>
+                  <View style={styles.chips}>
+                    {VEHICLE_TYPES.map(type => {
+                      const active = vehicleDraft.vehicleType === type;
+
+                      return (
+                        <Pressable
+                          key={type}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          disabled={savingVehicle}
+                          onPress={() =>
+                            setVehicleDraft(current => ({ ...current, vehicleType: type }))
+                          }
+                          style={[styles.chip, active && styles.chipActive]}
+                        >
+                          <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                            {formatVehicle(type)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={[styles.rowLabel, styles.fieldGap]}>Plate Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={vehicleDraft.vehiclePlateNumber}
+                    onChangeText={value => {
+                      setVehicleDraft(current => ({
+                        ...current,
+                        vehiclePlateNumber: formatPlateInput(value),
+                      }));
+                      setVehicleError(null);
+                    }}
+                    placeholder="ABC1234"
+                    placeholderTextColor="#B5B5B5"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    maxLength={8}
+                    editable={!savingVehicle}
+                  />
+                  {vehicleDraft.vehiclePlateNumber && !isValidPlate(vehicleDraft.vehiclePlateNumber) ? (
+                    <Text style={styles.fieldError}>{PLATE_ERROR}</Text>
+                  ) : null}
+
+                  <Text style={[styles.rowLabel, styles.fieldGap]}>Driver's License No.</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={vehicleDraft.driverLicenseNumber}
+                    onChangeText={value => {
+                      setVehicleDraft(current => ({
+                        ...current,
+                        driverLicenseNumber: formatLicenseInput(value),
+                      }));
+                      setVehicleError(null);
+                    }}
+                    placeholder="A01-23-456789"
+                    placeholderTextColor="#B5B5B5"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    maxLength={13}
+                    editable={!savingVehicle}
+                  />
+                  {vehicleDraft.driverLicenseNumber && !isValidLicense(vehicleDraft.driverLicenseNumber) ? (
+                    <Text style={styles.fieldError}>{LICENSE_ERROR}</Text>
+                  ) : null}
+
+                  <Text style={styles.editNote}>
+                    FLOGRAM Admin is notified when you change these details and may re-check your documents.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <InfoRow
+                    icon="bicycle-outline"
+                    label="Vehicle Type"
+                    value={formatVehicle(profile?.vehicleType)}
+                  />
+                  <InfoRow
+                    icon="card-outline"
+                    label="Plate Number"
+                    value={profile?.vehiclePlateNumber || 'Not provided'}
+                  />
+                  <InfoRow
+                    icon="document-text-outline"
+                    label="Driver's License No."
+                    value={profile?.driverLicenseNumber || 'Not provided'}
+                    last
+                  />
+                </>
+              )}
+
+              <EditActions
+                editing={editingVehicle}
+                saving={savingVehicle}
+                error={vehicleError}
+                disabled={!profile}
+                onEdit={startVehicleEdit}
+                onCancel={() => {
+                  setEditingVehicle(false);
+                  setVehicleError(null);
+                }}
+                onSave={() => void saveVehicle()}
+              />
+            </CollapsibleSection>
+          </View>
 
           {/* EMERGENCY */}
           <Section title="Emergency Contact">
@@ -387,7 +667,7 @@ export default function RiderProfileScreen() {
           </Pressable>
         </ScrollView>
       )}
-    </View>
+    </KeyboardSafeView>
   );
 }
 
@@ -402,6 +682,93 @@ function Section({
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.sectionCard}>{children}</View>
+    </View>
+  );
+}
+
+function EditActions({
+  editing,
+  saving,
+  error,
+  disabled,
+  onEdit,
+  onCancel,
+  onSave,
+}: {
+  editing: boolean;
+  saving: boolean;
+  error: string | null;
+  disabled?: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <View>
+      {error ? (
+        <View style={[styles.errorCard, styles.inlineError]}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={18}
+            color={RED}
+          />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+
+      {editing ? (
+        <View style={styles.actionRow}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={saving}
+            onPress={onCancel}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <Text style={styles.secondaryButtonText}>Cancel</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={saving}
+            onPress={onSave}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && { opacity: 0.85 },
+              saving && { opacity: 0.6 },
+            ]}
+          >
+            {saving ? (
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+              />
+            ) : (
+              <Text style={styles.primaryButtonText}>Save</Text>
+            )}
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          disabled={disabled}
+          onPress={onEdit}
+          style={({ pressed }) => [
+            styles.editButton,
+            pressed && { opacity: 0.8 },
+            disabled && { opacity: 0.5 },
+          ]}
+        >
+          <Ionicons
+            name="create-outline"
+            size={17}
+            color={RIDER_GOLD_DARK}
+          />
+          <Text style={styles.editButtonText}>Edit</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -598,6 +965,123 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 0,
     marginLeft: 12,
+  },
+  sectionTight: {
+    marginTop: 0,
+  },
+  collapsible: {
+    marginBottom: 12,
+    borderColor: '#EFEDE6',
+  },
+  editBlock: {
+    paddingVertical: 12,
+  },
+  input: {
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E7E3E8',
+    backgroundColor: '#FBFAFB',
+    color: TEXT,
+    fontSize: 15,
+  },
+  inputError: {
+    borderColor: RED,
+  },
+  fieldError: {
+    marginTop: 4,
+    color: RED,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  fieldGap: {
+    marginTop: 14,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: RIDER_GOLD,
+  },
+  chipActive: {
+    backgroundColor: RIDER_GOLD,
+  },
+  chipText: {
+    color: RIDER_GOLD_DARK,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  chipTextActive: {
+    color: '#FFFFFF',
+  },
+  editNote: {
+    marginTop: 12,
+    color: MUTED,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  inlineError: {
+    marginTop: 10,
+    marginBottom: 0,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: RIDER_GOLD,
+    backgroundColor: RIDER_GOLD_LIGHT,
+  },
+  editButtonText: {
+    color: RIDER_GOLD_DARK,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  primaryButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: RIDER_GOLD,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  secondaryButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E7E3E8',
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryButtonText: {
+    color: TEXT,
+    fontSize: 14,
+    fontWeight: '800',
   },
   logoutButton: {
     flexDirection: 'row',

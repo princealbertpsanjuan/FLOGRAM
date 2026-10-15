@@ -60,6 +60,25 @@ const peso = (value?: number | null) =>
 const shortDate = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
 
+/*
+ * Customer notes exactly as typed. specialInstructions is
+ * a string array on the server; an empty array (or a note
+ * that is only quote marks) means "no note", so the note
+ * box is hidden instead of showing “”.
+ */
+const cleanNote = (value?: string | null) => {
+  const text = String(value ?? '').trim();
+  return /^["'“”‘’\s]*$/.test(text) ? '' : text;
+};
+
+const customerNotes = (request: CustomRequest) => {
+  const instructions = Array.isArray(request.specialInstructions)
+    ? request.specialInstructions
+    : [request.specialInstructions];
+
+  return [...new Set([...instructions, request.customerMessage].map(cleanNote).filter(Boolean))];
+};
+
 const OFFER_STATUS: Record<SellerProposal['status'], { label: string; color: string }> = {
   submitted: { label: 'Offer sent – waiting for customer', color: '#B7801E' },
   selected: { label: 'Chosen by the customer', color: '#15803D' },
@@ -225,6 +244,7 @@ export default function SellerCustomRequestsScreen() {
     ].filter(Boolean) as [string, string][];
 
     const formOpen = openForm === request._id && !proposal && request.status === 'open';
+    const notes = customerNotes(request);
 
     return (
       <View key={request._id} style={[styles.card, focusId === request._id && { borderColor: GREEN }]}>
@@ -253,9 +273,14 @@ export default function SellerCustomRequestsScreen() {
           </View>
         ))}
 
-        {request.specialInstructions || request.customerMessage ? (
+        {notes.length ? (
           <View style={styles.message}>
-            <Text style={styles.messageText}>“{request.specialInstructions || request.customerMessage}”</Text>
+            <Text style={styles.messageLabel}>Note from the customer</Text>
+            {notes.map(note => (
+              <Text key={note} style={styles.messageText}>
+                {note}
+              </Text>
+            ))}
           </View>
         ) : null}
 
@@ -409,7 +434,8 @@ const styles = StyleSheet.create({
   detailLabel: { width: 80, color: MUTED, fontSize: 12 },
   detailValue: { flex: 1, color: TEXT, fontSize: 13, fontWeight: '600', textTransform: 'capitalize' },
   message: { marginTop: 8, padding: 10, borderRadius: 12, backgroundColor: '#F6F8F7' },
-  messageText: { color: TEXT, fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  messageLabel: { color: MUTED, fontSize: 11, fontWeight: '800', marginBottom: 2 },
+  messageText: { color: TEXT, fontSize: 13, lineHeight: 19 },
   offer: { marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: '#F1F7F3' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   offerPrice: { color: TEXT, fontSize: 15, fontWeight: '800' },

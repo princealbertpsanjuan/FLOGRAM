@@ -4,10 +4,38 @@ import {
 } from "express-validator";
 
 /*
+ * Shop contact number: Philippine mobile number,
+ * 11 digits starting with 09. Spaces / dashes /
+ * parentheses are removed and +63 / 63 becomes 0
+ * before checking (and the clean number is saved).
+ */
+const PH_MOBILE =
+  /^09\d{9}$/;
+
+const PHONE_MESSAGE =
+  "Enter a valid mobile number: 11 digits starting with 09 (e.g. 09171234567).";
+
+const normalizeContactNumber = (
+  value
+) => {
+  let number =
+    String(value ?? "")
+      .replace(/[\s\-()]/g, "");
+
+  if (/^\+?639\d{9}$/.test(number)) {
+    number =
+      `0${number.replace(/^\+?63/, "")}`;
+  }
+
+  return number;
+};
+
+/*
  * =========================================================
  * CREATE FLORIST PROFILE
  * =========================================================
  */
+
 export const floristProfileValidation = [
   body("shopName")
     .trim()
@@ -38,11 +66,14 @@ export const floristProfileValidation = [
     .withMessage(
       "Contact number is required."
     )
+    .customSanitizer(
+      normalizeContactNumber
+    )
     .matches(
-      /^(09|\+639)\d{9}$/
+      PH_MOBILE
     )
     .withMessage(
-      "Enter a valid Philippine phone number."
+      PHONE_MESSAGE
     ),
 
   body("businessEmail")
@@ -166,11 +197,14 @@ export const updateFloristValidation = [
   body("contactNumber")
     .optional()
     .trim()
+    .customSanitizer(
+      normalizeContactNumber
+    )
     .matches(
-      /^(09|\+639)\d{9}$/
+      PH_MOBILE
     )
     .withMessage(
-      "Enter a valid Philippine phone number."
+      PHONE_MESSAGE
     ),
 
   body("businessEmail")

@@ -55,6 +55,8 @@ import { ScreenLoader } from '../../components/ui/state-views';
 
 import ReportProblemLink from '../../components/ui/report-problem-link';
 
+import ContactActions from '../../components/ui/contact-actions';
+
 /*
  * =========================================================
  * RIDER ACTIVE DELIVERY
@@ -2566,6 +2568,24 @@ setLocationError(null);
               }
             />
 
+            {typeof delivery.florist ===
+              'object' &&
+            delivery.florist
+              ?.contactNumber ? (
+              <CallRow
+                label={`Shop${
+                  delivery.florist
+                    .shopName
+                    ? ` · ${delivery.florist.shopName}`
+                    : ''
+                }`}
+                phone={
+                  delivery.florist
+                    .contactNumber
+                }
+              />
+            ) : null}
+
             <DetailRow
               label="Pickup"
               value={formatAddress(
@@ -3224,8 +3244,8 @@ function NavigationStat({
 }
 
 /*
- * Tap to call (recipient), same as the customer calling
- * the rider from tracking.
+ * Contact number with Call / Message / Copy
+ * (recipient or shop).
  */
 function CallRow({
   label,
@@ -3234,33 +3254,18 @@ function CallRow({
   label: string;
   phone?: string | null;
 }) {
-  const cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
+  const cleanPhone = String(phone || '').trim();
 
   if (!cleanPhone) {
     return <DetailRow label={label} value="—" />;
   }
 
-  const call = () => {
-    Linking.openURL(`tel:${cleanPhone}`).catch(() =>
-      Alert.alert('Unable to call', `Please dial ${cleanPhone} manually.`)
-    );
-  };
-
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Call ${cleanPhone}`}
-      onPress={call}
-      style={({ pressed }) => [styles.detailRow, pressed && { opacity: 0.6 }]}
-    >
+    <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={[styles.detailValue, { color: '#C49317', textDecorationLine: 'underline' }]}>{phone}</Text>
-        <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#C49317' }}>
-          <Ionicons name="call" size={15} color="#FFFFFF" />
-        </View>
-      </View>
-    </Pressable>
+      <Text style={styles.detailValue}>{cleanPhone}</Text>
+      <ContactActions phone={cleanPhone} role="rider" compact />
+    </View>
   );
 }
 
