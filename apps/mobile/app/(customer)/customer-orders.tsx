@@ -30,11 +30,20 @@ import {
 } from "../../services/checkout";
 
 import {
+  cancelOrder,
   canPayOrderOnline,
   getMyOrders,
+  PAYMENT_NOT_COMPLETED_MESSAGE,
+  PAYMENT_NOT_COMPLETED_TITLE,
   payOrderOnline,
+  waitForOrderPayment,
   type CustomerOrder,
 } from "../../services/orders";
+
+import {
+  isOnlineOrderNotPlaced,
+  NOT_PLACED_STATUS_LABEL,
+} from "../../utils/order-status";
 
 import {
   getOrderReview,
@@ -584,6 +593,27 @@ const getCheckoutDisplayStatus =
       return "Cancelled";
     }
 
+    /*
+     * Online payment not confirmed yet → the order is not
+     * placed (the shop does not see it).
+     */
+    if (
+      orders.some(
+        (order) =>
+          isOnlineOrderNotPlaced({
+            paymentMethod:
+              checkout.paymentMethod,
+            paymentStatus:
+              order.paymentStatus ||
+              checkout.paymentStatus,
+            orderStatus:
+              order.orderStatus,
+          })
+      )
+    ) {
+      return NOT_PLACED_STATUS_LABEL;
+    }
+
     const nonCancelled =
       statuses.filter(
         (status) =>
@@ -875,7 +905,7 @@ const getCheckoutPaymentLabel =
         return "Payment Pending";
 
       case "failed":
-        return "Payment Failed";
+        return "Payment not completed";
 
       case "refunded":
         return "Refunded";
@@ -986,7 +1016,7 @@ const getStandalonePaymentLabel =
         return "Payment Pending";
 
       case "failed":
-        return "Payment Failed";
+        return "Payment not completed";
 
       case "refunded":
         return "Refunded";
@@ -2677,6 +2707,11 @@ function PayNowChip({
     setLoading,
   ] = useState(false);
 
+  const [
+    cancelling,
+    setCancelling,
+  ] = useState(false);
+
   const payNow =
     async () => {
       try {
@@ -2701,6 +2736,27 @@ function PayNowChip({
           await WebBrowser.openBrowserAsync(
             result.checkoutUrl
           );
+
+          /*
+           * Back from PayMongo (paid, cancelled or
+           * closed): check whether it was really paid.
+           */
+          const paid =
+            await waitForOrderPayment(
+              orderId
+            );
+
+          if (paid) {
+            Alert.alert(
+              "Payment successful",
+              "Your order has been placed and sent to the shop."
+            );
+          } else {
+            Alert.alert(
+              PAYMENT_NOT_COMPLETED_TITLE,
+              PAYMENT_NOT_COMPLETED_MESSAGE
+            );
+          }
         }
 
         onDone();
@@ -2721,11 +2777,77 @@ function PayNowChip({
       }
     };
 
+  /*
+   * Not paid yet → the order is not placed, so the
+   * customer can simply cancel it.
+   */
+  const confirmCancel =
+    () => {
+      Alert.alert(
+        "Cancel this order?",
+        "It hasn't been placed yet because it is not paid. Orders from the same checkout are cancelled together.",
+        [
+          {
+            text:
+              "Keep",
+            style:
+              "cancel",
+          },
+          {
+            text:
+              "Cancel Order",
+            style:
+              "destructive",
+            onPress:
+              () => {
+                void (async () => {
+                  try {
+                    setCancelling(
+                      true
+                    );
+
+                    await cancelOrder(
+                      orderId
+                    );
+
+                    Alert.alert(
+                      "Order cancelled",
+                      "Your order was not placed. Any bouquets from your cart were put back in your cart."
+                    );
+                  } catch (
+                    error
+                  ) {
+                    Alert.alert(
+                      "Unable to cancel",
+                      error instanceof
+                        Error
+                        ? error.message
+                        : "Please try again."
+                    );
+                  } finally {
+                    setCancelling(
+                      false
+                    );
+                    onDone();
+                  }
+                })();
+              },
+          },
+        ]
+      );
+    };
+
   return (
+    <View
+      style={
+        styles.payActionsRow
+      }
+    >
     <Pressable
       accessibilityRole="button"
       disabled={
-        loading
+        loading ||
+        cancelling
       }
       onPress={() =>
         void payNow()
@@ -2734,6 +2856,8 @@ function PayNowChip({
         pressed,
       }) => [
         styles.payNowChip,
+
+        styles.payActionButton,
 
         (pressed ||
           loading) && {
@@ -2764,6 +2888,45 @@ function PayNowChip({
         </>
       )}
     </Pressable>
+
+    <Pressable
+      accessibilityRole="button"
+      disabled={
+        loading ||
+        cancelling
+      }
+      onPress={
+        confirmCancel
+      }
+      style={({
+        pressed,
+      }) => [
+        styles.cancelUnpaidChip,
+
+        styles.payActionButton,
+
+        (pressed ||
+          cancelling) && {
+          opacity: 0.75,
+        },
+      ]}
+    >
+      {cancelling ? (
+        <ActivityIndicator
+          size="small"
+          color="#B74964"
+        />
+      ) : (
+        <Text
+          style={
+            styles.cancelUnpaidChipText
+          }
+        >
+          Cancel
+        </Text>
+      )}
+    </Pressable>
+    </View>
   );
 }
 
@@ -2909,9 +3072,13 @@ function StandaloneOrderCard({
               },
             ]}
           >
-            {formatStatus(
-              order.orderStatus
-            )}
+            {isOnlineOrderNotPlaced(
+              order
+            )
+              ? NOT_PLACED_STATUS_LABEL
+              : formatStatus(
+                  order.orderStatus
+                )}
           </Text>
         </View>
       </View>
@@ -4146,6 +4313,56 @@ const styles =
 
       color:
         "#FFFFFF",
+    },
+
+    payActionsRow: {
+      flexDirection:
+        "row",
+
+      gap:
+        8,
+    },
+
+    payActionButton: {
+      flex:
+        1,
+    },
+
+    cancelUnpaidChip: {
+      marginTop:
+        10,
+
+      minHeight:
+        40,
+
+      borderRadius:
+        12,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      borderWidth:
+        1,
+
+      borderColor:
+        "#E8B7C6",
+
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    cancelUnpaidChipText: {
+      fontSize:
+        13,
+
+      fontWeight:
+        "800",
+
+      color:
+        "#B74964",
     },
 
     paymentStatus: {

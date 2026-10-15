@@ -15,6 +15,15 @@ export type SellerPayoutItem = {
   grossAmount: number;
   commissionRate: number;
   commission: number;
+  /*
+   * FLOGRAM's pre-order fee (not part of grossAmount).
+   * Missing / 0 on payouts made before this field existed.
+   */
+  preOrderFee?: number;
+  /*
+   * Negative for Cash on Pickup: commission + pre-order fee
+   * the shop owes FLOGRAM.
+   */
   netAmount: number;
   completedAt: string | null;
   awaitingCodRemittance?: boolean;
@@ -30,6 +39,10 @@ export type SellerPayout = {
   itemCount?: number;
   grossSales: number;
   totalCommission: number;
+  /*
+   * Cash on Pickup pre-order fees deducted from this payout.
+   */
+  pickupPreOrderFees?: number;
   totalAmount: number;
   status: 'pending' | 'paid' | 'cancelled';
   paymentMethod?: string;
@@ -65,6 +78,7 @@ export type SellerBalance = {
   pickupSales?: number;
   commissionRate?: number | null;
   commission: number;
+  pickupPreOrderFees?: number;
   amountOwed: number;
   awaitingCodOrders: number;
   oldestUnpaidAt: string | null;

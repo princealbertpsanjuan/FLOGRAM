@@ -43,6 +43,10 @@ import {
 } from "../../services/orders";
 
 import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
+import {
+  isOnlineOrderNotPlaced,
+  NOT_PLACED_STATUS_LABEL,
+} from '../../utils/order-status';
 import SearchSuggestions from '../../components/customer/search-suggestions';
 
 /*
@@ -1887,10 +1891,23 @@ const handleOrdersPress =
         const order =
           currentPurchase.order;
 
+        /*
+         * Online payment not confirmed → not placed yet.
+         */
         const status =
-          getOrderStatusMeta(
-            order.orderStatus
-          );
+          isOnlineOrderNotPlaced(
+            order
+          )
+            ? {
+                ...getOrderStatusMeta(
+                  order.orderStatus
+                ),
+                label:
+                  NOT_PLACED_STATUS_LABEL,
+              }
+            : getOrderStatusMeta(
+                order.orderStatus
+              );
 
         const floristName =
           order.florist &&
@@ -1956,9 +1973,24 @@ const handleOrdersPress =
         );
 
       const status =
-        getOrderStatusMeta(
-          primaryStatus
-        );
+        isOnlineOrderNotPlaced({
+          paymentMethod:
+            checkout.paymentMethod,
+          paymentStatus:
+            checkout.paymentStatus,
+          orderStatus:
+            primaryStatus,
+        })
+          ? {
+              ...getOrderStatusMeta(
+                primaryStatus
+              ),
+              label:
+                NOT_PLACED_STATUS_LABEL,
+            }
+          : getOrderStatusMeta(
+              primaryStatus
+            );
 
       const firstItem =
         checkout.items?.[0];

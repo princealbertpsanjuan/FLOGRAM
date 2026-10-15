@@ -70,16 +70,19 @@ import ContactActions from '../../components/ui/contact-actions';
  *                  (new paid/COD order, accepted,
  *                  preparing)
  * progress         ready / with Rider
- * awaiting_payment online order not yet paid —
- *                  cannot be accepted
- * completed        delivered, completed, cancelled
+ * completed        delivered, completed ("Done")
+ * cancelled        cancelled / declined
  * all
+ *
+ * An online (PayMongo) order that is not paid yet is not
+ * a placed order: the server does not send it to the shop
+ * (and it is filtered out here too).
  */
 type OrderFilter =
   | 'action'
   | 'progress'
-  | 'awaiting_payment'
   | 'completed'
+  | 'cancelled'
   | 'all';
 
 const ACTION_STATUSES: CustomerOrderStatus[] = [
@@ -108,12 +111,13 @@ const needsSellerAction = (
     )
   );
 
-const isAwaitingPaymentOrder = (
+/*
+ * Placed order = cash order, or online order once paid.
+ */
+const isPlacedOrder = (
   order: CustomerOrder
 ) =>
-  order.orderStatus ===
-    'pending' &&
-  isAwaitingOnlinePayment(
+  !isAwaitingOnlinePayment(
     order
   );
 
@@ -124,10 +128,13 @@ const isAwaitingPaymentOrder = (
  */
 
 
+/*
+ * "Done" = finished orders only. Cancelled orders have
+ * their own filter.
+ */
 const COMPLETED_STATUSES: CustomerOrderStatus[] = [
   'delivered',
   'completed',
-  'cancelled',
 ];
 
 /*
@@ -547,7 +554,11 @@ const loadOrders =
       const result =
         await getSellerOrders();
 
-      setOrders(result);
+      setOrders(
+        result.filter(
+          isPlacedOrder
+        )
+      );
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -574,7 +585,11 @@ useEffect(() => {
           return;
         }
 
-        setOrders(result);
+        setOrders(
+          result.filter(
+            isPlacedOrder
+          )
+        );
         setError(null);
       } catch (err: unknown) {
         if (!active) {
@@ -623,16 +638,18 @@ useEffect(() => {
                 order.orderStatus
               )
           ).length,
-        awaitingPayment:
-          orders.filter(
-            isAwaitingPaymentOrder
-          ).length,
         completed:
           orders.filter(
             (order) =>
               COMPLETED_STATUSES.includes(
                 order.orderStatus
               )
+          ).length,
+        cancelled:
+          orders.filter(
+            (order) =>
+              order.orderStatus ===
+              'cancelled'
           ).length,
       }),
       [orders]
@@ -683,16 +700,18 @@ useEffect(() => {
                   order.orderStatus
                 )
             );
-          case 'awaiting_payment':
-            return orders.filter(
-              isAwaitingPaymentOrder
-            );
           case 'completed':
             return orders.filter(
               (order) =>
                 COMPLETED_STATUSES.includes(
                   order.orderStatus
                 )
+            );
+          case 'cancelled':
+            return orders.filter(
+              (order) =>
+                order.orderStatus ===
+                'cancelled'
             );
           default:
             return orders;
@@ -1190,8 +1209,8 @@ useEffect(() => {
               [
                 ['action', 'Needs Action', counts.action],
                 ['progress', 'In Progress', counts.progress],
-                ['awaiting_payment', 'Awaiting Payment', counts.awaitingPayment],
                 ['completed', 'Done', counts.completed],
+                ['cancelled', 'Cancelled', counts.cancelled],
                 ['all', 'All', counts.all],
               ] as const
             ).map(
@@ -1279,11 +1298,10 @@ useEffect(() => {
                     ? 'Needs Your Action'
                     : filter === 'progress'
                       ? 'In Progress'
-                      : filter ===
-                          'awaiting_payment'
-                        ? 'Awaiting Customer Payment'
-                        : filter === 'completed'
-                          ? 'Completed Orders'
+                      : filter === 'completed'
+                        ? 'Completed Orders'
+                        : filter === 'cancelled'
+                          ? 'Cancelled Orders'
                           : 'All Orders'}
               </Text>
 

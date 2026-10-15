@@ -78,7 +78,8 @@ import {
  *   "Order Received" / pickup handed over), for every
  *   payment method. Paid-but-in-progress online orders
  *   are not sales yet.
- * - Shop sales exclude Order.deliveryFee (Rider income).
+ * - Shop sales exclude Order.deliveryFee (Rider income)
+ *   and Order.preOrderFee (FLOGRAM revenue).
  * - Your Earnings = sales − FLOGRAM commission (same
  *   formula as Seller Earnings / payouts).
  * - Seller rating uses sellerRating, not overallRating.
@@ -977,7 +978,7 @@ export default function SellerReportsScreen() {
 
             <SummaryRow
               label="Total Sales"
-              hint="Bouquets, add-ons and pre-order fees. Delivery fees go to Riders."
+              hint="Bouquets and add-ons. Delivery fees go to Riders; pre-order fees go to FLOGRAM."
               value={formatMoney(
                 totals.sales
               )}
@@ -1021,8 +1022,9 @@ export default function SellerReportsScreen() {
               A sale counts only when the order is completed:
               the customer tapped &quot;Order Received&quot;, or
               you handed over a pickup order. Paid online orders
-              still in progress are not counted yet. Payout timing
-              (e.g. COD after the Rider remits) is shown in
+              still in progress are not counted yet. Pre-order fees
+              go to FLOGRAM and are not part of your sales. Payout
+              timing (e.g. COD after the Rider remits) is shown in
               Earnings.
             </Text>
           </View>
@@ -1114,7 +1116,7 @@ export default function SellerReportsScreen() {
               {totals.preOrderFees >
               0 ? (
                 <PerformanceRow
-                  label="Includes pre-order fees"
+                  label="Pre-order fees (to FLOGRAM, not in sales)"
                   value={formatMoney(
                     totals.preOrderFees
                   )}
@@ -1224,11 +1226,11 @@ export default function SellerReportsScreen() {
                   }
                 >
                   Product amount = price × quantity + add-ons (no
-                  delivery fee, before commission
+                  delivery fee, no pre-order fee, before
+                  commission).
                   {totals.preOrderFees > 0
-                    ? ', pre-order fees shown in Sales Overview'
+                    ? ' Pre-order fees go to FLOGRAM and are shown in Sales Overview.'
                     : ''}
-                  ).
                 </Text>
               </View>
             ) : (
@@ -2039,8 +2041,9 @@ function RatingRow({
  *                  pickup handed over), not refunded
  *   sale date    = completedAt (older orders: deliveredAt,
  *                  then updatedAt)
- *   Total Sales  = Σ (totalAmount − deliveryFee)
- *                = price × qty + add-ons + pre-order fee
+ *   Total Sales  = Σ (totalAmount − deliveryFee − preOrderFee)
+ *                = price × qty + add-ons
+ *                  (delivery fee → Rider, pre-order fee → FLOGRAM)
  *   Commission   = Σ round(order sales × commission rate)
  *   Earnings     = Total Sales − Commission
  * =========================================================

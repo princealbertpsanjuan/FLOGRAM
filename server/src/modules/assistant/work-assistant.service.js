@@ -3,6 +3,7 @@ import Florist from "../florists/florist.model.js";
 import Flower from "../flowers/flower.model.js";
 import GiftAddOn from "../addons/addon.model.js";
 import Order from "../orders/order.model.js";
+import { placedOrderMatch } from "../orders/order-payment-expiry.js";
 import Rider from "../riders/rider.model.js";
 import RiderPayout from "../riders/rider-payout.model.js";
 import RiderRemittance from "../riders/rider-remittance.model.js";
@@ -76,8 +77,8 @@ const buildSellerContext = async (sellerUserId) => {
   }
 
   const [statusCounts, todayOrders, products, addOnCount, earnings, sentiment, patterns] = await Promise.all([
-    Order.aggregate([{ $match: { florist: florist._id } }, { $group: { _id: "$orderStatus", count: { $sum: 1 } } }]),
-    Order.countDocuments({ florist: florist._id, createdAt: { $gte: startOfManilaDay() } }),
+    Order.aggregate([{ $match: { florist: florist._id, ...placedOrderMatch() } }, { $group: { _id: "$orderStatus", count: { $sum: 1 } } }]),
+    Order.countDocuments({ florist: florist._id, createdAt: { $gte: startOfManilaDay() }, ...placedOrderMatch() }),
     Flower.find({ florist: florist._id, isActive: true }).select("name price isAvailable").lean(),
     GiftAddOn.countDocuments({ florist: florist._id, isActive: true }),
     settle(getSellerEarnings(sellerUserId)),
@@ -130,7 +131,7 @@ You are the FLOGRAM Seller Assistant inside the FLOGRAM mobile app, helping a fl
 How FLOGRAM works for Sellers:
 - Orders move: pending -> confirmed (accept) -> preparing -> ready for pickup / ready for delivery -> (Rider) out for delivery -> delivered -> completed. Sellers accept or decline in Orders.
 - Online orders reach the shop only after PayMongo confirms payment. COD money is collected by the Rider and remitted to FLOGRAM. Cash on Pickup is collected by the shop.
-- Seller earnings = product sales (order total minus delivery fee) minus the platform commission set by Admin. Admin pays sellers out per period with a bank reference and proof; the Earnings screen shows the unpaid balance and payout history. For Cash on Pickup the shop already has the cash, so only the commission is deducted from the next payout.
+- Seller earnings = product sales (order total minus delivery fee minus pre-order fee) minus the platform commission set by Admin. The pre-order fee goes to FLOGRAM, not to the shop; the delivery fee goes to the Rider. Admin pays sellers out per period with a bank reference and proof; the Earnings screen shows the unpaid balance and payout history. For Cash on Pickup the shop already has the cash (including any pre-order fee), so the commission and the pre-order fee are deducted from the next payout.
 - Products: add/edit in Products; mark unavailable instead of deleting when flowers run out. Gift add-ons (chocolates, teddy bears, balloons, cards) are managed in Gift Add-ons.
 - Shop Insights shows review sentiment (AFINN lexicon) and frequently-bought-together items (FP-Growth). Use them for bundles and promotions.
 - Disputes: a Seller can report a problem with an order (e.g. customer unavailable) from the order; Admin decides. Policy violations can lead to a warning, suspension or ban.

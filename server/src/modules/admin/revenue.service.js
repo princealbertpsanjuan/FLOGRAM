@@ -25,17 +25,20 @@ import { getPlatformCommissionRate } from "./admin-settings.service.js";
  *   gross        = order.totalAmount (what the customer paid)
  *                = subtotal + deliveryFee + preOrderFee
  *   deliveryFees = order.deliveryFee  -> Rider income
- *   productSales = gross − deliveryFee
- *                = bouquet price × qty + add-ons + pre-order fee
+ *   preOrderFees = order.preOrderFee  -> FLOGRAM revenue
+ *   productSales = gross − deliveryFee − preOrderFee
+ *                = bouquet price × qty + add-ons (the shop's sales)
  *   commission   = productSales × Admin commission rate
  *                  (rounded per order, like Seller Earnings)
  *   sellerShare  = productSales − commission
+ *   platformRevenue (FLOGRAM revenue) = commission + preOrderFees
  *
- * PRE-ORDER FEE belongs to the shop (product side): the shop
- * does the extra work of a scheduled bouquet, and Seller
- * Earnings / payouts (sellerPayouts) already pay it to the
- * shop as part of "total − delivery fee". Commission is taken
- * from it like the rest of product sales.
+ *   gross = sellerShare + platformRevenue + deliveryFees
+ *
+ * PRE-ORDER FEE goes to FLOGRAM, not to the shop's sales.
+ * It is not part of productSales, no commission is taken
+ * from it, and Seller Earnings / payouts (sellerPayouts)
+ * exclude it the same way.
  *
  * COD cash awaiting remittance (informational only): completed
  * COD orders whose Rider remittance is not verified yet. The
@@ -122,6 +125,7 @@ export const getRecognizedOrders = async ({ startDate = null, endDate = null, fl
     .map((order) => {
       const gross = round(order.totalAmount);
       const deliveryFee = round(order.deliveryFee);
+      const preOrderFee = round(order.preOrderFee);
 
       return {
         orderId: String(order._id),
@@ -130,8 +134,12 @@ export const getRecognizedOrders = async ({ startDate = null, endDate = null, fl
         recognizedAt: recognizedAtOf(order),
         gross,
         deliveryFee,
-        preOrderFee: round(order.preOrderFee),
-        productSales: round(Math.max(0, gross - deliveryFee)),
+        preOrderFee,
+        /*
+         * Shop sales exclude the delivery fee (Rider) and the
+         * pre-order fee (FLOGRAM).
+         */
+        productSales: round(Math.max(0, gross - deliveryFee - preOrderFee)),
       };
     })
     .filter((entry) => inRange(entry.recognizedAt, startDate, endDate));
@@ -183,6 +191,7 @@ const summarize = (entries, rate) => {
     productSales,
     preOrderFees,
     commission,
+    platformRevenue: round(commission + preOrderFees),
     sellerShare: round(productSales - commission),
     online: byMethod("paymongo"),
     cod: byMethod("cash_on_delivery"),
@@ -217,7 +226,9 @@ export const getRevenueSummary = async ({ startDate = null, endDate = null, gran
           total: part.gross,
           deliveryFees: part.deliveryFees,
           productSales: part.productSales,
+          preOrderFees: part.preOrderFees,
           commission: part.commission,
+          platformRevenue: part.platformRevenue,
           sellerShare: part.sellerShare,
           orders: part.orders,
         };

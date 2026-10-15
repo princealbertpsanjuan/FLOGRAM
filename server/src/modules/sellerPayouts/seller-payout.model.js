@@ -8,12 +8,16 @@ import mongoose from "mongoose";
  * Seller earnings = product sales − platform commission.
  *
  * Product sales of an order = totalAmount − deliveryFee
- * (the delivery fee belongs to the Rider).
+ *                               − preOrderFee
+ * (the delivery fee belongs to the Rider, the pre-order fee
+ * belongs to FLOGRAM; commission applies to product sales
+ * only).
  *
  * Money held by FLOGRAM (online payments, COD remitted by
  * a Rider) is paid out to the Seller. Cash on Pickup is
- * collected by the Seller directly, so only its commission
- * is deducted from the payout.
+ * collected by the Seller directly (whole total, including
+ * the pre-order fee), so its commission and pre-order fee
+ * are deducted from the payout.
  * =========================================================
  */
 
@@ -27,8 +31,15 @@ const sellerPayoutItemSchema = new mongoose.Schema(
     commissionRate: { type: Number, required: true, min: 0 },
     commission: { type: Number, required: true, min: 0 },
     /*
+     * FLOGRAM's pre-order fee on this order (not part of
+     * grossAmount). Payouts created before this field
+     * existed have 0 here.
+     */
+    preOrderFee: { type: Number, min: 0, default: 0 },
+    /*
      * Amount this order adds to the payout.
-     * Negative for Cash on Pickup (commission owed).
+     * Negative for Cash on Pickup
+     * (commission + pre-order fee owed).
      */
     netAmount: { type: Number, required: true },
     completedAt: { type: Date, default: null },
@@ -45,6 +56,11 @@ const sellerPayoutSchema = new mongoose.Schema(
     items: { type: [sellerPayoutItemSchema], default: [] },
     grossSales: { type: Number, required: true, min: 0, default: 0 },
     totalCommission: { type: Number, required: true, min: 0, default: 0 },
+    /*
+     * Pre-order fees collected in cash by the shop (Cash on
+     * Pickup) and deducted from this payout.
+     */
+    pickupPreOrderFees: { type: Number, min: 0, default: 0 },
     totalAmount: { type: Number, required: true, min: 0, default: 0 },
     status: { type: String, enum: ["pending", "paid", "cancelled"], default: "pending", index: true },
     paymentMethod: { type: String, trim: true, default: "", maxlength: 100 },

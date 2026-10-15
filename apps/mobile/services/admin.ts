@@ -222,9 +222,46 @@ export type AdminDashboardData = {
       today: number;
     };
 
+    pickup?: {
+      total: number;
+      today: number;
+    };
+
+    /*
+     * Shop sales: total − delivery fees − pre-order fees.
+     */
+    productSales?: {
+      total: number;
+      today: number;
+    };
+
+    /*
+     * Rider income.
+     */
+    deliveryFees?: {
+      total: number;
+      today: number;
+    };
+
     commission?: {
       rate: number;
       percentage: number;
+      total: number;
+      today: number;
+    };
+
+    /*
+     * FLOGRAM revenue (not part of shop sales).
+     */
+    preOrderFees?: {
+      total: number;
+      today: number;
+    };
+
+    /*
+     * FLOGRAM revenue = commission + pre-order fees.
+     */
+    platformRevenue?: {
       total: number;
       today: number;
     };
@@ -575,6 +612,13 @@ export type AdminReportOverview = {
 
   commission: number;
 
+  preOrderFees?: number;
+
+  /*
+   * FLOGRAM revenue = commission + pre-order fees.
+   */
+  platformRevenue?: number;
+
   sellerShare: number;
 };
 
@@ -599,7 +643,11 @@ export type AdminSalesTrendItem = {
 
   productSales?: number;
 
+  preOrderFees?: number;
+
   commission: number;
+
+  platformRevenue?: number;
 
   sellerShare: number;
 
@@ -608,7 +656,8 @@ export type AdminSalesTrendItem = {
 
 export type AdminReportSales = {
   /*
-   * Everything customers paid (products + delivery fees).
+   * Everything customers paid
+   * (products + delivery fees + pre-order fees).
    */
   total: number;
 
@@ -626,11 +675,14 @@ export type AdminReportSales = {
   deliveryFees?: number;
 
   /*
-   * total − delivery fees; commission is taken from this.
-   * Includes add-ons and pre-order fees (shop income).
+   * total − delivery fees − pre-order fees (shop sales,
+   * includes add-ons); commission is taken from this.
    */
   productSales?: number;
 
+  /*
+   * FLOGRAM revenue, not part of productSales.
+   */
   preOrderFees?: number;
 
   commissionRate: number;
@@ -638,6 +690,11 @@ export type AdminReportSales = {
   commissionPercentage: number;
 
   commission: number;
+
+  /*
+   * FLOGRAM revenue = commission + pre-order fees.
+   */
+  platformRevenue?: number;
 
   sellerShare: number;
 
@@ -826,7 +883,8 @@ export type AdminTopShop = {
   orders: number;
 
   /*
-   * Product sales (order total − delivery fee) of the
+   * Product sales (order total − delivery fee − pre-order
+   * fee) of the
    * shop's orders completed in the period — the same money
    * the Sales section counts.
    */

@@ -41,7 +41,23 @@ const assertId = (id, label) => {
 
 const completedAtOf = (order) => order.completedAt || order.deliveredAt || order.updatedAt || order.createdAt;
 
-const grossOf = (order) => roundMoney(Math.max(0, Number(order.totalAmount || 0) - Number(order.deliveryFee || 0)));
+/*
+ * Seller product sales of an order (same rule as
+ * admin/revenue.service.js):
+ *
+ *   grossAmount = totalAmount − deliveryFee − preOrderFee
+ *               = bouquet price × qty + add-ons
+ *
+ * The delivery fee belongs to the Rider and the pre-order
+ * fee belongs to FLOGRAM, so neither is the shop's sale and
+ * no commission is taken from them.
+ */
+const preOrderFeeOf = (order) => roundMoney(Math.max(0, Number(order.preOrderFee || 0)));
+
+const grossOf = (order) =>
+  roundMoney(
+    Math.max(0, Number(order.totalAmount || 0) - Number(order.deliveryFee || 0) - preOrderFeeOf(order))
+  );
 
 /*
  * Orders already counted in a pending or paid payout.
@@ -68,7 +84,7 @@ const classifyShopOrders = async (floristId, { periodStart = null, periodEnd = n
     orderStatus: { $in: SUCCESS_STATUSES },
     paymentStatus: { $ne: "refunded" },
   })
-    .select("_id productName paymentMethod paymentStatus totalAmount deliveryFee completedAt deliveredAt updatedAt createdAt")
+    .select("_id productName paymentMethod paymentStatus totalAmount deliveryFee preOrderFee completedAt deliveredAt updatedAt createdAt")
     .lean();
 
   const codOrderIds = orders.filter((order) => order.paymentMethod === "cash_on_delivery").map((order) => order._id);
@@ -94,6 +110,7 @@ const classifyShopOrders = async (floristId, { periodStart = null, periodEnd = n
     if (reserved.has(String(order._id))) return;
 
     const grossAmount = grossOf(order);
+    const preOrderFee = preOrderFeeOf(order);
     const commission = roundMoney(grossAmount * commissionRate);
 
     const item = {
@@ -104,12 +121,23 @@ const classifyShopOrders = async (floristId, { periodStart = null, periodEnd = n
       grossAmount,
       commissionRate,
       commission,
+      /*
+       * FLOGRAM's pre-order fee (informational on online /
+       * COD orders, where FLOGRAM already holds it).
+       */
+      preOrderFee,
       netAmount: roundMoney(grossAmount - commission),
       completedAt,
     };
 
     if (order.paymentMethod === "cash_on_pickup") {
-      item.netAmount = -commission;
+      /*
+       * The shop collected the whole order total in cash
+       * (product sales + pre-order fee). It keeps its net
+       * earnings and owes FLOGRAM the commission AND the
+       * pre-order fee, deducted from the next payout.
+       */
+      item.netAmount = -roundMoney(commission + preOrderFee);
       eligible.push(item);
     } else if (order.paymentMethod === "cash_on_delivery") {
       if (remittedIds.has(String(order._id))) {
@@ -230,6 +258,12 @@ export const getAdminSellerBalances = async () => {
         pickupSales: sum(eligible.filter((item) => item.collectedBySeller), "grossAmount"),
         commissionRate: eligible[0]?.commissionRate ?? null,
         commission: sum(eligible, "commission"),
+        /*
+         * Pre-order fees the shop collected in cash (Cash on
+         * Pickup) and owes FLOGRAM. Online / COD pre-order
+         * fees are already with FLOGRAM.
+         */
+        pickupPreOrderFees: sum(eligible.filter((item) => item.collectedBySeller), "preOrderFee"),
         amountOwed: roundMoney(sum(eligible, "netAmount")),
         awaitingCodOrders: awaitingCod.length,
         oldestUnpaidAt: times.length ? new Date(Math.min(...times)) : null,
@@ -296,7 +330,7 @@ export const createAdminSellerPayout = async (floristId, adminId, input = {}) =>
 
   if (totalAmount <= 0) {
     throw createError(
-      "Commission from Cash on Pickup orders is equal to or larger than the online/COD earnings. Nothing to pay out yet."
+      "Commission and pre-order fees owed from Cash on Pickup orders are equal to or larger than the online/COD earnings. Nothing to pay out yet."
     );
   }
 
@@ -310,6 +344,7 @@ export const createAdminSellerPayout = async (floristId, adminId, input = {}) =>
     items: eligible,
     grossSales: sum(eligible, "grossAmount"),
     totalCommission: sum(eligible, "commission"),
+    pickupPreOrderFees: sum(eligible.filter((item) => item.collectedBySeller), "preOrderFee"),
     totalAmount,
     status: "pending",
     createdBy: adminId,

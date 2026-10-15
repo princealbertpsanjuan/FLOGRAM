@@ -3,6 +3,7 @@ import Checkout from "../checkout/checkout.model.js";
 
 import {
   createCheckoutPayMongoSession,
+  processCheckoutPayMongoWebhook,
 } from "../checkout/checkout.service.js";
 
 import {
@@ -12,6 +13,15 @@ import {
   retrievePayMongoCheckoutSession,
   verifyPayMongoWebhookSignature,
 } from "./paymongo.service.js";
+
+import {
+  claimOrderPayment,
+  expireOrderIfPaymentWindowEnded,
+  markSingleOrderPaid,
+  notifyOrderPlacedAfterPayment,
+  reviveExpiredOrder,
+  syncOnlinePayment,
+} from "../orders/order-payment-expiry.js";
 
 /*
  * =========================================================
@@ -27,69 +37,26 @@ import {
  *                             late webhook still matches
  * =========================================================
  */
-const markSingleOrderPaid = async (
-  order,
-  session,
-  paidPayment
-) => {
-  if (
-    order.paymentStatus ===
-    "paid"
-  ) {
-    return;
-  }
-
-  const paymentAttributes =
-    paidPayment?.attributes ||
-    {};
-
-  order.paymentStatus =
-    "paid";
-
-  order.paymentProvider =
-    "paymongo";
-
-  order.paymongoCheckoutSessionId =
-    session?.id ||
-    order
-      .paymongoCheckoutSessionId;
-
-  order.paymongoPaymentId =
-    paidPayment?.id ||
-    order
-      .paymongoPaymentId;
-
-  order.paymentChannel =
-    paymentAttributes
-      ?.source
-      ?.type ||
-    paymentAttributes
-      ?.payment_method
-      ?.type ||
-    order
-      .paymentChannel ||
-    null;
-
-  order.paidAt =
-    Number.isFinite(
-      Number(
-        paymentAttributes
-          ?.paid_at
+/*
+ * The payment window ended → the order is cancelled
+ * ("Payment not completed") instead of opening PayMongo.
+ */
+const assertPaymentWindowOpen =
+  async (order) => {
+    if (
+      await expireOrderIfPaymentWindowEnded(
+        order
       )
-    )
-      ? new Date(
-          Number(
-            paymentAttributes
-              .paid_at
-          ) * 1000
-        )
-      : new Date();
+    ) {
+      const error = new Error(
+        "The payment time for this order ran out, so it was cancelled and not placed. Please order again."
+      );
 
-  order.paymentFailedAt =
-    null;
+      error.statusCode = 400;
 
-  await order.save();
-};
+      throw error;
+    }
+  };
 
 const startSingleOrderPayment =
   async (order) => {
@@ -357,6 +324,10 @@ export const createCheckout = async (
       throw error;
     }
 
+    await assertPaymentWindowOpen(
+      order
+    );
+
     const result =
       await startSingleOrderPayment(
         order
@@ -465,6 +436,10 @@ export const payOrder = async (
       throw error;
     }
 
+    await assertPaymentWindowOpen(
+      order
+    );
+
     const checkout =
       await Checkout.findOne({
         orders:
@@ -534,6 +509,39 @@ export const getPaymentStatus =
     next
   ) => {
     try {
+      /*
+       * Not paid yet in FLOGRAM → ask PayMongo directly
+       * (webhook may be late) so a paid order is placed.
+       */
+      const current =
+        await Order.findOne({
+          _id:
+            req.params.orderId,
+
+          customer:
+            req.user.userId,
+        }).select(
+          "_id customer paymentMethod paymentStatus orderStatus paymongoCheckoutSessionId"
+        );
+
+      if (
+        current &&
+        current.paymentMethod ===
+          "paymongo" &&
+        ![
+          "paid",
+          "refunded",
+        ].includes(
+          current.paymentStatus
+        ) &&
+        current.orderStatus !==
+          "cancelled"
+      ) {
+        await syncOnlinePayment(
+          current
+        );
+      }
+
       const order =
         await Order.findOne({
           _id:
@@ -550,6 +558,8 @@ export const getPaymentStatus =
             "paymentProvider",
             "paymentChannel",
             "paymentStatus",
+            "orderStatus",
+            "cancellationReason",
             "paymongoCheckoutSessionId",
             "paymongoPaymentIntentId",
             "paymongoPaymentId",
@@ -733,6 +743,36 @@ export const payMongoWebhook =
       const metadata =
         attributes.metadata ||
         {};
+
+      /*
+       * Cart checkout session (one payment for several
+       * orders) → handled by the grouped checkout logic,
+       * which places the orders and notifies the shops.
+       */
+      if (
+        metadata.checkoutId
+      ) {
+        const result =
+          await processCheckoutPayMongoWebhook({
+            rawBody,
+
+            signatureHeader:
+              signature,
+          });
+
+        return res
+          .status(200)
+          .json({
+            success:
+              true,
+
+            message:
+              "PayMongo checkout webhook processed.",
+
+            data:
+              result,
+          });
+      }
 
       const referenceNumber =
         attributes
@@ -1121,7 +1161,40 @@ export const payMongoWebhook =
       order.lastPaymentEventId =
         eventId;
 
+      /*
+       * Online orders are placed only now: revive one that
+       * was auto-cancelled for non-payment (late webhook),
+       * then tell the customer and the shop.
+       */
+      reviveExpiredOrder(
+        order
+      );
+
+      /*
+       * Another path ("Pay Now" / status poll) may have
+       * just recorded this payment → do not notify twice.
+       */
+      if (
+        !(await claimOrderPayment(
+          order._id
+        ))
+      ) {
+        return res
+          .status(200)
+          .json({
+            success:
+              true,
+
+            message:
+              "PayMongo payment was already processed.",
+          });
+      }
+
       await order.save();
+
+      await notifyOrderPlacedAfterPayment(
+        order
+      );
 
       console.log(
         "PayMongo payment completed:",

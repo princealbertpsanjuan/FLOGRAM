@@ -1,4 +1,11 @@
 import { autoCompleteDeliveredOrders } from "./order-auto-complete.js";
+import {
+  cancelUnpaidOnlineOrder,
+  expireOrderIfPaymentWindowEnded,
+  expireUnpaidOnlineOrders,
+  isAwaitingOnlinePayment,
+  placedOrderMatch,
+} from "./order-payment-expiry.js";
 import Order from "./order.model.js";
 
 import User from "../auth/auth.model.js";
@@ -1465,6 +1472,51 @@ customerNotes:
         "pending",
     });
 
+  /*
+   * Online payment: the order is not placed until it is
+   * paid. The shop is notified only when the payment is
+   * confirmed (checkout.service.js / order-payment-expiry.js).
+   */
+  if (
+    paymentMethod ===
+    "paymongo"
+  ) {
+    await createNotificationSafely({
+      recipient:
+        customerId,
+
+      role:
+        "customer",
+
+      type:
+        "order_updated",
+
+      title:
+        "Waiting for payment",
+
+      message:
+        `${productName} is not placed yet. Complete your online payment and it will be sent to the shop.`,
+
+      order:
+        order._id,
+
+      metadata: {
+        screen:
+          "order",
+
+        orderStatus:
+          "pending",
+
+        awaitingPayment:
+          true,
+      },
+    });
+
+    return populateOrder(
+      order._id
+    );
+  }
+
   await Promise.all([
     createNotificationSafely({
       recipient:
@@ -1540,6 +1592,7 @@ export const getCustomerOrders =
     filters = {}
   ) => {
     await autoCompleteDeliveredOrders();
+    await expireUnpaidOnlineOrders();
 
     const query = {
       customer:
@@ -1585,6 +1638,7 @@ export const getSellerOrders =
     filters = {}
   ) => {
     await autoCompleteDeliveredOrders();
+    await expireUnpaidOnlineOrders();
 
     const seller =
       await User.findById(
@@ -1623,9 +1677,15 @@ export const getSellerOrders =
       throw error;
     }
 
+    /*
+     * Unpaid online orders are not placed yet, so the shop
+     * does not see them (cash orders always show).
+     */
     const query = {
       florist:
         florist._id,
+
+      ...placedOrderMatch(),
     };
 
     if (
@@ -1756,7 +1816,7 @@ export const getOrderById =
       throw error;
     }
 
-    const order =
+    let order =
       await populateOrder(
         orderId
       );
@@ -1770,6 +1830,21 @@ export const getOrderById =
       error.statusCode = 404;
 
       throw error;
+    }
+
+    /*
+     * Unpaid online order past its payment window →
+     * cancel it now ("Payment not completed").
+     */
+    if (
+      await expireOrderIfPaymentWindowEnded(
+        order
+      )
+    ) {
+      order =
+        await populateOrder(
+          orderId
+        );
     }
 
     /*
@@ -1825,6 +1900,24 @@ export const getOrderById =
         throw error;
       }
 
+      /*
+       * Not placed until paid online.
+       */
+      if (
+        isAwaitingOnlinePayment(
+          order
+        )
+      ) {
+        const error =
+          new Error(
+            "Order was not found."
+          );
+
+        error.statusCode = 404;
+
+        throw error;
+      }
+
       return order;
     }
 
@@ -1860,7 +1953,12 @@ export const updateSellerOrderStatus =
           sellerId,
       });
 
-    if (!order) {
+    if (
+      !order ||
+      isAwaitingOnlinePayment(
+        order
+      )
+    ) {
       const error =
         new Error(
           "Order was not found or does not belong to this seller."
@@ -2149,7 +2247,10 @@ const getSellerOwnedOrder =
         ? await Order.findOne({ _id: orderId, florist: florist._id })
         : null;
 
-    if (!order) {
+    /*
+     * Unpaid online orders are not placed yet.
+     */
+    if (!order || isAwaitingOnlinePayment(order)) {
       const error = new Error("Order was not found or does not belong to your shop.");
       error.statusCode = 404;
       throw error;
@@ -2350,6 +2451,57 @@ export const cancelCustomerOrder =
       error.statusCode = 400;
 
       throw error;
+    }
+
+    /*
+     * =====================================================
+     * UNPAID ONLINE ORDER (NOT PLACED YET)
+     * =====================================================
+     *
+     * Close the PayMongo session and cancel the whole
+     * checkout group (one payment covers all of it). The
+     * shop never saw it, so it is not notified.
+     */
+    if (
+      order.orderStatus ===
+        "pending" &&
+      isAwaitingOnlinePayment(
+        order
+      )
+    ) {
+      const result =
+        await cancelUnpaidOnlineOrder(
+          order,
+          {
+            reason:
+              reason
+                ? `Cancelled before payment: ${String(reason).trim()}`
+                : "Cancelled before payment",
+
+            byCustomer:
+              true,
+
+            force:
+              true,
+          }
+        );
+
+      if (
+        result.placed
+      ) {
+        const error =
+          new Error(
+            "Your online payment already went through, so this order was placed and sent to the shop."
+          );
+
+        error.statusCode = 409;
+
+        throw error;
+      }
+
+      return Order.findById(
+        order._id
+      );
     }
 
     /*
@@ -2612,6 +2764,7 @@ export const getAdminOrders = async (
   filters = {}
 ) => {
   await autoCompleteDeliveredOrders();
+  await expireUnpaidOnlineOrders();
 
   const query = {};
 

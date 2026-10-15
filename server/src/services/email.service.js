@@ -232,6 +232,11 @@ const getEmailTransporter = () => {
     greetingTimeout: 8000,
     socketTimeout: 12000,
     dnsTimeout: 5000,
+    /*
+     * Render has no IPv6 route: without this, Gmail can
+     * fail with "connect ENETUNREACH 2404:6800:...".
+     */
+    family: 4,
   });
 };
 

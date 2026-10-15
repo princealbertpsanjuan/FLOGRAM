@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Flower from "../flowers/flower.model.js";
 import Florist from "../florists/florist.model.js";
 import Order from "../orders/order.model.js";
+import { placedOrderMatch } from "../orders/order-payment-expiry.js";
 import { notifySafely } from "../notifications/notify-helpers.js";
 
 /*
@@ -94,7 +95,7 @@ export const getAdminFlowers = async (query = {}) => {
    */
   const orderCounts = flowers.length
     ? await Order.aggregate([
-        { $match: { flower: { $in: flowers.map((flower) => flower._id) } } },
+        { $match: { flower: { $in: flowers.map((flower) => flower._id) }, ...placedOrderMatch() } },
         { $group: { _id: "$flower", count: { $sum: 1 } } },
       ])
     : [];

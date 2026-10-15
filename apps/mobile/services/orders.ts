@@ -544,6 +544,70 @@ export async function payOrderOnline(
 }
 
 /*
+ * =========================================================
+ * ONLINE PAYMENT RESULT (after closing PayMongo)
+ *
+ * GET /payments/orders/:orderId/status
+ *
+ * The server also asks PayMongo directly, so a payment is
+ * found even when the webhook is late. Checks a few times
+ * and returns true once the order is paid (= placed).
+ * =========================================================
+ */
+
+type OrderPaymentStatusResponse = {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    order: {
+      _id: string;
+      paymentStatus: PaymentStatus;
+      orderStatus?: string;
+    };
+  };
+};
+
+export async function waitForOrderPayment(
+  orderId: string,
+  attempts = 4
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    try {
+      const response =
+        await apiRequest<OrderPaymentStatusResponse>(
+          `/payments/orders/${encodeURIComponent(orderId.trim())}/status`,
+          {
+            authenticated: true,
+          }
+        );
+
+      if (response.data.order.paymentStatus === 'paid') {
+        return true;
+      }
+    } catch {
+      // try again
+    }
+  }
+
+  return false;
+}
+
+/*
+ * Shown when the customer closes PayMongo without paying.
+ */
+export const PAYMENT_NOT_COMPLETED_TITLE =
+  'Payment not completed';
+
+export const PAYMENT_NOT_COMPLETED_MESSAGE =
+  "Your order hasn't been placed yet. You can pay with Pay Now in My Orders within 30 minutes, or cancel it there. Unpaid orders are cancelled automatically.";
+
+/*
  * Online payment started but not finished, and the
  * order can still be paid.
  */

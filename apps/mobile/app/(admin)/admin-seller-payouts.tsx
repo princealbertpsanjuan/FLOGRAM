@@ -41,7 +41,11 @@ import { getUploadUrl } from '../../utils/media';
  * ADMIN – SELLER PAYOUTS
  * =========================================================
  *
+ * Product sales = order total − delivery fee − pre-order fee
+ *   (delivery fee → Rider, pre-order fee → FLOGRAM).
  * Seller earnings = product sales − platform commission.
+ * Cash on Pickup: the shop collected the whole total, so its
+ * commission and pre-order fee are deducted from the payout.
  * Same flow as Rider Payouts: create a payout for a shop's
  * unpaid orders, send the bank transfer outside FLOGRAM,
  * then record the reference number and proof.
@@ -284,8 +288,9 @@ export default function AdminSellerPayoutsScreen() {
                 <Text style={styles.summaryValue}>{peso(owedTotal)}</Text>
                 <Text style={styles.summaryNote}>
                   From {peso(balances.reduce((sum, balance) => sum + balance.grossSales, 0))} in sales, less{' '}
-                  {peso(balances.reduce((sum, balance) => sum + balance.commission, 0))} FLOGRAM commission and cash the
-                  shops already collected on pickup
+                  {peso(balances.reduce((sum, balance) => sum + balance.commission, 0))} FLOGRAM commission, cash the shops
+                  already collected on pickup, and pre-order fees they collected on pickup (pre-order fees go to
+                  FLOGRAM, not to sellers).
                 </Text>
               </View>
 
@@ -325,6 +330,13 @@ export default function AdminSellerPayoutsScreen() {
                           value={`− ${peso(balance.commission)}`}
                           tone="red"
                         />
+                        {Number(balance.pickupPreOrderFees || 0) > 0 ? (
+                          <BreakdownRow
+                            label="Less: pre-order fees collected on pickup (FLOGRAM)"
+                            value={`− ${peso(balance.pickupPreOrderFees)}`}
+                            tone="red"
+                          />
+                        ) : null}
                         <BreakdownRow label="Owed to seller" value={peso(balance.amountOwed)} strong />
                       </View>
                       {balance.oldestUnpaidAt ? (
@@ -390,6 +402,20 @@ export default function AdminSellerPayoutsScreen() {
                     ) : null;
                   })()}
                   <BreakdownRow label="Less: FLOGRAM commission" value={`− ${peso(payout.totalCommission)}`} tone="red" />
+                  {(() => {
+                    const pickupPreOrderFees =
+                      payout.pickupPreOrderFees ??
+                      (payout.items || [])
+                        .filter(item => item.collectedBySeller)
+                        .reduce((total, item) => total + Number(item.preOrderFee || 0), 0);
+                    return pickupPreOrderFees > 0 ? (
+                      <BreakdownRow
+                        label="Less: pre-order fees collected on pickup (FLOGRAM)"
+                        value={`− ${peso(pickupPreOrderFees)}`}
+                        tone="red"
+                      />
+                    ) : null;
+                  })()}
                   <BreakdownRow label="Payout to seller" value={peso(payout.totalAmount)} strong />
                 </View>
 
