@@ -35,6 +35,7 @@ import violationRouter from "../modules/violations/violation.routes.js";
 import sellerPayoutRouter from "../modules/sellerPayouts/seller-payout.routes.js";
 import workAssistantRouter from "../modules/assistant/work-assistant.routes.js";
 import listingCommentRouter from "../modules/flowerComments/flower-comment.routes.js";
+import geoRouter from "../modules/geo/geo.routes.js";
 
 const apiRouter = Router();
 
@@ -47,6 +48,14 @@ const apiRouter = Router();
 apiRouter.use(
   "/health",
   healthRouter
+);
+
+/*
+ * Address search / map pin → address (public).
+ */
+apiRouter.use(
+  "/geo",
+  geoRouter
 );
 
 /*
