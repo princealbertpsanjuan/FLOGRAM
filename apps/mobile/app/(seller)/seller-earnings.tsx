@@ -5,6 +5,7 @@ import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenHeader from '../../components/ui/screen-header';
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import { EmptyState, ErrorState, ScreenLoader } from '../../components/ui/state-views';
 import {
   PAYMENT_METHOD_LABELS,
@@ -80,6 +81,10 @@ export default function SellerEarningsScreen() {
     }
   };
 
+  // Long lists show 5, then "See all (N)".
+  const payoutList = useSeeAll(data?.payouts);
+  const unpaidList = useSeeAll(data?.recentItems);
+
   if (loading) {
     return <ScreenLoader role="seller" message="Loading earnings..." />;
   }
@@ -144,7 +149,7 @@ export default function SellerEarningsScreen() {
                 message="Admin sends payouts for completed orders by bank transfer with proof."
               />
             ) : (
-              data.payouts.map(payout => {
+              payoutList.visible.map(payout => {
                 const open = openPayout?._id === payout._id;
 
                 return (
@@ -209,12 +214,14 @@ export default function SellerEarningsScreen() {
               })
             )}
 
+            <SeeAllButton state={payoutList} role="seller" />
+
             <Text style={styles.section}>Not yet paid out</Text>
 
             {data.recentItems.length === 0 ? (
               <Text style={styles.meta}>Nothing waiting. Completed orders appear here.</Text>
             ) : (
-              data.recentItems.map(item => (
+              unpaidList.visible.map(item => (
                 <View
                   key={item.order}
                   style={[styles.card, styles.item]}
@@ -233,6 +240,8 @@ export default function SellerEarningsScreen() {
                 </View>
               ))
             )}
+
+            <SeeAllButton state={unpaidList} role="seller" />
 
             <Text style={styles.footnote}>
               Product sales = order total minus delivery fee (the delivery fee goes to the Rider). For Cash on Pickup you

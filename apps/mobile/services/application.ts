@@ -92,6 +92,8 @@ export const createSellerProfile = (input: {
   contactNumber: string;
   businessEmail: string;
   address: Address;
+  // Shop map pin; checkout needs it to compute delivery.
+  location?: { latitude: number; longitude: number };
 }) =>
   apiRequest<Wrapped<unknown>>('/florists/profile', {
     method: 'POST',

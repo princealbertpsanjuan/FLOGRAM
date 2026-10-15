@@ -336,6 +336,29 @@ export default function SellerDashboardScreen() {
 
   const [customRequests, setCustomRequests] = useState({ open: 0, needsOffer: 0 });
 
+  /*
+   * Re-read the shop profile on every visit so the
+   * "set your map pin" banner disappears right after the
+   * seller saves a pin in Seller Profile.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      getMyFloristProfile()
+        .then(florist => {
+          if (!active) return;
+
+          setData(current => (current ? { ...current, florist } : current));
+        })
+        .catch(() => undefined);
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -934,6 +957,12 @@ export default function SellerDashboardScreen() {
       .shopName ||
     'Seller';
 
+  // Checkout needs florist.location to compute delivery.
+  const missingMapPin =
+    !!data?.florist &&
+    (typeof data.florist.location?.latitude !== 'number' ||
+      typeof data.florist.location?.longitude !== 'number');
+
   return (
     <SafeAreaView
       style={
@@ -1129,6 +1158,43 @@ export default function SellerDashboardScreen() {
               >
                 {error}
               </Text>
+            </View>
+          ) : null}
+
+          {/* SHOP MAP PIN MISSING */}
+
+          {missingMapPin ? (
+            <View style={styles.mapPinBanner}>
+              <View style={styles.mapPinBannerRow}>
+                <View style={styles.mapPinBannerIcon}>
+                  <Ionicons name="location" size={20} color="#FFFFFF" />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.mapPinBannerTitle}>
+                    Set your shop&apos;s map pin so customers can order with delivery
+                  </Text>
+
+                  <Text style={styles.mapPinBannerText}>
+                    Delivery checkout uses your shop&apos;s exact location to calculate the route and fee.
+                    Until it is set, customers cannot place delivery orders from your shop.
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(seller)/seller-profile',
+                    params: { openEdit: '1' },
+                  } as never)
+                }
+                style={({ pressed }) => [styles.mapPinBannerButton, pressed && { opacity: 0.8 }]}
+              >
+                <Ionicons name="map-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.mapPinBannerButtonText}>Set Map Pin</Text>
+              </Pressable>
             </View>
           ) : null}
 
@@ -2018,6 +2084,61 @@ function OrderStatusBadge({
 
 const styles =
   StyleSheet.create({
+    mapPinBanner: {
+      backgroundColor: '#FFF7E6',
+      borderWidth: 1,
+      borderColor: '#F0C873',
+      borderRadius: 18,
+      padding: 14,
+      marginBottom: 14,
+    },
+
+    mapPinBannerRow: {
+      flexDirection: 'row',
+      gap: 12,
+      alignItems: 'flex-start',
+    },
+
+    mapPinBannerIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: '#D99A2B',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    mapPinBannerTitle: {
+      color: '#5B4210',
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 19,
+    },
+
+    mapPinBannerText: {
+      color: '#7A6232',
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
+
+    mapPinBannerButton: {
+      marginTop: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: '#5E9874',
+      borderRadius: 12,
+      paddingVertical: 11,
+    },
+
+    mapPinBannerButtonText: {
+      color: '#FFFFFF',
+      fontSize: 13,
+      fontWeight: '800',
+    },
+
     container: {
       flex: 1,
       backgroundColor:

@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 
@@ -33,6 +34,12 @@ import {
 } from '../../services/flower';
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import OptionChips from '../../components/seller/option-chips';
+import {
+  PRODUCT_CATEGORIES,
+  PRODUCT_OCCASIONS,
+  withExtraOptions,
+} from '../../constants/product-options';
 
 const commaSeparatedToArray = (
   value: string
@@ -70,8 +77,39 @@ export default function SellerEditProductScreen() {
   const [category, setCategory] =
     useState('');
 
-  const [occasion, setOccasion] =
-    useState('');
+  const [occasions, setOccasions] =
+    useState<string[]>([]);
+
+  /*
+   * Values saved on the product before the fixed lists
+   * existed stay selectable as extra chips.
+   */
+  const [savedOptions, setSavedOptions] =
+    useState<{
+      category: string;
+      occasions: string[];
+    }>({
+      category: '',
+      occasions: [],
+    });
+
+  const categoryOptions = useMemo(
+    () =>
+      withExtraOptions(
+        PRODUCT_CATEGORIES,
+        [savedOptions.category]
+      ),
+    [savedOptions]
+  );
+
+  const occasionOptions = useMemo(
+    () =>
+      withExtraOptions(
+        PRODUCT_OCCASIONS,
+        savedOptions.occasions
+      ),
+    [savedOptions]
+  );
 
   const [
     flowerTypes,
@@ -146,12 +184,19 @@ export default function SellerEditProductScreen() {
           selectedFlower.category || ''
         );
 
-        setOccasion(
-          (
-            selectedFlower.occasion ||
+        setOccasions(
+          selectedFlower.occasion ||
             []
-          ).join(', ')
         );
+
+        setSavedOptions({
+          category:
+            selectedFlower.category ||
+            '',
+          occasions:
+            selectedFlower.occasion ||
+            [],
+        });
 
         setFlowerTypes(
           (
@@ -235,12 +280,19 @@ useEffect(() => {
         selectedFlower.category || ''
       );
 
-      setOccasion(
-        (
-          selectedFlower.occasion ||
+      setOccasions(
+        selectedFlower.occasion ||
           []
-        ).join(', ')
       );
+
+      setSavedOptions({
+        category:
+          selectedFlower.category ||
+          '',
+        occasions:
+          selectedFlower.occasion ||
+          [],
+      });
 
       setFlowerTypes(
         (
@@ -338,7 +390,7 @@ useEffect(() => {
       if (!trimmedCategory) {
         Alert.alert(
           'Category Required',
-          'Please enter the product category.'
+          'Please choose the product category.'
         );
         return;
       }
@@ -359,10 +411,7 @@ useEffect(() => {
             category:
               trimmedCategory,
 
-            occasion:
-              commaSeparatedToArray(
-                occasion
-              ),
+            occasion: occasions,
 
             flowerTypes:
               commaSeparatedToArray(
@@ -481,11 +530,7 @@ useEffect(() => {
     >
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : undefined
-        }
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
       >
         <View style={styles.header}>
           <View
@@ -686,15 +731,18 @@ useEffect(() => {
               Category
             </Text>
 
-            <TextInput
+            <OptionChips
+              options={categoryOptions}
               value={category}
-              onChangeText={
-                setCategory
-              }
-              placeholder="Example: Bouquet"
-              placeholderTextColor="#AAAAAA"
-              style={styles.input}
+              onChange={setCategory}
+              disabled={saving}
             />
+
+            <Text
+              style={styles.helperText}
+            >
+              Choose one.
+            </Text>
 
             <Text
               style={styles.label}
@@ -702,21 +750,18 @@ useEffect(() => {
               Occasions
             </Text>
 
-            <TextInput
-              value={occasion}
-              onChangeText={
-                setOccasion
-              }
-              placeholder="Birthday, Anniversary"
-              placeholderTextColor="#AAAAAA"
-              style={styles.input}
+            <OptionChips
+              multiple
+              options={occasionOptions}
+              value={occasions}
+              onChange={setOccasions}
+              disabled={saving}
             />
 
             <Text
               style={styles.helperText}
             >
-              Separate multiple
-              occasions with commas.
+              Tap all that apply.
             </Text>
 
             <Text

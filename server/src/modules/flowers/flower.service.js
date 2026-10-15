@@ -301,6 +301,7 @@ export const deactivateFlower =
 
     flower.isActive = false;
     flower.isAvailable = false;
+    flower.hiddenByAdmin = false;
 
     await flower.save();
 

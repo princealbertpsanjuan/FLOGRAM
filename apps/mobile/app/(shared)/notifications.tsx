@@ -94,9 +94,18 @@ export default function NotificationsScreen() {
     }
 
     const disputeId = typeof item.metadata?.disputeId === 'string' ? item.metadata.disputeId : null;
+    // Listing comments: metadata { screen: 'product', flowerId }.
+    const flowerId =
+      item.metadata?.screen === 'product' && typeof item.metadata?.flowerId === 'string'
+        ? item.metadata.flowerId
+        : null;
 
     if (disputeId) {
       router.push({ pathname: '/(shared)/dispute-details', params: { disputeId } } as never);
+    } else if (flowerId && role === 'seller') {
+      router.push({ pathname: '/(seller)/seller-product-feedback', params: { flowerId } } as never);
+    } else if (flowerId && role === 'customer') {
+      router.push({ pathname: '/(customer)/customer-product-details', params: { flowerId } } as never);
     } else if (item.type === 'custom_request' && role === 'seller') {
       const requestId = typeof item.metadata?.requestId === 'string' ? item.metadata.requestId : undefined;
       router.push({ pathname: '/(seller)/seller-custom-requests', params: requestId ? { requestId } : {} } as never);

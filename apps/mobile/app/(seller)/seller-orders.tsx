@@ -47,6 +47,10 @@ import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
+
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 import { formatAddOnsLine } from '../../services/addons';
 
 import ReportProblemLink from '../../components/ui/report-problem-link';
@@ -638,6 +642,15 @@ useEffect(() => {
         orders,
       ]
     );
+
+  /*
+   * Show 5 orders, then "See all (N)".
+   * Collapses again when the filter changes.
+   */
+  const visibleOrders =
+    useSeeAll(filteredOrders, {
+      resetKey: `${filter}:${focusedOrderId || ''}`,
+    });
 
   /*
    * =======================================================
@@ -1250,7 +1263,7 @@ useEffect(() => {
                 </Text>
               </View>
             ) : (
-              filteredOrders.map(
+              visibleOrders.visible.map(
                 (
                   order
                 ) => (
@@ -1299,6 +1312,11 @@ useEffect(() => {
                 )
               )
             )}
+
+            <SeeAllButton
+              state={visibleOrders}
+              role="seller"
+            />
           </View>
         </ScrollView>
 
@@ -1312,50 +1330,53 @@ useEffect(() => {
           animationType="fade"
           onRequestClose={() => setCancelTarget(null)}
         >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>
-                {cancelTarget?.orderStatus === 'pending' ? 'Decline Order' : 'Cancel Order'}
-              </Text>
-              <Text style={styles.modalText}>
-                The customer will see this reason.
-                {cancelTarget?.paymentMethod === 'paymongo' && cancelTarget?.paymentStatus === 'paid'
-                  ? ' This order was paid online, so FLOGRAM Admin will refund the customer.'
-                  : ''}
-              </Text>
-              <TextInput
-                value={cancelReason}
-                onChangeText={setCancelReason}
-                placeholder="e.g. Flowers out of stock today"
-                placeholderTextColor="#9AA59F"
-                multiline
-                maxLength={300}
-                style={styles.modalInput}
-              />
-              <View style={styles.modalActions}>
-                <Pressable
-                  disabled={cancelling}
-                  onPress={() => setCancelTarget(null)}
-                  style={[styles.modalButton, styles.modalButtonGhost]}
-                >
-                  <Text style={[styles.modalButtonText, { color: '#5E9874' }]}>Keep Order</Text>
-                </Pressable>
-                <Pressable
-                  disabled={cancelling}
-                  onPress={() => void submitCancel()}
-                  style={[styles.modalButton, styles.modalButtonDanger, cancelling && { opacity: 0.6 }]}
-                >
-                  {cancelling ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.modalButtonText}>
-                      {cancelTarget?.orderStatus === 'pending' ? 'Decline' : 'Cancel Order'}
-                    </Text>
-                  )}
-                </Pressable>
+          {/* Keeps the reason box above the keyboard. */}
+          <KeyboardSafeView style={styles.modalKeyboard}>
+            <View style={styles.modalBackdrop}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>
+                  {cancelTarget?.orderStatus === 'pending' ? 'Decline Order' : 'Cancel Order'}
+                </Text>
+                <Text style={styles.modalText}>
+                  The customer will see this reason.
+                  {cancelTarget?.paymentMethod === 'paymongo' && cancelTarget?.paymentStatus === 'paid'
+                    ? ' This order was paid online, so FLOGRAM Admin will refund the customer.'
+                    : ''}
+                </Text>
+                <TextInput
+                  value={cancelReason}
+                  onChangeText={setCancelReason}
+                  placeholder="e.g. Flowers out of stock today"
+                  placeholderTextColor="#9AA59F"
+                  multiline
+                  maxLength={300}
+                  style={styles.modalInput}
+                />
+                <View style={styles.modalActions}>
+                  <Pressable
+                    disabled={cancelling}
+                    onPress={() => setCancelTarget(null)}
+                    style={[styles.modalButton, styles.modalButtonGhost]}
+                  >
+                    <Text style={[styles.modalButtonText, { color: '#5E9874' }]}>Keep Order</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={cancelling}
+                    onPress={() => void submitCancel()}
+                    style={[styles.modalButton, styles.modalButtonDanger, cancelling && { opacity: 0.6 }]}
+                  >
+                    {cancelling ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.modalButtonText}>
+                        {cancelTarget?.orderStatus === 'pending' ? 'Decline' : 'Cancel Order'}
+                      </Text>
+                    )}
+                  </Pressable>
+                </View>
               </View>
             </View>
-          </View>
+          </KeyboardSafeView>
         </Modal>
       </View>
     </SafeAreaView>
@@ -2487,12 +2508,15 @@ const styles =
       fontWeight: '800',
     },
 
+    modalKeyboard: {
+      backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+
     modalBackdrop: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       padding: 24,
-      backgroundColor: 'rgba(0,0,0,0.45)',
     },
 
     modalCard: {

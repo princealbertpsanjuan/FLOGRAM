@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 
+import { SeeAllButton, useSeeAll } from '../ui/see-all';
+import { ROLE_ACCENT } from '../ui/state-views';
 import { getStoredUser } from '../../services/auth';
 import {
   deleteListingComment,
@@ -19,10 +31,21 @@ import {
  *
  * Reviews from customers who bought this bouquet, plus
  * public comments/questions. The shop can reply.
+ *
+ * Shared by the customer product page (role "customer",
+ * pink) and the seller's per-product feedback screen
+ * (role "seller", green). A failed load shows an error
+ * with a retry instead of hiding the section.
  * =========================================================
  */
 
-const PINK = '#DF628F';
+type FeedRole = 'customer' | 'seller';
+
+const ACCENT_TINT: Record<FeedRole, string> = {
+  customer: '#FCE8F0',
+  seller: '#E8F2EC',
+};
+
 const TEXT = '#3B3438';
 const MUTED = '#7C7579';
 
@@ -43,33 +66,92 @@ const Stars = ({ value }: { value: number }) => (
   </View>
 );
 
-export default function ListingComments({ flowerId }: { flowerId?: string | null }) {
+export default function ListingComments({
+  flowerId,
+  role = 'customer',
+  onLoaded,
+  style,
+}: {
+  flowerId?: string | null;
+  role?: FeedRole;
+  onLoaded?: (data: ListingFeedback) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const accent = ROLE_ACCENT[role];
   const [data, setData] = useState<ListingFeedback | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
   const [canComment, setCanComment] = useState(false);
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+
+  // Kept in a ref so an inline callback does not re-trigger the fetch.
+  const onLoadedRef = useRef(onLoaded);
+  onLoadedRef.current = onLoaded;
 
   const load = useCallback(async () => {
     if (!flowerId) return;
     try {
-      setData(await getListingFeedback(flowerId));
-    } catch {
-      setData(null);
+      setLoadError('');
+      const next = await getListingFeedback(flowerId);
+      setData(next);
+      onLoadedRef.current?.(next);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not load reviews and comments.');
+    } finally {
+      setLoading(false);
     }
   }, [flowerId]);
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
     void getStoredUser().then(user => {
       setUserId(user?._id || null);
       setCanComment(user?.role === 'customer' || user?.role === 'seller');
     });
-  }, [load]);
+  }, []);
 
-  if (!flowerId || !data) {
+  const feed = data
+    ? [
+        ...data.reviews.map(review => ({ kind: 'review' as const, ...review })),
+        ...data.comments.map(comment => ({ kind: 'comment' as const, ...comment })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    : [];
+
+  const seeAll = useSeeAll(feed, { resetKey: flowerId });
+
+  if (!flowerId) {
     return null;
+  }
+
+  if (!data) {
+    return (
+      <View style={[styles.card, style]}>
+        <Text style={styles.title}>Reviews & Comments</Text>
+        {loading ? (
+          <ActivityIndicator color={accent} style={{ marginVertical: 14 }} />
+        ) : (
+          <View style={styles.errorBox}>
+            <Text style={styles.empty}>{loadError || 'Could not load reviews and comments.'}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setLoading(true);
+                void load();
+              }}
+              style={[styles.retry, { borderColor: accent }]}
+            >
+              <Ionicons name="refresh" size={14} color={accent} />
+              <Text style={[styles.moreText, { color: accent }]}>Try again</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
   }
 
   const post = async () => {
@@ -105,15 +187,8 @@ export default function ListingComments({ flowerId }: { flowerId?: string | null
     ]);
   };
 
-  const feed = [
-    ...data.reviews.map(review => ({ kind: 'review' as const, ...review })),
-    ...data.comments.map(comment => ({ kind: 'comment' as const, ...comment })),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  const visible = showAll ? feed : feed.slice(0, 4);
-
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, style]}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Reviews & Comments</Text>
         {data.averageRating ? (
@@ -127,12 +202,22 @@ export default function ListingComments({ flowerId }: { flowerId?: string | null
       </View>
 
       {feed.length === 0 ? (
-        <Text style={styles.empty}>No reviews or comments yet. Be the first to ask the shop a question.</Text>
+        <Text style={styles.empty}>
+          {role === 'seller'
+            ? 'No reviews or comments on this listing yet.'
+            : 'No reviews or comments yet. Be the first to ask the shop a question.'}
+        </Text>
       ) : (
-        visible.map(entry => (
+        seeAll.visible.map(entry => (
           <View key={`${entry.kind}-${entry._id}`} style={styles.entry}>
-            <View style={[styles.avatar, entry.kind === 'comment' && entry.authorRole === 'seller' && styles.shopAvatar]}>
-              <Text style={styles.avatarText}>
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: ACCENT_TINT[role] },
+                entry.kind === 'comment' && entry.authorRole === 'seller' && styles.shopAvatar,
+              ]}
+            >
+              <Text style={[styles.avatarText, { color: accent }]}>
                 {entry.kind === 'comment' && entry.authorRole === 'seller' ? '🌸' : entry.authorName.slice(0, 1).toUpperCase()}
               </Text>
             </View>
@@ -161,28 +246,24 @@ export default function ListingComments({ flowerId }: { flowerId?: string | null
         ))
       )}
 
-      {feed.length > 4 ? (
-        <Pressable onPress={() => setShowAll(current => !current)} style={styles.more}>
-          <Text style={styles.moreText}>{showAll ? 'Show less' : `Show all ${feed.length}`}</Text>
-        </Pressable>
-      ) : null}
+      <SeeAllButton state={seeAll} role={role} />
 
       {canComment ? (
         <View style={styles.composer}>
           <TextInput
             value={text}
             onChangeText={setText}
-            placeholder="Ask the shop or leave a comment…"
+            placeholder={role === 'seller' ? 'Reply to your customers…' : 'Ask the shop or leave a comment…'}
             placeholderTextColor="#B5AEB2"
             maxLength={500}
             multiline
             style={styles.input}
           />
           <Pressable
-            accessibilityLabel="Post comment"
+            accessibilityLabel={role === 'seller' ? 'Post reply' : 'Post comment'}
             disabled={posting || !text.trim()}
             onPress={() => void post()}
-            style={[styles.send, (posting || !text.trim()) && { opacity: 0.5 }]}
+            style={[styles.send, { backgroundColor: accent }, (posting || !text.trim()) && { opacity: 0.5 }]}
           >
             {posting ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="send" size={16} color="#FFFFFF" />}
           </Pressable>
@@ -217,7 +298,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FCE8F0',
   },
   shopAvatar: { backgroundColor: '#E8F2EC' },
-  avatarText: { color: PINK, fontSize: 14, fontWeight: '800' },
+  avatarText: { fontSize: 14, fontWeight: '800' },
   entryHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 },
   author: { color: TEXT, fontSize: 13, fontWeight: '800' },
   verified: { flexDirection: 'row', alignItems: 'center', gap: 2 },
@@ -225,8 +306,17 @@ const styles = StyleSheet.create({
   time: { color: MUTED, fontSize: 11 },
   body: { marginTop: 3, color: TEXT, fontSize: 13, lineHeight: 19 },
   delete: { marginTop: 4, color: '#C2413B', fontSize: 12, fontWeight: '700' },
-  more: { alignItems: 'center', paddingVertical: 8 },
-  moreText: { color: PINK, fontSize: 13, fontWeight: '800' },
+  errorBox: { alignItems: 'flex-start', gap: 10, marginTop: 4 },
+  retry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  moreText: { fontSize: 13, fontWeight: '800' },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 10 },
   input: {
     flex: 1,
@@ -239,5 +329,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: '#F7F2F4',
   },
-  send: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: PINK },
+  send: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
 });

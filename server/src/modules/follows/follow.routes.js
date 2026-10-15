@@ -3,17 +3,21 @@ import { Router } from "express";
 import authenticate from "../../middleware/authenticate.js";
 import authorize from "../../middleware/authorize.js";
 
-import { follow, mine, status, unfollow } from "./follow.controller.js";
+import { follow, mine, sellerFollowers, status, unfollow } from "./follow.controller.js";
 
 /*
  * /api/v1/follows
  *
+ * GET    /seller/mine               (seller) customers following my shop
  * GET    /mine                      shops I follow
  * GET    /florists/:floristId       follow status + follower count
  * POST   /florists/:floristId       follow
  * DELETE /florists/:floristId       unfollow
  */
 const followRouter = Router();
+
+// Seller route first: everything below it is customer-only.
+followRouter.get("/seller/mine", authenticate, authorize("seller"), sellerFollowers);
 
 followRouter.use(authenticate, authorize("customer"));
 

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -20,7 +21,10 @@ import {
 
 import SafeAreaView from '../../components/ui/top-safe-area-view';
 
-import { router } from 'expo-router';
+import {
+  router,
+  useLocalSearchParams,
+} from 'expo-router';
 
 import {
   getStoredUser,
@@ -41,7 +45,24 @@ import {
 
 import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
+import {
+  getMyShopFollowers,
+  type ShopFollowers,
+} from '../../services/follows';
+
 import { ScreenLoader } from '../../components/ui/state-views';
+
+import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
+
+import {
+  SeeAllButton,
+  useSeeAll,
+} from '../../components/ui/see-all';
+
+import ShopLocationPicker, {
+  isValidShopCoordinate,
+  type ShopCoordinate,
+} from '../../components/seller/shop-location-picker';
 
 /*
  * =========================================================
@@ -53,6 +74,7 @@ type ProfileData = {
   user: AuthUser | null;
   florist: FloristProfile;
   reviews: SellerReviewsData;
+  followers: ShopFollowers | null;
 };
 
 type EditForm = {
@@ -65,6 +87,7 @@ type EditForm = {
   city: string;
   province: string;
   postalCode: string;
+  location: ShopCoordinate | null;
 };
 
 
@@ -97,6 +120,18 @@ const getInitialForm = (
 
   postalCode:
     florist.address?.postalCode || '',
+
+  location:
+    isValidShopCoordinate(
+      florist.location
+    )
+      ? {
+          latitude:
+            florist.location.latitude,
+          longitude:
+            florist.location.longitude,
+        }
+      : null,
 });
 
 /*
@@ -158,7 +193,36 @@ export default function SellerProfileScreen() {
       city: '',
       province: '',
       postalCode: '',
+      location: null,
     });
+
+  const [
+    followersVisible,
+    setFollowersVisible,
+  ] =
+    useState(false);
+
+  const followerList =
+    useSeeAll(
+      data?.followers
+        ?.followers,
+      {
+        resetKey:
+          followersVisible,
+      }
+    );
+
+  /*
+   * Dashboard "Set your shop's map pin" banner opens
+   * this screen with ?openEdit=1.
+   */
+  const params =
+    useLocalSearchParams<{
+      openEdit?: string;
+    }>();
+
+  const autoOpenedRef =
+    useRef(false);
 
   /*
    * =======================================================
@@ -173,11 +237,16 @@ export default function SellerProfileScreen() {
           storedUser,
           florist,
           reviews,
+          followers,
         ] =
           await Promise.all([
             getStoredUser(),
             getMyFloristProfile(),
             getSellerReviews(),
+            // Followers are extra; never block the profile.
+            getMyShopFollowers().catch(
+              () => null
+            ),
           ]);
 
         setData({
@@ -185,6 +254,7 @@ export default function SellerProfileScreen() {
             storedUser,
           florist,
           reviews,
+          followers,
         });
 
         setError(null);
@@ -332,6 +402,23 @@ export default function SellerProfileScreen() {
       data,
     ]);
 
+  useEffect(() => {
+    if (
+      params.openEdit &&
+      data?.florist &&
+      !autoOpenedRef.current
+    ) {
+      autoOpenedRef.current =
+        true;
+
+      openEditProfile();
+    }
+  }, [
+    params.openEdit,
+    data,
+    openEditProfile,
+  ]);
+
   const updateField = <
     K extends keyof EditForm,
   >(
@@ -397,6 +484,15 @@ export default function SellerProfileScreen() {
                   postalCode:
                     form.postalCode.trim(),
                 },
+
+                // Shop map pin used by checkout for
+                // delivery route and fee.
+                ...(form.location
+                  ? {
+                      location:
+                        form.location,
+                    }
+                  : {}),
               }
             );
 
@@ -860,6 +956,46 @@ export default function SellerProfileScreen() {
                   </View>
                 )}
               </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="View shop followers"
+                onPress={() =>
+                  setFollowersVisible(
+                    true
+                  )
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.followersStat,
+
+                  pressed &&
+                    styles.buttonPressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.followersCount
+                  }
+                >
+                  {data?.followers
+                    ?.count ?? 0}
+                </Text>
+
+                <Text
+                  style={
+                    styles.followersLabel
+                  }
+                >
+                  {(data?.followers
+                    ?.count ?? 0) ===
+                  1
+                    ? 'Follower'
+                    : 'Followers'}
+                  {' ›'}
+                </Text>
+              </Pressable>
             </View>
           </View>
 
@@ -954,6 +1090,21 @@ export default function SellerProfileScreen() {
               label="Pickup Address"
               value={
                 locationText
+              }
+            />
+
+            <InfoRow
+              label="Map Pin"
+              value={
+                isValidShopCoordinate(
+                  florist?.location
+                )
+                  ? `${florist.location.latitude.toFixed(
+                      5
+                    )}, ${florist.location.longitude.toFixed(
+                      5
+                    )}`
+                  : 'Not set — tap Edit to pin your shop'
               }
               last
             />
@@ -1166,6 +1317,7 @@ export default function SellerProfileScreen() {
             }
           }}
         >
+          <KeyboardSafeView>
           <View
             style={
               styles.modalOverlay
@@ -1381,6 +1533,30 @@ export default function SellerProfileScreen() {
                   }
                 />
 
+                <Text
+                  style={
+                    styles.formSectionTitle
+                  }
+                >
+                  Shop Map Pin
+                </Text>
+
+                <ShopLocationPicker
+                  value={
+                    form.location
+                  }
+                  onChange={
+                    value =>
+                      updateField(
+                        'location',
+                        value
+                      )
+                  }
+                  disabled={
+                    saving
+                  }
+                />
+
                 <View
                   style={
                     styles.modalActions
@@ -1451,12 +1627,241 @@ export default function SellerProfileScreen() {
               </ScrollView>
             </View>
           </View>
+          </KeyboardSafeView>
+        </Modal>
+
+        {/* ============================================= */}
+        {/* FOLLOWERS MODAL */}
+        {/* ============================================= */}
+
+        <Modal
+          visible={
+            followersVisible
+          }
+          animationType="slide"
+          transparent
+          onRequestClose={() =>
+            setFollowersVisible(
+              false
+            )
+          }
+        >
+          <View
+            style={
+              styles.modalOverlay
+            }
+          >
+            <View
+              style={
+                styles.modalContainer
+              }
+            >
+              <View
+                style={
+                  styles.modalHeader
+                }
+              >
+                <View>
+                  <Text
+                    style={
+                      styles.modalTitle
+                    }
+                  >
+                    Followers
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.modalSubtitle
+                    }
+                  >
+                    {data?.followers
+                      ?.count ?? 0}{' '}
+                    {(data?.followers
+                      ?.count ?? 0) === 1
+                      ? 'customer follows'
+                      : 'customers follow'}{' '}
+                    your shop
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={
+                    styles.modalClose
+                  }
+                  onPress={() =>
+                    setFollowersVisible(
+                      false
+                    )
+                  }
+                >
+                  <Text
+                    style={
+                      styles.modalCloseText
+                    }
+                  >
+                    ×
+                  </Text>
+                </Pressable>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={
+                  false
+                }
+                contentContainerStyle={
+                  styles.modalScrollContent
+                }
+              >
+                {!data?.followers ? (
+                  <Text
+                    style={
+                      styles.followersEmpty
+                    }
+                  >
+                    Unable to load followers right now. Pull down on your profile to refresh.
+                  </Text>
+                ) : data.followers
+                    .followers.length ===
+                  0 ? (
+                  <Text
+                    style={
+                      styles.followersEmpty
+                    }
+                  >
+                    No followers yet. Customers can follow your shop from its shop page to get notified about new bouquets.
+                  </Text>
+                ) : (
+                  <>
+                    {followerList.visible.map(
+                      item => {
+                        const fullName =
+                          `${item.customer.firstName ?? ''} ${
+                            item.customer.lastName ?? ''
+                          }`.trim() ||
+                          'Customer';
+
+                        const initials =
+                          fullName
+                            .split(/\s+/)
+                            .map(part =>
+                              part.charAt(0)
+                            )
+                            .join('')
+                            .slice(0, 2)
+                            .toUpperCase();
+
+                        return (
+                          <View
+                            key={
+                              item._id
+                            }
+                            style={
+                              styles.followerRow
+                            }
+                          >
+                            {item.customer
+                              .profileImage ? (
+                              <Image
+                                source={{
+                                  uri: item
+                                    .customer
+                                    .profileImage,
+                                }}
+                                style={
+                                  styles.followerAvatar
+                                }
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.followerAvatar,
+                                  styles.followerInitials,
+                                ]}
+                              >
+                                <Text
+                                  style={
+                                    styles.followerInitialsText
+                                  }
+                                >
+                                  {initials}
+                                </Text>
+                              </View>
+                            )}
+
+                            <View
+                              style={{
+                                flex: 1,
+                              }}
+                            >
+                              <Text
+                                style={
+                                  styles.followerName
+                                }
+                                numberOfLines={
+                                  1
+                                }
+                              >
+                                {fullName}
+                              </Text>
+
+                              <Text
+                                style={
+                                  styles.followerDate
+                                }
+                              >
+                                Followed{' '}
+                                {formatFollowDate(
+                                  item.followedAt
+                                )}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      }
+                    )}
+
+                    <SeeAllButton
+                      state={
+                        followerList
+                      }
+                      role="seller"
+                    />
+                  </>
+                )}
+              </ScrollView>
+            </View>
+          </View>
         </Modal>
       </View>
     </SafeAreaView>
   );
 }
 
+
+const formatFollowDate = (
+  value: string
+) => {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return '';
+  }
+
+  return date.toLocaleDateString(
+    'en-PH',
+    {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }
+  );
+};
 
 /*
  * =========================================================
@@ -2248,6 +2653,94 @@ const styles =
     /*
      * EDIT MODAL
      */
+
+    followersStat: {
+      flexDirection:
+        'row',
+      alignItems:
+        'baseline',
+      alignSelf:
+        'flex-start',
+      gap: 6,
+      marginTop: 12,
+      paddingHorizontal:
+        12,
+      paddingVertical: 8,
+      borderRadius: 14,
+      backgroundColor:
+        '#EAF4ED',
+    },
+
+    followersCount: {
+      color: '#5E9874',
+      fontSize: 16,
+      fontWeight:
+        '900',
+    },
+
+    followersLabel: {
+      color: '#5E9874',
+      fontSize: 12,
+      fontWeight:
+        '700',
+    },
+
+    followersEmpty: {
+      color: '#6F746F',
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign:
+        'center',
+      marginTop: 20,
+    },
+
+    followerRow: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      gap: 12,
+      backgroundColor:
+        '#FFFFFF',
+      borderRadius: 14,
+      padding: 12,
+      marginBottom: 10,
+    },
+
+    followerAvatar: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+    },
+
+    followerInitials: {
+      backgroundColor:
+        '#EAF4ED',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    followerInitialsText: {
+      color: '#5E9874',
+      fontSize: 14,
+      fontWeight:
+        '800',
+    },
+
+    followerName: {
+      color: '#2F3431',
+      fontSize: 14,
+      fontWeight:
+        '700',
+    },
+
+    followerDate: {
+      color: '#8A8F8B',
+      fontSize: 12,
+      marginTop: 2,
+    },
 
     modalOverlay: {
       flex: 1,

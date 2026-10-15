@@ -29,6 +29,8 @@ import SellerBottomNav from '../../components/seller/seller-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+
 /*
  * =========================================================
  * TYPES
@@ -200,7 +202,8 @@ export default function SellerProductsScreen() {
         flowers.filter(
           (flower) =>
             flower.isActive !==
-            false
+              false ||
+            flower.hiddenByAdmin
         );
 
       if (
@@ -226,6 +229,15 @@ export default function SellerProductsScreen() {
     }, [flowers, filter]);
 
   /*
+   * Show 5 products, then "See all (N)".
+   * Collapses again when the filter changes.
+   */
+  const visibleFlowers =
+    useSeeAll(filteredFlowers, {
+      resetKey: filter,
+    });
+
+  /*
    * =======================================================
    * COUNTS
    * =======================================================
@@ -235,7 +247,8 @@ export default function SellerProductsScreen() {
     const activeFlowers =
       flowers.filter(
         (flower) =>
-          flower.isActive !== false
+          flower.isActive !== false ||
+          flower.hiddenByAdmin
       );
 
     return {
@@ -686,7 +699,7 @@ export default function SellerProductsScreen() {
               </Text>
             </View>
           ) : (
-            filteredFlowers.map(
+            visibleFlowers.visible.map(
               (flower) => (
                 <ProductCard
                   key={flower._id}
@@ -718,10 +731,28 @@ onEdit={() =>
                       flower
                     )
                   }
+                  onFeedback={() =>
+                    router.push({
+                      pathname:
+                        '/(seller)/seller-product-feedback',
+                      params: {
+                        flowerId: flower._id,
+                        name: flower.name,
+                      },
+                    } as never)
+                  }
                 />
               )
             )
           )}
+
+          {filteredFlowers.length >
+          0 ? (
+            <SeeAllButton
+              state={visibleFlowers}
+              role="seller"
+            />
+          ) : null}
 
           <View
             style={
@@ -789,6 +820,7 @@ function ProductCard({
   onAvailabilityChange,
   onEdit,
   onDelete,
+  onFeedback,
 }: {
   flower: FlowerListing;
   updating: boolean;
@@ -797,6 +829,7 @@ function ProductCard({
   ) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onFeedback: () => void;
 }) {
   const imageUrl =
     getProductImage(flower);
@@ -917,6 +950,20 @@ function ProductCard({
           {flower.description}
         </Text>
 
+        {flower.hiddenByAdmin ? (
+          <View style={styles.adminHiddenNotice}>
+            <Text style={styles.adminHiddenTitle}>
+              Hidden by FLOGRAM Admin
+            </Text>
+            <Text style={styles.adminHiddenText}>
+              Customers can't see this listing
+              {flower.adminHiddenReason
+                ? `. Reason: ${flower.adminHiddenReason}`
+                : '. Please review it or contact the Admin through Report a Problem.'}
+            </Text>
+          </View>
+        ) : null}
+
         {/* AVAILABILITY */}
 
         <View
@@ -1025,6 +1072,34 @@ function ProductCard({
             </Text>
           </Pressable>
         </View>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.feedbackButton,
+            pressed && {
+              opacity: 0.75,
+            },
+          ]}
+          onPress={onFeedback}
+          accessibilityRole="button"
+          accessibilityLabel={`Reviews and comments for ${flower.name}`}
+        >
+          <Text
+            style={
+              styles.editIcon
+            }
+          >
+            ★
+          </Text>
+
+          <Text
+            style={
+              styles.editText
+            }
+          >
+            Reviews & Comments
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -1431,6 +1506,20 @@ const styles =
       color: '#659676',
       fontSize: 11,
       fontWeight: '700',
+    },
+
+    feedbackButton: {
+      minHeight: 34,
+      marginTop: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor:
+        '#D5E6DA',
+      backgroundColor:
+        '#FFFFFF',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
     },
 
     deleteButton: {
