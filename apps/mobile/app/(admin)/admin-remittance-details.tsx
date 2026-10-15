@@ -28,6 +28,7 @@ import {
 } from "../../services/admin";
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import AdminContactActions from '../../components/admin/admin-contact-actions';
 
 import { getUploadUrl } from '../../utils/media';
 
@@ -676,6 +677,11 @@ export default function AdminRemittanceDetailsScreen() {
               remittance.riderUser?.phoneNumber ||
               "Not provided"
             }
+          />
+
+          <AdminContactActions
+            phone={remittance.riderUser?.phoneNumber}
+            compact
           />
 
           <InfoRow

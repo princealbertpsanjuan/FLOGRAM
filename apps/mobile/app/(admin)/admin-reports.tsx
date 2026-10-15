@@ -32,6 +32,13 @@ import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+import CollapsibleSection from '../../components/ui/collapsible-section';
+import {
+  DateRangeButton,
+  formatRange,
+  type DateRange,
+} from '../../components/ui/date-range-picker';
+import { useDesktopWeb } from '../../hooks/use-desktop-web';
 
 /*
  * =========================================================
@@ -271,6 +278,8 @@ function StatCard({
   detail,
   tone = "purple",
 }: StatCardProps) {
+  const desktop = useDesktopWeb();
+
   const toneData = {
     purple: {
       iconColor: COLORS.purpleAccent,
@@ -303,7 +312,12 @@ function StatCard({
   }[tone];
 
   return (
-    <View style={styles.statCard}>
+    <View
+      style={[
+        styles.statCard,
+        desktop && styles.statCardDesktop,
+      ]}
+    >
       <View
         style={[
           styles.statIcon,
@@ -399,12 +413,18 @@ type BreakdownCardProps = {
     typeof Ionicons
   >["name"];
   data: AdminReportBreakdown[];
+  /*
+   * Inside a dropdown section: no outer card or title
+   * (the section header already shows them).
+   */
+  bare?: boolean;
 };
 
 function BreakdownCard({
   title,
   icon,
   data,
+  bare = false,
 }: BreakdownCardProps) {
   const total = data.reduce(
     (sum, item) =>
@@ -413,20 +433,27 @@ function BreakdownCard({
   );
 
   return (
-    <View style={styles.contentCard}>
-      <View style={styles.cardTitleRow}>
-        <View style={styles.cardTitleIcon}>
-          <Ionicons
-            name={icon}
-            size={18}
-            color={COLORS.purpleAccent}
-          />
-        </View>
+    <View
+      style={[
+        styles.contentCard,
+        bare && styles.flatCard,
+      ]}
+    >
+      {bare ? null : (
+        <View style={styles.cardTitleRow}>
+          <View style={styles.cardTitleIcon}>
+            <Ionicons
+              name={icon}
+              size={18}
+              color={COLORS.purpleAccent}
+            />
+          </View>
 
-        <Text style={styles.cardTitle}>
-          {title}
-        </Text>
-      </View>
+          <Text style={styles.cardTitle}>
+            {title}
+          </Text>
+        </View>
+      )}
 
       {data.length === 0 ? (
         <Text
@@ -741,6 +768,8 @@ function AdminBottomNavigation() {
 export default function AdminReportsScreen() {
   const router = useRouter();
 
+  const desktop = useDesktopWeb();
+
   const { period } =
     useLocalSearchParams<{
       period?: string | string[];
@@ -767,6 +796,17 @@ export default function AdminReportsScreen() {
       initialPeriod
     );
 
+  /*
+   * Custom calendar range. When set it overrides the
+   * period chips (the server receives startDate/endDate).
+   */
+  const [
+    customRange,
+    setCustomRange,
+  ] = useState<DateRange | null>(
+    null
+  );
+
   const [report, setReport] =
     useState<AdminReportsData | null>(
       null
@@ -781,12 +821,22 @@ export default function AdminReportsScreen() {
   ] = useState(false);
 
   const [
-  headerRefreshing,
-  setHeaderRefreshing,
-] = useState(false);
+    headerRefreshing,
+    setHeaderRefreshing,
+  ] = useState(false);
 
   const [error, setError] =
     useState("");
+
+  const fetchReport =
+    useCallback(
+      () =>
+        getAdminReports(
+          selectedPeriod,
+          customRange
+        ),
+      [selectedPeriod, customRange]
+    );
 
   /*
    * =======================================================
@@ -797,8 +847,6 @@ export default function AdminReportsScreen() {
   const loadReport =
     useCallback(
       async (
-        period:
-          AdminReportPeriod,
         isRefresh = false
       ) => {
         try {
@@ -811,9 +859,7 @@ export default function AdminReportsScreen() {
           setError("");
 
           const data =
-            await getAdminReports(
-              period
-            );
+            await fetchReport();
 
           setReport(data);
         } catch (err) {
@@ -828,7 +874,7 @@ export default function AdminReportsScreen() {
           setRefreshing(false);
         }
       },
-      []
+      [fetchReport]
     );
 
   /*
@@ -847,9 +893,7 @@ export default function AdminReportsScreen() {
           setError("");
 
           const data =
-            await getAdminReports(
-              selectedPeriod
-            );
+            await fetchReport();
 
           if (active) {
             setReport(data);
@@ -874,38 +918,37 @@ export default function AdminReportsScreen() {
       return () => {
         active = false;
       };
-    }, [selectedPeriod])
+    }, [fetchReport])
   );
+
   const handleHeaderRefresh =
-  useCallback(async () => {
-    if (headerRefreshing) {
-      return;
-    }
+    useCallback(async () => {
+      if (headerRefreshing) {
+        return;
+      }
 
-    setHeaderRefreshing(true);
+      setHeaderRefreshing(true);
 
-    try {
-      setError("");
+      try {
+        setError("");
 
-      const data =
-        await getAdminReports(
-          selectedPeriod
+        const data =
+          await fetchReport();
+
+        setReport(data);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Reports and analytics could not be loaded."
         );
-
-      setReport(data);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Reports and analytics could not be loaded."
-      );
-    } finally {
-      setHeaderRefreshing(false);
-    }
-  }, [
-    headerRefreshing,
-    selectedPeriod,
-  ]);
+      } finally {
+        setHeaderRefreshing(false);
+      }
+    }, [
+      headerRefreshing,
+      fetchReport,
+    ]);
 
   /*
    * =======================================================
@@ -915,10 +958,12 @@ export default function AdminReportsScreen() {
 
   const periodLabel = useMemo(
     () =>
-      getPeriodLabel(
-        selectedPeriod
-      ),
-    [selectedPeriod]
+      customRange
+        ? formatRange(customRange)
+        : getPeriodLabel(
+            selectedPeriod
+          ),
+    [selectedPeriod, customRange]
   );
 
   const orderTotal =
@@ -959,17 +1004,17 @@ export default function AdminReportsScreen() {
       : 0;
 
   /*
+   * Top Shops: show 5 + "See all"; collapses on period change.
+   */
+  const topShopsSeeAll = useSeeAll(report?.topShops, {
+    resetKey: `${selectedPeriod}|${customRange?.start ?? ""}|${customRange?.end ?? ""}`,
+  });
+
+  /*
    * =======================================================
    * LOADING
    * =======================================================
    */
-
-  /*
-   * Top Shops: show 5 + "See all"; collapses on period change.
-   */
-  const topShopsSeeAll = useSeeAll(report?.topShops, {
-    resetKey: selectedPeriod,
-  });
 
   if (loading && !report) {
     return (
@@ -1008,9 +1053,7 @@ export default function AdminReportsScreen() {
         <Pressable
           style={styles.retryButton}
           onPress={() =>
-            void loadReport(
-              selectedPeriod
-            )
+            void loadReport()
           }
         >
           <Ionicons
@@ -1035,7 +1078,18 @@ export default function AdminReportsScreen() {
     return null;
   }
 
-   return (
+  const salesOrders =
+    report.overview.salesOrders ??
+    report.sales.orders ??
+    0;
+
+  const codAwaiting =
+    report.sales.codAwaitingRemittance;
+
+  const awaitingConfirmation =
+    report.orders.awaitingConfirmation ?? 0;
+
+  return (
     <View style={styles.container}>
       <ScrollView
         style={styles.mainScroll}
@@ -1047,10 +1101,7 @@ export default function AdminReportsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() =>
-              void loadReport(
-                selectedPeriod,
-                true
-              )
+              void loadReport(true)
             }
             tintColor={
               COLORS.purpleAccent
@@ -1065,106 +1116,123 @@ export default function AdminReportsScreen() {
          */}
 
         <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View
-              style={
-                styles.headerTitleContent
-              }
-            >
-              <Text
-                style={
-                  styles.headerEyebrow
-                }
-              >
-                SYSTEM ANALYTICS
-              </Text>
-
-              <Text
-                style={styles.headerTitle}
-              >
-                Reports & Analytics
-              </Text>
-
-              <Text
-                style={
-                  styles.headerSubtitle
-                }
-              >
-                Monitor FLOGRAM&apos;s
-                marketplace performance
-                and financial activity.
-              </Text>
-            </View>
-
-            <Pressable
-              style={[
-                styles.headerButton,
-                headerRefreshing &&
-                  styles.headerButtonDisabled,
-              ]}
-              onPress={
-                handleHeaderRefresh
-              }
-              disabled={
-                headerRefreshing
-              }
-            >
-              {headerRefreshing ? (
-                <ActivityIndicator
-                  size="small"
-                  color="#FFFFFF"
-                />
-              ) : (
-                <Ionicons
-                  name="refresh-outline"
-                  size={21}
-                  color="#FFFFFF"
-                />
-              )}
-            </Pressable>
-          </View>
-
           <View
-            style={styles.headerSummary}
+            style={[
+              styles.headerInner,
+              desktop && styles.desktopWidth,
+            ]}
           >
-            <View>
-              <Text
+            <View style={styles.headerTop}>
+              <View
                 style={
-                  styles.headerSummaryLabel
+                  styles.headerTitleContent
                 }
               >
-                Recognized Sales
-              </Text>
+                <Text
+                  style={
+                    styles.headerEyebrow
+                  }
+                >
+                  SYSTEM ANALYTICS
+                </Text>
 
-              <Text
-                style={
-                  styles.headerSummaryValue
+                <Text
+                  style={styles.headerTitle}
+                >
+                  Reports & Analytics
+                </Text>
+
+                <Text
+                  style={
+                    styles.headerSubtitle
+                  }
+                >
+                  Monitor FLOGRAM&apos;s
+                  marketplace performance
+                  and financial activity.
+                </Text>
+              </View>
+
+              <Pressable
+                style={[
+                  styles.headerButton,
+                  headerRefreshing &&
+                    styles.headerButtonDisabled,
+                ]}
+                onPress={
+                  handleHeaderRefresh
+                }
+                disabled={
+                  headerRefreshing
                 }
               >
-                {formatCurrency(
-                  report.sales.total
+                {headerRefreshing ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Ionicons
+                    name="refresh-outline"
+                    size={21}
+                    color="#FFFFFF"
+                  />
                 )}
-              </Text>
+              </Pressable>
             </View>
 
             <View
-              style={
-                styles.headerPeriodBadge
-              }
+              style={styles.headerSummary}
             >
-              <Ionicons
-                name="calendar-outline"
-                size={15}
-                color="#FFFFFF"
-              />
+              <View style={styles.headerSummaryText}>
+                <Text
+                  style={
+                    styles.headerSummaryLabel
+                  }
+                >
+                  Recognized Sales
+                </Text>
 
-              <Text
+                <Text
+                  style={
+                    styles.headerSummaryValue
+                  }
+                >
+                  {formatCurrency(
+                    report.sales.total
+                  )}
+                </Text>
+
+                <Text
+                  style={
+                    styles.headerSummaryHint
+                  }
+                >
+                  {formatNumber(salesOrders)} completed{" "}
+                  {salesOrders === 1 ? "order" : "orders"}
+                </Text>
+              </View>
+
+              <View
                 style={
-                  styles.headerPeriodText
+                  styles.headerPeriodBadge
                 }
               >
-                {periodLabel}
-              </Text>
+                <Ionicons
+                  name="calendar-outline"
+                  size={15}
+                  color="#FFFFFF"
+                />
+
+                <Text
+                  style={
+                    styles.headerPeriodText
+                  }
+                  numberOfLines={1}
+                >
+                  {periodLabel}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -1175,26 +1243,24 @@ export default function AdminReportsScreen() {
          * =================================================
          */}
 
-        <View style={styles.body}>
+        <View
+          style={[
+            styles.body,
+            desktop && styles.desktopWidth,
+          ]}
+        >
           <SectionHeader
             eyebrow="REPORT PERIOD"
-            title="Analytics Overview"
-            subtitle="Choose a period to update all report data."
+            title="Choose a Period"
+            subtitle="Every section below uses this period (Philippine time)."
           />
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={
-              false
-            }
-            contentContainerStyle={
-              styles.periodRow
-            }
-          >
+          <View style={styles.periodRow}>
             {PERIODS.map((item) => {
               const active =
+                !customRange &&
                 selectedPeriod ===
-                item.value;
+                  item.value;
 
               return (
                 <Pressable
@@ -1204,11 +1270,12 @@ export default function AdminReportsScreen() {
                     active &&
                       styles.periodButtonActive,
                   ]}
-                  onPress={() =>
+                  onPress={() => {
+                    setCustomRange(null);
                     setSelectedPeriod(
                       item.value
-                    )
-                  }
+                    );
+                  }}
                 >
                   <Text
                     style={[
@@ -1222,7 +1289,14 @@ export default function AdminReportsScreen() {
                 </Pressable>
               );
             })}
-          </ScrollView>
+
+            <DateRangeButton
+              value={customRange}
+              onChange={setCustomRange}
+              role="admin"
+              maxDate={new Date()}
+            />
+          </View>
 
           {error ? (
             <View
@@ -1244,296 +1318,355 @@ export default function AdminReportsScreen() {
             </View>
           ) : null}
 
-          <View style={styles.statGrid}>
-            <StatCard
-              icon="cash-outline"
-              label="Sales"
-              value={formatCurrency(
-                report.overview
-                  .recognizedSales
-              )}
-              detail="Recognized"
-              tone="purple"
-            />
+          {/*
+           * ===============================================
+           * GROUP: SALES & ORDERS
+           * ===============================================
+           */}
 
-            <StatCard
-              icon="receipt-outline"
-              label="Orders"
-              value={formatNumber(
-                report.overview
-                  .totalOrders
-              )}
-              detail={`${formatPercent(
-                report.overview
-                  .completionRate
-              )} completed`}
-              tone="blue"
-            />
+          <Text style={styles.groupTitle}>
+            SALES & ORDERS
+          </Text>
 
-            <StatCard
-              icon="people-outline"
-              label="Users"
-              value={formatNumber(
-                report.overview
-                  .totalUsers
-              )}
-              detail="Platform users"
-              tone="green"
-            />
-
-            <StatCard
-              icon="wallet-outline"
-              label="Commission"
-              value={formatCurrency(
-                report.overview
-                  .commission
-              )}
-              detail={`${report.sales.commissionPercentage}% platform share`}
-              tone="yellow"
-            />
-          </View>
-
-          <SectionHeader
-            eyebrow="FINANCIAL PERFORMANCE"
-            title="Sales & Revenue"
-            subtitle="Money actually received: confirmed online payments, Cash on Pickup handovers and Admin-verified COD remittances (Philippine time)."
-          />
-
-          <View
-            style={styles.financeHero}
+          <CollapsibleSection
+            title="Analytics Overview"
+            subtitle="Sales, orders, users and commission at a glance"
+            icon="grid-outline"
+            role="admin"
           >
+            <View style={[styles.statGrid, styles.statGridInSection]}>
+              <StatCard
+                icon="cash-outline"
+                label="Sales"
+                value={formatCurrency(
+                  report.overview
+                    .recognizedSales
+                )}
+                detail={`${formatNumber(salesOrders)} completed ${salesOrders === 1 ? "order" : "orders"}`}
+                tone="purple"
+              />
+
+              <StatCard
+                icon="receipt-outline"
+                label="Orders Placed"
+                value={formatNumber(
+                  report.overview
+                    .totalOrders
+                )}
+                detail={`${formatPercent(
+                  report.overview
+                    .completionRate
+                )} completed`}
+                tone="blue"
+              />
+
+              <StatCard
+                icon="people-outline"
+                label="Users"
+                value={formatNumber(
+                  report.overview
+                    .totalUsers
+                )}
+                detail="Platform users"
+                tone="green"
+              />
+
+              <StatCard
+                icon="wallet-outline"
+                label="Commission"
+                value={formatCurrency(
+                  report.overview
+                    .commission
+                )}
+                detail={`${report.sales.commissionPercentage}% of product sales`}
+                tone="yellow"
+              />
+            </View>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Sales & Revenue"
+            subtitle="Completed orders, commission and seller share"
+            icon="cash-outline"
+            role="admin"
+          >
+            <Text style={styles.sectionNote}>
+              A sale counts when the order is completed: the
+              customer tapped &quot;Order Received&quot; or the
+              shop handed the pickup over. Same rule for Online,
+              Cash on Delivery and Cash on Pickup.
+            </Text>
+
             <View
-              style={
-                styles.financeHeroTop
-              }
+              style={styles.financeHero}
             >
               <View
                 style={
-                  styles.financeHeroIcon
+                  styles.financeHeroTop
                 }
               >
-                <Ionicons
-                  name="analytics-outline"
-                  size={22}
-                  color="#FFFFFF"
-                />
+                <View
+                  style={
+                    styles.financeHeroIcon
+                  }
+                >
+                  <Ionicons
+                    name="analytics-outline"
+                    size={22}
+                    color="#FFFFFF"
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.financeHeroLabel
+                  }
+                >
+                  TOTAL PAID BY CUSTOMERS
+                </Text>
               </View>
 
               <Text
                 style={
-                  styles.financeHeroLabel
+                  styles.financeHeroValue
                 }
               >
-                TOTAL COLLECTED
+                {formatCurrency(
+                  report.sales.total
+                )}
+              </Text>
+
+              <Text
+                style={
+                  styles.financeHeroSubtext
+                }
+              >
+                {periodLabel} • {formatNumber(salesOrders)} completed{" "}
+                {salesOrders === 1 ? "order" : "orders"}
               </Text>
             </View>
 
-            <Text
-              style={
-                styles.financeHeroValue
-              }
-            >
-              {formatCurrency(
-                report.sales.total
-              )}
-            </Text>
-
-            <Text
-              style={
-                styles.financeHeroSubtext
-              }
-            >
-              {periodLabel}
-            </Text>
-          </View>
-
-          <View
-            style={styles.contentCard}
-          >
-            <InfoRow
-              label="Online payments (PayMongo)"
-              value={formatCurrency(
-                report.sales.online
-              )}
-              valueColor={COLORS.blue}
-            />
-
-            <InfoRow
-              label="Cash on Delivery (verified remittances)"
-              value={formatCurrency(
-                report.sales.cod
-              )}
-              valueColor={
-                COLORS.green
-              }
-            />
-
-            <InfoRow
-              label="Cash on Pickup (collected by shops)"
-              value={formatCurrency(
-                report.sales.pickup ?? 0
-              )}
-            />
-
-            <InfoRow
-              label="Less: delivery fees (Rider income)"
-              value={`− ${formatCurrency(
-                report.sales.deliveryFees ?? 0
-              )}`}
-            />
-
-            <InfoRow
-              label="Product sales"
-              value={formatCurrency(
-                report.sales.productSales ??
-                  report.sales.total
-              )}
-            />
-
-            <InfoRow
-              label={`FLOGRAM commission (${report.sales.commissionPercentage}% of product sales)`}
-              value={formatCurrency(
-                report.sales
-                  .commission
-              )}
-              valueColor={
-                COLORS.purpleAccent
-              }
-            />
-
-            <InfoRow
-              label="Seller share"
-              value={formatCurrency(
-                report.sales
-                  .sellerShare
-              )}
-              last
-            />
-          </View>
-
-          <SalesTrend
-            data={report.sales.trend}
-          />
-
-          <SectionHeader
-            eyebrow="ORDER PERFORMANCE"
-            title="Order Analytics"
-            subtitle="Analyze order completion, cancellation, fulfillment, and marketplace activity."
-          />
-
-          <View style={styles.statGrid}>
-            <StatCard
-              icon="bag-handle-outline"
-              label="Total Orders"
-              value={formatNumber(
-                report.orders.total
-              )}
-              tone="purple"
-            />
-
-            <StatCard
-              icon="checkmark-circle-outline"
-              label="Completed"
-              value={formatNumber(
-                report.orders.completed
-              )}
-              detail={formatPercent(
-                report.orders
-                  .completionRate
-              )}
-              tone="green"
-            />
-
-            <StatCard
-              icon="close-circle-outline"
-              label="Cancelled"
-              value={formatNumber(
-                report.orders.cancelled
-              )}
-              detail={formatPercent(
-                report.orders
-                  .cancellationRate
-              )}
-              tone="red"
-            />
-
-            <StatCard
-              icon="calendar-outline"
-              label="Pre-Orders"
-              value={formatNumber(
-                report.orders.preOrders
-              )}
-              tone="yellow"
-            />
-          </View>
-
-          <BreakdownCard
-            title="Orders by Status"
-            icon="layers-outline"
-            data={
-              report.orders.byStatus
-            }
-          />
-
-          <BreakdownCard
-            title="Payment Methods"
-            icon="card-outline"
-            data={
-              report.orders
-                .byPaymentMethod
-            }
-          />
-
-          <BreakdownCard
-            title="Order Sources"
-            icon="flower-outline"
-            data={
-              report.orders.bySource
-            }
-          />
-
-          <View
-            style={styles.contentCard}
-          >
             <View
-              style={styles.cardTitleRow}
+              style={[styles.contentCard, styles.flatCard]}
             >
-              <View
-                style={
-                  styles.cardTitleIcon
-                }
-              >
-                <Ionicons
-                  name="navigate-outline"
-                  size={18}
-                  color={
-                    COLORS.purpleAccent
-                  }
-                />
-              </View>
+              <InfoRow
+                label="Online payments (PayMongo)"
+                value={formatCurrency(
+                  report.sales.online
+                )}
+                valueColor={COLORS.blue}
+              />
 
-              <View
-                style={
-                  styles.cardTitleText
+              <InfoRow
+                label="Cash on Delivery"
+                value={formatCurrency(
+                  report.sales.cod
+                )}
+                valueColor={
+                  COLORS.green
                 }
-              >
-                <Text
-                  style={styles.cardTitle}
-                >
-                  Fulfillment
-                </Text>
+              />
 
-                <Text
-                  style={
-                    styles.cardSubtitle
-                  }
-                >
-                  Delivery versus
-                  customer pickup
-                </Text>
-              </View>
+              <InfoRow
+                label="Cash on Pickup (collected by shops)"
+                value={formatCurrency(
+                  report.sales.pickup ?? 0
+                )}
+              />
+
+              <InfoRow
+                label="Less: delivery fees (Rider income)"
+                value={`− ${formatCurrency(
+                  report.sales.deliveryFees ?? 0
+                )}`}
+              />
+
+              <InfoRow
+                label="Product sales (bouquets, add-ons, pre-order fees)"
+                value={formatCurrency(
+                  report.sales.productSales ??
+                    report.sales.total
+                )}
+              />
+
+              <InfoRow
+                label={`FLOGRAM commission (${report.sales.commissionPercentage}% of product sales)`}
+                value={formatCurrency(
+                  report.sales
+                    .commission
+                )}
+                valueColor={
+                  COLORS.purpleAccent
+                }
+              />
+
+              <InfoRow
+                label="Seller share (product sales − commission)"
+                value={formatCurrency(
+                  report.sales
+                    .sellerShare
+                )}
+                last
+              />
             </View>
 
+            {codAwaiting ? (
+              <View style={styles.awaitingCard}>
+                <Ionicons
+                  name="hourglass-outline"
+                  size={18}
+                  color={COLORS.yellow}
+                />
+
+                <View style={styles.awaitingContent}>
+                  <Text style={styles.awaitingTitle}>
+                    COD cash awaiting remittance:{" "}
+                    {formatCurrency(codAwaiting.amount)}
+                  </Text>
+
+                  <Text style={styles.awaitingText}>
+                    {formatNumber(codAwaiting.orders)} completed COD{" "}
+                    {codAwaiting.orders === 1 ? "order" : "orders"} in
+                    this period whose cash is still with Riders
+                    (remittance not verified yet). Already counted
+                    in the sales above.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            <SalesTrend
+              data={report.sales.trend}
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Order Analytics"
+            subtitle="Orders placed in the period and their outcome"
+            icon="bag-handle-outline"
+            role="admin"
+          >
+            <View style={[styles.statGrid, styles.statGridInSection]}>
+              <StatCard
+                icon="bag-handle-outline"
+                label="Total Orders"
+                value={formatNumber(
+                  report.orders.total
+                )}
+                tone="purple"
+              />
+
+              <StatCard
+                icon="checkmark-circle-outline"
+                label="Completed"
+                value={formatNumber(
+                  report.orders.completed
+                )}
+                detail={formatPercent(
+                  report.orders
+                    .completionRate
+                )}
+                tone="green"
+              />
+
+              <StatCard
+                icon="close-circle-outline"
+                label="Cancelled"
+                value={formatNumber(
+                  report.orders.cancelled
+                )}
+                detail={formatPercent(
+                  report.orders
+                    .cancellationRate
+                )}
+                tone="red"
+              />
+
+              <StatCard
+                icon="calendar-outline"
+                label="Pre-Orders"
+                value={formatNumber(
+                  report.orders.preOrders
+                )}
+                tone="yellow"
+              />
+            </View>
+
+            <View
+              style={[styles.contentCard, styles.flatCard]}
+            >
+              <InfoRow
+                label="Delivered, waiting for customer to confirm"
+                value={formatNumber(
+                  awaitingConfirmation
+                )}
+                valueColor={COLORS.yellow}
+                last
+              />
+            </View>
+
+            <Text style={styles.sectionNote}>
+              Counts orders placed in this period. Completion rate =
+              completed ÷ (completed + cancelled). Delivered orders
+              become sales once the customer confirms receipt.
+            </Text>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Orders by Status"
+            subtitle="Current status of orders placed in the period"
+            icon="layers-outline"
+            role="admin"
+          >
+            <BreakdownCard
+              title="Orders by Status"
+              icon="layers-outline"
+              data={
+                report.orders.byStatus
+              }
+              bare
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Payment Methods"
+            subtitle="How customers chose to pay"
+            icon="card-outline"
+            role="admin"
+          >
+            <BreakdownCard
+              title="Payment Methods"
+              icon="card-outline"
+              data={
+                report.orders
+                  .byPaymentMethod
+              }
+              bare
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Order Sources"
+            subtitle="Shop listings, custom bouquets and more"
+            icon="flower-outline"
+            role="admin"
+          >
+            <BreakdownCard
+              title="Order Sources"
+              icon="flower-outline"
+              data={
+                report.orders.bySource
+              }
+              bare
+            />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Fulfillment"
+            subtitle="Delivery versus customer pickup"
+            icon="navigate-outline"
+            role="admin"
+          >
             <View
               style={
                 styles.fulfillmentRow
@@ -1649,336 +1782,316 @@ export default function AdminReportsScreen() {
                 </Text>
               </View>
             </View>
-          </View>
+          </CollapsibleSection>
 
-          <SectionHeader
-            eyebrow="PLATFORM COMMUNITY"
+          {/*
+           * ===============================================
+           * GROUP: USERS & SHOPS
+           * ===============================================
+           */}
+
+          <Text style={styles.groupTitle}>
+            USERS & SHOPS
+          </Text>
+
+          <CollapsibleSection
             title="User Analytics"
-            subtitle="Current platform population and registrations within the selected report period."
-          />
-
-          <View
-            style={styles.contentCard}
-          >
-            <InfoRow
-              label="Total Platform Users"
-              value={formatNumber(
-                report.users.total
-              )}
-            />
-
-            <InfoRow
-              label="Customers"
-              value={formatNumber(
-                report.users.customers
-              )}
-            />
-
-            <InfoRow
-              label="Sellers"
-              value={formatNumber(
-                report.users.sellers
-              )}
-            />
-
-            <InfoRow
-              label="Riders"
-              value={formatNumber(
-                report.users.riders
-              )}
-              last
-            />
-          </View>
-
-          <Pressable
-            style={styles.newUsersCard}
-            onPress={() =>
-              router.push({
-                pathname:
-                  "/(admin)/admin-users",
-                params: {
-                  registrationPeriod:
-                    selectedPeriod,
-                },
-              } as never)
-            }
+            subtitle="Platform population and new registrations"
+            icon="people-outline"
+            role="admin"
           >
             <View
-              style={
-                styles.newUsersHeader
-              }
+              style={[styles.contentCard, styles.flatCard]}
             >
-              <View>
-                <Text
-                  style={
-                    styles.newUsersEyebrow
-                  }
-                >
-                  NEW REGISTRATIONS
-                </Text>
+              <InfoRow
+                label="Total Platform Users"
+                value={formatNumber(
+                  report.users.total
+                )}
+              />
 
-                <Text
-                  style={
-                    styles.newUsersValue
-                  }
-                >
-                  {formatNumber(
-                    report.users.newUsers
-                  )}
-                </Text>
-              </View>
+              <InfoRow
+                label="Customers"
+                value={formatNumber(
+                  report.users.customers
+                )}
+              />
 
-              <View
-                style={
-                  styles.newUsersIcon
-                }
-              >
-                <Ionicons
-                  name="person-add-outline"
-                  size={23}
-                  color={
-                    COLORS.purpleAccent
-                  }
-                />
-              </View>
+              <InfoRow
+                label="Sellers"
+                value={formatNumber(
+                  report.users.sellers
+                )}
+              />
+
+              <InfoRow
+                label="Riders"
+                value={formatNumber(
+                  report.users.riders
+                )}
+                last
+              />
             </View>
 
-            <View
-              style={
-                styles.newUserBreakdown
+            <Pressable
+              style={[styles.newUsersCard, styles.newUsersCardInSection]}
+              onPress={() =>
+                router.push({
+                  pathname:
+                    "/(admin)/admin-users",
+                  params: {
+                    registrationPeriod:
+                      selectedPeriod,
+                  },
+                } as never)
               }
             >
               <View
                 style={
-                  styles.newUserItem
+                  styles.newUsersHeader
                 }
               >
-                <Text
-                  style={
-                    styles.newUserNumber
-                  }
-                >
-                  {formatNumber(
-                    report.users
-                      .newCustomers
-                  )}
-                </Text>
+                <View>
+                  <Text
+                    style={
+                      styles.newUsersEyebrow
+                    }
+                  >
+                    NEW REGISTRATIONS
+                  </Text>
 
-                <Text
+                  <Text
+                    style={
+                      styles.newUsersValue
+                    }
+                  >
+                    {formatNumber(
+                      report.users.newUsers
+                    )}
+                  </Text>
+                </View>
+
+                <View
                   style={
-                    styles.newUserLabel
+                    styles.newUsersIcon
                   }
                 >
-                  Customers
-                </Text>
+                  <Ionicons
+                    name="person-add-outline"
+                    size={23}
+                    color={
+                      COLORS.purpleAccent
+                    }
+                  />
+                </View>
               </View>
 
               <View
                 style={
-                  styles.newUserItem
+                  styles.newUserBreakdown
                 }
               >
-                <Text
+                <View
                   style={
-                    styles.newUserNumber
+                    styles.newUserItem
                   }
                 >
-                  {formatNumber(
-                    report.users
-                      .newSellers
-                  )}
-                </Text>
+                  <Text
+                    style={
+                      styles.newUserNumber
+                    }
+                  >
+                    {formatNumber(
+                      report.users
+                        .newCustomers
+                    )}
+                  </Text>
 
-                <Text
+                  <Text
+                    style={
+                      styles.newUserLabel
+                    }
+                  >
+                    Customers
+                  </Text>
+                </View>
+
+                <View
                   style={
-                    styles.newUserLabel
+                    styles.newUserItem
                   }
                 >
-                  Sellers
-                </Text>
+                  <Text
+                    style={
+                      styles.newUserNumber
+                    }
+                  >
+                    {formatNumber(
+                      report.users
+                        .newSellers
+                    )}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.newUserLabel
+                    }
+                  >
+                    Sellers
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.newUserItem
+                  }
+                >
+                  <Text
+                    style={
+                      styles.newUserNumber
+                    }
+                  >
+                    {formatNumber(
+                      report.users
+                        .newRiders
+                    )}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.newUserLabel
+                    }
+                  >
+                    Riders
+                  </Text>
+                </View>
               </View>
+            </Pressable>
+          </CollapsibleSection>
 
-              <View
-                style={
-                  styles.newUserItem
-                }
-              >
-                <Text
-                  style={
-                    styles.newUserNumber
-                  }
-                >
-                  {formatNumber(
-                    report.users
-                      .newRiders
-                  )}
-                </Text>
-
-                <Text
-                  style={
-                    styles.newUserLabel
-                  }
-                >
-                  Riders
-                </Text>
-              </View>
-            </View>
-          </Pressable>
-
-          <SectionHeader
-            eyebrow="COD MONITORING"
+          <CollapsibleSection
             title="Remittance Analytics"
-            subtitle="Monitor rider cash-on-delivery remittance activity and verified COD value."
-          />
-
-          <View style={styles.statGrid}>
-            <StatCard
-              icon="time-outline"
-              label="Pending"
-              value={formatNumber(
-                report.remittances
-                  .pending
-              )}
-              tone="yellow"
-            />
-
-            <StatCard
-              icon="document-text-outline"
-              label="Submitted"
-              value={formatNumber(
-                report.remittances
-                  .submitted
-              )}
-              detail="For verification"
-              tone="blue"
-            />
-
-            <StatCard
-              icon="checkmark-done-outline"
-              label="Verified"
-              value={formatNumber(
-                report.remittances
-                  .verified
-              )}
-              tone="green"
-            />
-
-            <StatCard
-              icon="close-outline"
-              label="Rejected"
-              value={formatNumber(
-                report.remittances
-                  .rejected
-              )}
-              tone="red"
-            />
-          </View>
-
-          <View
-            style={styles.codValueCard}
+            subtitle="Rider cash-on-delivery remittances"
+            icon="swap-horizontal-outline"
+            role="admin"
           >
-            <View
-              style={
-                styles.codValueIcon
-              }
-            >
-              <Ionicons
-                name="cash-outline"
-                size={24}
-                color={COLORS.green}
+            <View style={[styles.statGrid, styles.statGridInSection]}>
+              <StatCard
+                icon="time-outline"
+                label="Pending"
+                value={formatNumber(
+                  report.remittances
+                    .pending
+                )}
+                tone="yellow"
+              />
+
+              <StatCard
+                icon="document-text-outline"
+                label="Submitted"
+                value={formatNumber(
+                  report.remittances
+                    .submitted
+                )}
+                detail="For verification"
+                tone="blue"
+              />
+
+              <StatCard
+                icon="checkmark-done-outline"
+                label="Verified"
+                value={formatNumber(
+                  report.remittances
+                    .verified
+                )}
+                tone="green"
+              />
+
+              <StatCard
+                icon="close-outline"
+                label="Rejected"
+                value={formatNumber(
+                  report.remittances
+                    .rejected
+                )}
+                tone="red"
               />
             </View>
 
             <View
-              style={
-                styles.codValueContent
-              }
-            >
-              <Text
-                style={
-                  styles.codValueLabel
-                }
-              >
-                Verified COD Value
-              </Text>
-
-              <Text
-                style={styles.codValue}
-              >
-                {formatCurrency(
-                  report.remittances
-                    .verifiedAmount
-                )}
-              </Text>
-
-              <Text
-                style={
-                  styles.codValueMeta
-                }
-              >
-                {formatNumber(
-                  report.remittances
-                    .verifiedInPeriod
-                )}{" "}
-                remittance
-                {report.remittances
-                  .verifiedInPeriod ===
-                1
-                  ? ""
-                  : "s"}{" "}
-                verified during this
-                period
-              </Text>
-            </View>
-          </View>
-
-          <SectionHeader
-            eyebrow="MARKETPLACE PERFORMANCE"
-            title="Top Shops"
-            subtitle="Shops ranked by product sales received in the selected period."
-          />
-
-          <View
-            style={styles.contentCard}
-          >
-            <View
-              style={styles.cardTitleRow}
+              style={[styles.codValueCard, styles.codValueCardInSection]}
             >
               <View
                 style={
-                  styles.cardTitleIcon
+                  styles.codValueIcon
                 }
               >
                 <Ionicons
-                  name="trophy-outline"
-                  size={18}
-                  color={COLORS.yellow}
+                  name="cash-outline"
+                  size={24}
+                  color={COLORS.green}
                 />
               </View>
 
               <View
                 style={
-                  styles.cardTitleText
+                  styles.codValueContent
                 }
               >
                 <Text
-                  style={styles.cardTitle}
+                  style={
+                    styles.codValueLabel
+                  }
                 >
-                  Shop Performance
+                  Verified COD Value
+                </Text>
+
+                <Text
+                  style={styles.codValue}
+                >
+                  {formatCurrency(
+                    report.remittances
+                      .verifiedAmount
+                  )}
                 </Text>
 
                 <Text
                   style={
-                    styles.cardSubtitle
+                    styles.codValueMeta
                   }
                 >
-                  Based on completed
-                  marketplace order
-                  value
+                  {formatNumber(
+                    report.remittances
+                      .verifiedInPeriod
+                  )}{" "}
+                  remittance
+                  {report.remittances
+                    .verifiedInPeriod ===
+                  1
+                    ? ""
+                    : "s"}{" "}
+                  verified during this
+                  period
                 </Text>
               </View>
             </View>
 
+            {codAwaiting ? (
+              <Text style={styles.sectionNote}>
+                COD cash still with Riders for orders completed in
+                this period: {formatCurrency(codAwaiting.amount)} (
+                {formatNumber(codAwaiting.orders)}{" "}
+                {codAwaiting.orders === 1 ? "order" : "orders"}).
+              </Text>
+            ) : null}
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Top Shops"
+            subtitle="Ranked by product sales of completed orders"
+            icon="trophy-outline"
+            role="admin"
+          >
             {report.topShops.length ===
             0 ? (
               <View
@@ -2021,7 +2134,7 @@ export default function AdminReportsScreen() {
                 />
               </>
             )}
-          </View>
+          </CollapsibleSection>
 
           <View
             style={styles.noticeCard}
@@ -2056,13 +2169,13 @@ export default function AdminReportsScreen() {
                   styles.noticeText
                 }
               >
-                Recognized sales include
-                successful online
-                payments and COD funds
-                only after the rider
-                remittance has been
-                verified by an
-                administrator.
+                Sales are recognized when an order is completed
+                (customer confirmed receipt or picked it up), for
+                every payment method. Product sales = order total −
+                delivery fee; commission = product sales ×{" "}
+                {report.sales.commissionPercentage}%; seller share =
+                product sales − commission. Cancelled and refunded
+                orders never count.
               </Text>
             </View>
           </View>
@@ -2253,6 +2366,8 @@ const styles = StyleSheet.create({
   },
 
   headerPeriodBadge: {
+    flexShrink: 1,
+    maxWidth: "55%",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -2264,6 +2379,7 @@ const styles = StyleSheet.create({
   },
 
   headerPeriodText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: "700",
     color: "#FFFFFF",
@@ -2313,8 +2429,103 @@ const styles = StyleSheet.create({
    */
 
   periodRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
     gap: 8,
     paddingBottom: 6,
+  },
+
+  /*
+   * Desktop web portal: keep the report readable instead
+   * of stretching across a wide window.
+   */
+  desktopWidth: {
+    width: "100%",
+    maxWidth: 1080,
+    alignSelf: "center",
+  },
+
+  headerInner: {
+    width: "100%",
+  },
+
+  headerSummaryText: {
+    flex: 1,
+  },
+
+  headerSummaryHint: {
+    marginTop: 3,
+    fontSize: 11,
+    color:
+      "rgba(255,255,255,0.68)",
+  },
+
+  groupTitle: {
+    marginTop: 22,
+    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    color: COLORS.purpleAccent,
+  },
+
+  statGridInSection: {
+    marginTop: 0,
+    marginBottom: 12,
+  },
+
+  statCardDesktop: {
+    width: "24%",
+  },
+
+  flatCard: {
+    marginBottom: 12,
+    padding: 0,
+    borderWidth: 0,
+  },
+
+  sectionNote: {
+    marginBottom: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.secondaryText,
+  },
+
+  awaitingCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 14,
+    padding: 13,
+    borderRadius: 14,
+    backgroundColor:
+      COLORS.yellowBackground,
+  },
+
+  awaitingContent: {
+    flex: 1,
+  },
+
+  awaitingTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  awaitingText: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 17,
+    color: COLORS.secondaryText,
+  },
+
+  newUsersCardInSection: {
+    marginBottom: 0,
+  },
+
+  codValueCardInSection: {
+    marginBottom: 12,
   },
 
   periodButton: {

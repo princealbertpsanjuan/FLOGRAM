@@ -15,8 +15,13 @@ import {
  * =========================================================
  */
 
+/*
+ * An order is completed only when the customer marked it
+ * received (or the shop handed a pickup over). "delivered"
+ * means the Rider dropped it off and the customer has not
+ * confirmed yet; it is reported separately and is not a sale.
+ */
 const COMPLETED_ORDER_STATUSES = [
-  "delivered",
   "completed",
 ];
 
@@ -34,13 +39,67 @@ const REPORT_PERIODS = {
  * =========================================================
  */
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/*
+ * "YYYY-MM-DD" (a Manila calendar day) -> midnight Manila.
+ */
+const parseManilaDay = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || "").trim());
+
+  if (!match) return null;
+
+  const [, year, month, day] = match.map(Number);
+  const utcDay = new Date(Date.UTC(year, month - 1, day));
+
+  /*
+   * Reject impossible days (2026-02-31, 2026-13-01)
+   * instead of letting Date roll them into another month.
+   */
+  if (
+    Number.isNaN(utcDay.getTime()) ||
+    utcDay.getUTCFullYear() !== year ||
+    utcDay.getUTCMonth() !== month - 1 ||
+    utcDay.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return new Date(utcDay.getTime() - MANILA_OFFSET_MS);
+};
+
 /*
  * Report periods are Philippine calendar days.
- * "today" = 00:00 Manila today until now.
+ * "today" = 00:00 Manila today until 23:59:59 Manila.
+ *
+ * Custom range: startDate / endDate as "YYYY-MM-DD"
+ * (both days included).
  */
 const getPeriodRange = (
-  period = "today"
+  period = "today",
+  custom = {}
 ) => {
+  const customStart =
+    parseManilaDay(custom.startDate);
+
+  const customEnd =
+    parseManilaDay(custom.endDate || custom.startDate);
+
+  if (customStart && customEnd) {
+    const [first, last] =
+      customStart <= customEnd
+        ? [customStart, customEnd]
+        : [customEnd, customStart];
+
+    return {
+      key: "custom",
+      startDate: first,
+      endDate: new Date(last.getTime() + DAY_MS - 1),
+    };
+  }
+
   const normalizedPeriod =
     Object.prototype.hasOwnProperty.call(
       REPORT_PERIODS,
@@ -71,10 +130,7 @@ const getPeriodRange = (
     new Date(
       startOfManilaDay(now).getTime() -
         (days - 1) *
-          24 *
-          60 *
-          60 *
-          1000
+          DAY_MS
     );
 
   return {
@@ -134,8 +190,18 @@ const roundMoney = (value) =>
  */
 
 const getTrendGranularity = (
-  period
+  period,
+  startDate = null,
+  endDate = null
 ) => {
+  /*
+   * Custom range: daily bars up to ~2 months, monthly after.
+   */
+  if (period === "custom") {
+    const days = startDate && endDate ? (endDate.getTime() - startDate.getTime()) / DAY_MS : 0;
+    return days <= 62 ? "day" : "month";
+  }
+
   if (
     period === "today" ||
     period === "7d" ||
@@ -156,22 +222,6 @@ const getMongoDateFormat = (
 
   return "%Y-%m";
 };
-
-/*
- * =========================================================
- * ONLINE SALES
- * =========================================================
- *
- * Recognized online sales:
- *
- * paymentStatus = paid
- * paymentMethod != cash_on_delivery
- * orderStatus != cancelled
- *
- * Revenue date:
- * paidAt
- * =========================================================
- */
 
 /*
  * =========================================================
@@ -229,6 +279,24 @@ const getOrderAnalytics =
                 $match: {
                   orderStatus:
                     "cancelled",
+                },
+              },
+
+              {
+                $count:
+                  "count",
+              },
+            ],
+
+            /*
+             * Delivered by the Rider, customer has not
+             * tapped "Order Received" yet (not a sale yet).
+             */
+            awaitingConfirmation: [
+              {
+                $match: {
+                  orderStatus:
+                    "delivered",
                 },
               },
 
@@ -420,6 +488,12 @@ const getOrderAnalytics =
       cancelled:
         safeNumber(
           data.cancelled?.[0]
+            ?.count
+        ),
+
+      awaitingConfirmation:
+        safeNumber(
+          data.awaitingConfirmation?.[0]
             ?.count
         ),
 
@@ -948,7 +1022,8 @@ const getTopShops = async (entries) => {
 
 export const getAdminReports =
   async (
-    period = "today"
+    period = "today",
+    custom = {}
   ) => {
     const {
       key,
@@ -956,12 +1031,15 @@ export const getAdminReports =
       endDate,
     } =
       getPeriodRange(
-        period
+        period,
+        custom
       );
 
     const granularity =
       getTrendGranularity(
-        key
+        key,
+        startDate,
+        endDate
       );
 
     const [
@@ -1068,6 +1146,11 @@ export const getAdminReports =
         cancellationRate,
         recognizedSales:
           revenue.gross,
+        /*
+         * Orders completed in the period (= sales count).
+         */
+        salesOrders:
+          revenue.orders,
         productSales:
           revenue.productSales,
         commission:
@@ -1078,7 +1161,8 @@ export const getAdminReports =
 
       sales: {
         /*
-         * total = everything customers paid
+         * total = everything customers paid for orders
+         * completed in the period
          * (products + delivery fees).
          */
         total:
@@ -1095,6 +1179,11 @@ export const getAdminReports =
           revenue.deliveryFees,
         productSales:
           revenue.productSales,
+        /*
+         * Included in productSales (belongs to the shop).
+         */
+        preOrderFees:
+          revenue.preOrderFees,
         commissionRate:
           revenue.commissionRate,
         commissionPercentage,
@@ -1102,6 +1191,12 @@ export const getAdminReports =
           revenue.commission,
         sellerShare:
           revenue.sellerShare,
+        /*
+         * Informational: completed COD sales whose cash is
+         * still with Riders (remittance not verified yet).
+         */
+        codAwaitingRemittance:
+          revenue.codAwaitingRemittance,
         trend:
           revenue.trend,
       },
@@ -1113,6 +1208,8 @@ export const getAdminReports =
           orderAnalytics.completed,
         cancelled:
           orderAnalytics.cancelled,
+        awaitingConfirmation:
+          orderAnalytics.awaitingConfirmation,
         preOrders:
           orderAnalytics.preOrders,
         completionRate,

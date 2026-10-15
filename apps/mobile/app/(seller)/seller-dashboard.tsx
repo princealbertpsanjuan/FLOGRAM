@@ -639,21 +639,26 @@ export default function SellerDashboardScreen() {
       const todaysPaidOrders =
         orders.filter(
           order => {
+            /*
+             * A sale counts once the customer marks the
+             * order received (completed) — same rule as
+             * Reports and Earnings.
+             */
             if (
-              order.paymentStatus !==
-              'paid'
+              order.orderStatus !==
+                'completed' ||
+              order.paymentStatus ===
+                'refunded'
             ) {
               return false;
             }
 
             const revenueDate =
-              order.paidAt
-                ? new Date(
-                    order.paidAt
-                  )
-                : new Date(
-                    order.updatedAt
-                  );
+              new Date(
+                order.completedAt ||
+                  order.deliveredAt ||
+                  order.updatedAt
+              );
 
             return (
               revenueDate >=
@@ -752,20 +757,20 @@ export default function SellerDashboardScreen() {
                 .filter(
                   order => {
                     if (
-                      order.paymentStatus !==
-                      'paid'
+                      order.orderStatus !==
+                        'completed' ||
+                      order.paymentStatus ===
+                        'refunded'
                     ) {
                       return false;
                     }
 
                     const revenueDate =
-                      order.paidAt
-                        ? new Date(
-                            order.paidAt
-                          )
-                        : new Date(
-                            order.updatedAt
-                          );
+                      new Date(
+                        order.completedAt ||
+                          order.deliveredAt ||
+                          order.updatedAt
+                      );
 
                     return isSameDay(
                       revenueDate,
@@ -1081,7 +1086,7 @@ export default function SellerDashboardScreen() {
                   styles.summaryMeta
                 }
               >
-                Paid orders
+                Completed orders
                 today
               </Text>
             </View>

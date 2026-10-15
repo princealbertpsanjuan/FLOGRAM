@@ -43,6 +43,7 @@ import AdminScreenHeader, {
 import { getUploadUrl } from '../../utils/media';
 
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+import { DateRangeButton, isInRange, type DateRange } from '../../components/ui/date-range-picker';
 
 import {
   PAYOUT_STATUS_LABELS,
@@ -128,6 +129,8 @@ export default function AdminRiderPayoutsScreen() {
   const insets = useSafeAreaInsets();
 
   const [tab, setTab] = useState<Tab>('owed');
+  // Optional date range for Pending / History (calendar). null = all dates.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [balances, setBalances] = useState<RiderPayoutBalance[]>([]);
   const [payouts, setPayouts] = useState<RiderPayout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -177,16 +180,24 @@ export default function AdminRiderPayoutsScreen() {
 
   const owedRiders = balances.filter(item => item.amountOwed > 0);
   const totalOwed = owedRiders.reduce((sum, item) => sum + item.amountOwed, 0);
-  const pendingPayouts = payouts.filter(item => item.status === 'pending');
-  const totalPending = pendingPayouts.reduce((sum, item) => sum + item.totalAmount, 0);
-  const historyPayouts = payouts.filter(item => item.status !== 'pending');
+  const allPendingPayouts = payouts.filter(item => item.status === 'pending');
+  const totalPending = allPendingPayouts.reduce((sum, item) => sum + item.totalAmount, 0);
+
+  // Pending: date the payout was created. History: date paid (or cancelled).
+  const pendingPayouts = allPendingPayouts.filter(item => isInRange(item.createdAt, dateRange));
+  const historyPayouts = payouts.filter(
+    item =>
+      item.status !== 'pending' &&
+      isInRange(item.paidAt || item.cancelledAt || item.createdAt, dateRange)
+  );
+  const dateKey = dateRange ? `${dateRange.start}_${dateRange.end}` : '';
 
   /*
    * Show 5 records + "See all"; collapses on tab change.
    */
   const owedSeeAll = useSeeAll(owedRiders, { resetKey: tab });
   const payoutSeeAll = useSeeAll(tab === 'pending' ? pendingPayouts : historyPayouts, {
-    resetKey: tab,
+    resetKey: `${tab}|${dateKey}`,
   });
 
   /*
@@ -390,7 +401,7 @@ export default function AdminRiderPayoutsScreen() {
             <Text style={styles.summaryLabel}>Pending payment</Text>
             <Text style={styles.summaryValue}>{formatPeso(totalPending)}</Text>
             <Text style={styles.summaryMeta}>
-              {pendingPayouts.length} payout{pendingPayouts.length === 1 ? '' : 's'}
+              {allPendingPayouts.length} payout{allPendingPayouts.length === 1 ? '' : 's'}
             </Text>
           </View>
         </View>
@@ -412,7 +423,7 @@ export default function AdminRiderPayoutsScreen() {
           {(
             [
               ['owed', 'Amount Owed'],
-              ['pending', `Pending (${pendingPayouts.length})`],
+              ['pending', `Pending (${allPendingPayouts.length})`],
               ['paid', 'History'],
             ] as const
           ).map(([key, label]) => (
@@ -427,6 +438,22 @@ export default function AdminRiderPayoutsScreen() {
             </Pressable>
           ))}
         </View>
+
+        {/* DATE FILTER (Pending / History) */}
+        {tab !== 'owed' ? (
+          <View style={styles.dateRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setDateRange(null)}
+              style={[styles.dateChip, !dateRange && styles.dateChipActive]}
+            >
+              <Text style={[styles.dateChipText, !dateRange && styles.dateChipTextActive]}>
+                All dates
+              </Text>
+            </Pressable>
+            <DateRangeButton value={dateRange} onChange={setDateRange} role="admin" maxDate={new Date()} />
+          </View>
+        ) : null}
 
         {error ? (
           <View style={styles.errorCard}>
@@ -486,7 +513,9 @@ export default function AdminRiderPayoutsScreen() {
         ) : (tab === 'pending' ? pendingPayouts : historyPayouts).length === 0 ? (
           <Empty
             text={
-              tab === 'pending'
+              dateRange
+                ? 'No payouts in the selected dates.'
+                : tab === 'pending'
                 ? 'No payouts are waiting for payment.'
                 : 'Paid and cancelled payouts will appear here.'
             }
@@ -791,6 +820,18 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#FFFFFF' },
   tabText: { color: C.secondaryText, fontSize: 13, fontWeight: '600' },
   tabTextActive: { color: C.purpleAccent, fontWeight: '800' },
+  dateRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 },
+  dateChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.card,
+  },
+  dateChipActive: { backgroundColor: C.purpleAccent, borderColor: C.purpleAccent },
+  dateChipText: { color: C.secondaryText, fontSize: 13, fontWeight: '700' },
+  dateChipTextActive: { color: '#FFFFFF' },
   errorCard: { marginBottom: 12, padding: 12, borderRadius: 12, backgroundColor: C.redLight },
   errorText: { color: C.red, fontSize: 14 },
   card: { marginBottom: 10, padding: 16, borderRadius: 18, backgroundColor: C.card },

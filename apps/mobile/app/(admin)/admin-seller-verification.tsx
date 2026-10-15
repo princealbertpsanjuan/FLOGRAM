@@ -26,6 +26,7 @@ import {
 } from "../../services/admin";
 
 import RequirementDocumentsView from "../../components/admin/requirement-documents";
+import AdminContactActions from "../../components/admin/admin-contact-actions";
 import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
 
 const COLORS = {
@@ -1023,6 +1024,13 @@ export default function AdminSellerVerificationScreen() {
                       }
                     />
 
+                    <AdminContactActions
+                      phone={
+                        selectedFlorist.contactNumber
+                      }
+                      compact
+                    />
+
                     <ModalInfoRow
                       icon="calendar-outline"
                       label="Application Date"
@@ -1071,6 +1079,14 @@ export default function AdminSellerVerificationScreen() {
                         "Not provided"
                       }
                       last
+                    />
+
+                    <AdminContactActions
+                      phone={
+                        getOwner(selectedFlorist)
+                          ?.phoneNumber
+                      }
+                      compact
                     />
                   </View>
 

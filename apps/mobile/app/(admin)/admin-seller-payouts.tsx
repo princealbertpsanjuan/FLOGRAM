@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import KeyboardSafeView from '../../components/ui/keyboard-safe-view';
 import ScreenHeader from '../../components/ui/screen-header';
+import { DateRangeButton, isInRange, type DateRange } from '../../components/ui/date-range-picker';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
 import { EmptyState, ErrorState, ScreenLoader } from '../../components/ui/state-views';
 import {
@@ -78,6 +79,8 @@ export default function AdminSellerPayoutsScreen() {
   const insets = useSafeAreaInsets();
 
   const [tab, setTab] = useState<Tab>('balances');
+  // Optional date range for payout lists (calendar). null = all dates.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [balances, setBalances] = useState<SellerBalance[]>([]);
   const [payouts, setPayouts] = useState<SellerPayout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -211,7 +214,13 @@ export default function AdminSellerPayoutsScreen() {
    * Show 5 records + "See all"; collapses on tab change.
    */
   const balancesSeeAll = useSeeAll(owedBalances, { resetKey: tab });
-  const payoutsSeeAll = useSeeAll(payouts, { resetKey: tab });
+  // Paid: date paid. Pending / Cancelled: date created.
+  const datedPayouts = payouts.filter(payout =>
+    isInRange(tab === 'paid' ? payout.paidAt || payout.createdAt : payout.createdAt, dateRange)
+  );
+  const payoutsSeeAll = useSeeAll(datedPayouts, {
+    resetKey: `${tab}|${dateRange ? `${dateRange.start}_${dateRange.end}` : ''}`,
+  });
 
   return (
     <View style={styles.screen}>
@@ -234,6 +243,19 @@ export default function AdminSellerPayoutsScreen() {
           </Pressable>
         ))}
       </View>
+
+      {tab !== 'balances' ? (
+        <View style={styles.dateRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setDateRange(null)}
+            style={[styles.tab, !dateRange && styles.tabActive]}
+          >
+            <Text style={[styles.tabText, !dateRange && { color: '#FFFFFF' }]}>All dates</Text>
+          </Pressable>
+          <DateRangeButton value={dateRange} onChange={setDateRange} role="admin" maxDate={new Date()} />
+        </View>
+      ) : null}
 
       {loading ? (
         <ScreenLoader role="admin" />
@@ -333,8 +355,12 @@ export default function AdminSellerPayoutsScreen() {
                 </>
               )}
             </>
-          ) : payouts.length === 0 ? (
-            <EmptyState role="admin" icon="document-text-outline" title={`No ${tab} payouts`} />
+          ) : datedPayouts.length === 0 ? (
+            <EmptyState
+              role="admin"
+              icon="document-text-outline"
+              title={dateRange ? `No ${tab} payouts in these dates` : `No ${tab} payouts`}
+            />
           ) : (
             <>
             {payoutsSeeAll.visible.map(payout => (
@@ -503,6 +529,7 @@ const styles = StyleSheet.create({
   tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14, borderWidth: 1, borderColor: ACCENT },
   tabActive: { backgroundColor: ACCENT },
   tabText: { color: ACCENT, fontSize: 12, fontWeight: '700' },
+  dateRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 10 },
   content: { padding: 16, gap: 10 },
   summary: { padding: 16, borderRadius: 18, backgroundColor: '#24245D' },
   summaryLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700' },

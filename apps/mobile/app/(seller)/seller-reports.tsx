@@ -46,6 +46,18 @@ import {
   getShopRevenue,
 } from '../../utils/order-status';
 
+import {
+  getMyEarnings,
+} from '../../services/seller-payouts';
+
+import CollapsibleSection from '../../components/ui/collapsible-section';
+
+import {
+  DateRangeButton,
+  formatRange,
+  type DateRange,
+} from '../../components/ui/date-range-picker';
+
 /*
  * =========================================================
  * SELLER REPORTS
@@ -58,11 +70,17 @@ import {
  * GET /api/v1/orders/seller/mine
  * GET /api/v1/reviews/seller/mine
  * GET /api/v1/florists/profile
+ * GET /api/v1/seller-payouts/me   (commission rate)
  *
  * IMPORTANT:
  *
- * - Sales are calculated from PAID orders only.
+ * - Sales count only COMPLETED orders (customer marked
+ *   "Order Received" / pickup handed over), for every
+ *   payment method. Paid-but-in-progress online orders
+ *   are not sales yet.
  * - Shop sales exclude Order.deliveryFee (Rider income).
+ * - Your Earnings = sales − FLOGRAM commission (same
+ *   formula as Seller Earnings / payouts).
  * - Seller rating uses sellerRating, not overallRating.
  * - No fake report values are used.
  * =========================================================
@@ -76,10 +94,23 @@ const ACTIVE_STATUSES = [
   'out_for_delivery',
 ];
 
-const SUCCESSFUL_STATUSES = [
-  'delivered',
-  'completed',
+/*
+ * Report periods for the earnings summary and top products.
+ */
+type ReportPeriod = 'all' | 'today' | '7d' | 'month';
+
+const PERIODS: { label: string; value: ReportPeriod }[] = [
+  { label: 'All Time', value: 'all' },
+  { label: 'Today', value: 'today' },
+  { label: '7 Days', value: '7d' },
+  { label: 'This Month', value: 'month' },
 ];
+
+const PAYMENT_LABELS: Record<string, string> = {
+  paymongo: 'Online (PayMongo)',
+  cash_on_delivery: 'Cash on Delivery',
+  cash_on_pickup: 'Cash on Pickup',
+};
 
 type WeeklyData = {
   day: string;
@@ -91,6 +122,15 @@ type ProductPerformance = {
   name: string;
   quantity: number;
   sales: number;
+};
+
+type SalesTotals = {
+  orders: number;
+  sales: number;
+  preOrderFees: number;
+  commission: number;
+  earnings: number;
+  byMethod: { method: string; sales: number; orders: number }[];
 };
 
 export default function SellerReportsScreen() {
@@ -110,6 +150,29 @@ export default function SellerReportsScreen() {
     florist,
     setFlorist,
   ] = useState<FloristProfile | null>(
+    null
+  );
+
+  /*
+   * Admin commission rate (from Seller Earnings, same
+   * source the payouts use). null = could not load.
+   */
+  const [
+    commissionRate,
+    setCommissionRate,
+  ] = useState<number | null>(
+    null
+  );
+
+  const [
+    period,
+    setPeriod,
+  ] = useState<ReportPeriod>('all');
+
+  const [
+    customRange,
+    setCustomRange,
+  ] = useState<DateRange | null>(
     null
   );
 
@@ -152,11 +215,17 @@ export default function SellerReportsScreen() {
             sellerOrders,
             sellerReviews,
             floristProfile,
+            earnings,
           ] =
             await Promise.all([
               getSellerOrders(),
               getSellerReviews(),
               getMyFloristProfile(),
+              /*
+               * Only needed for the commission rate; the
+               * report still works without it.
+               */
+              getMyEarnings().catch(() => null),
             ]);
 
           setOrders(
@@ -169,6 +238,12 @@ export default function SellerReportsScreen() {
 
           setFlorist(
             floristProfile
+          );
+
+          setCommissionRate(
+            earnings && Number.isFinite(Number(earnings.commissionRate))
+              ? Number(earnings.commissionRate)
+              : null
           );
         } catch (error) {
           console.log(
@@ -236,7 +311,7 @@ export default function SellerReportsScreen() {
 
   /*
    * =======================================================
-   * BASIC ORDER STATS
+   * BASIC ORDER STATS (all orders, all time)
    * =======================================================
    */
 
@@ -246,15 +321,27 @@ export default function SellerReportsScreen() {
   const completedOrders =
     useMemo(
       () =>
-        /*
-         * Delivered orders are successful even
-         * before the customer taps "Received".
-         */
         orders.filter(
           order =>
-            SUCCESSFUL_STATUSES.includes(
-              order.orderStatus
-            )
+            order.orderStatus ===
+            'completed'
+        ).length,
+      [
+        orders,
+      ]
+    );
+
+  /*
+   * Delivered by the Rider, customer has not tapped
+   * "Order Received" yet. Not a sale yet.
+   */
+  const awaitingConfirmation =
+    useMemo(
+      () =>
+        orders.filter(
+          order =>
+            order.orderStatus ===
+            'delivered'
         ).length,
       [
         orders,
@@ -302,11 +389,8 @@ export default function SellerReportsScreen() {
     );
 
   /*
-   * =======================================================
-   * COMPLETION RATE
-   * =======================================================
+   * Completion rate = completed ÷ (completed + cancelled).
    */
-
   const completionRate =
     useMemo(() => {
       const finishedOrders =
@@ -330,109 +414,138 @@ export default function SellerReportsScreen() {
 
   /*
    * =======================================================
-   * SALES
-   * =======================================================
-   *
-   * Only PAID orders are counted.
-   *
-   * We intentionally do not count unpaid/pending payments
-   * as Seller sales.
+   * SALES (completed orders only)
    * =======================================================
    */
 
-  const paidOrders =
+  const saleOrders =
     useMemo(
       () =>
         orders.filter(
-          order =>
-            order.paymentStatus ===
-              'paid' &&
-            order.orderStatus !==
-              'cancelled'
+          isCompletedSale
         ),
       [
         orders,
       ]
     );
 
-  const totalSales =
-    useMemo(
+  const periodRange =
+    useMemo<DateRange | null>(
       () =>
-        paidOrders.reduce(
-          (
-            total,
-            order
-          ) =>
-            total +
-            getShopRevenue(
-              order
-            ),
-          0
+        customRange ??
+        getPeriodRange(
+          period
         ),
       [
-        paidOrders,
+        customRange,
+        period,
+      ]
+    );
+
+  const periodLabel =
+    customRange
+      ? formatRange(
+          customRange
+        )
+      : PERIODS.find(
+          item =>
+            item.value ===
+            period
+        )?.label ||
+        'All Time';
+
+  const periodSales =
+    useMemo(
+      () =>
+        saleOrders.filter(
+          order =>
+            isKeyInRange(
+              manilaDayKey(
+                getSaleDate(
+                  order
+                )
+              ),
+              periodRange
+            )
+        ),
+      [
+        saleOrders,
+        periodRange,
+      ]
+    );
+
+  const totals =
+    useMemo(
+      () =>
+        summarizeSales(
+          periodSales,
+          commissionRate
+        ),
+      [
+        periodSales,
+        commissionRate,
+      ]
+    );
+
+  const salesForDays =
+    useCallback(
+      (range: DateRange | null) =>
+        summarizeSales(
+          saleOrders.filter(
+            order =>
+              isKeyInRange(
+                manilaDayKey(
+                  getSaleDate(
+                    order
+                  )
+                ),
+                range
+              )
+          ),
+          commissionRate
+        ).sales,
+      [
+        saleOrders,
+        commissionRate,
       ]
     );
 
   const todaySales =
-    useMemo(() => {
-      const now =
-        new Date();
-
-      return paidOrders
-        .filter(
-          order =>
-            isSameDay(
-              getSaleDate(
-                order
-              ),
-              now
-            )
-        )
-        .reduce(
-          (
-            total,
-            order
-          ) =>
-            total +
-            getShopRevenue(
-              order
-            ),
-          0
-        );
-    }, [
-      paidOrders,
-    ]);
+    useMemo(
+      () =>
+        salesForDays(
+          getPeriodRange(
+            'today'
+          )
+        ),
+      [
+        salesForDays,
+      ]
+    );
 
   const monthSales =
-    useMemo(() => {
-      const now =
-        new Date();
+    useMemo(
+      () =>
+        salesForDays(
+          getPeriodRange(
+            'month'
+          )
+        ),
+      [
+        salesForDays,
+      ]
+    );
 
-      return paidOrders
-        .filter(
-          order =>
-            isSameMonth(
-              getSaleDate(
-                order
-              ),
-              now
-            )
-        )
-        .reduce(
-          (
-            total,
-            order
-          ) =>
-            total +
-            getShopRevenue(
-              order
-            ),
-          0
-        );
-    }, [
-      paidOrders,
-    ]);
+  const allTimeSales =
+    useMemo(
+      () =>
+        salesForDays(
+          null
+        ),
+      [
+        salesForDays,
+      ]
+    );
 
   /*
    * =======================================================
@@ -453,7 +566,7 @@ export default function SellerReportsScreen() {
 
   /*
    * =======================================================
-   * PRODUCT PERFORMANCE
+   * PRODUCT PERFORMANCE (selected period)
    * =======================================================
    */
 
@@ -463,10 +576,10 @@ export default function SellerReportsScreen() {
     >(
       () =>
         buildProductPerformance(
-          orders
+          periodSales
         ),
       [
-        orders,
+        periodSales,
       ]
     );
 
@@ -516,6 +629,14 @@ export default function SellerReportsScreen() {
     useSeeAll(
       reviews?.reviews
     );
+
+  const ratePercent =
+    commissionRate !== null
+      ? Math.round(
+          commissionRate *
+            10000
+        ) / 100
+      : null;
 
   /*
    * =======================================================
@@ -776,170 +897,144 @@ export default function SellerReportsScreen() {
             </View>
           ) : null}
 
-          {/* STAT GRID */}
+          {/* PERIOD */}
 
           <View
             style={
-              styles.statsGrid
+              styles.periodRow
             }
           >
-            <StatCard
-              icon="▣"
-              value={formatNumber(
-                totalOrders
-              )}
-              label="Total Orders"
-              iconBackground="#EAF5EE"
-            />
+            {PERIODS.map(
+              item => {
+                const active =
+                  !customRange &&
+                  period ===
+                    item.value;
 
-            <StatCard
-              icon="✓"
-              value={formatNumber(
-                completedOrders
-              )}
-              label="Completed"
-              iconBackground="#E8F6ED"
-            />
+                return (
+                  <Pressable
+                    key={
+                      item.value
+                    }
+                    onPress={() => {
+                      setCustomRange(
+                        null
+                      );
+                      setPeriod(
+                        item.value
+                      );
+                    }}
+                    style={[
+                      styles.periodChip,
+                      active &&
+                        styles.periodChipActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.periodChipText,
+                        active &&
+                          styles.periodChipTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              }
+            )}
 
-            <StatCard
-              icon="₱"
+            <DateRangeButton
+              value={
+                customRange
+              }
+              onChange={
+                setCustomRange
+              }
+              role="seller"
+              maxDate={new Date()}
+            />
+          </View>
+
+          {/* EARNINGS SUMMARY */}
+
+          <View
+            style={
+              styles.summaryCard
+            }
+          >
+            <Text
+              style={
+                styles.summaryEyebrow
+              }
+            >
+              {periodLabel.toUpperCase()} •{' '}
+              {totals.orders}{' '}
+              {totals.orders === 1
+                ? 'COMPLETED ORDER'
+                : 'COMPLETED ORDERS'}
+            </Text>
+
+            <SummaryRow
+              label="Total Sales"
+              hint="Bouquets, add-ons and pre-order fees. Delivery fees go to Riders."
               value={formatMoney(
-                totalSales
+                totals.sales
               )}
-              label="Paid Sales"
-              iconBackground="#FFF4D9"
             />
 
-            <StatCard
-              icon="◷"
-              value={formatNumber(
-                activeOrders
-              )}
-              label="Active Orders"
-              iconBackground="#F0EBFA"
+            <SummaryRow
+              label={
+                ratePercent !== null
+                  ? `FLOGRAM Commission (${ratePercent}%)`
+                  : 'FLOGRAM Commission'
+              }
+              value={
+                commissionRate !== null
+                  ? `− ${formatMoney(
+                      totals.commission
+                    )}`
+                  : '—'
+              }
+              muted
             />
-          </View>
 
-          {/* ORDER PERFORMANCE */}
-
-          <View
-            style={
-              styles.sectionCard
-            }
-          >
-            <Text
-              style={
-                styles.sectionTitle
+            <SummaryRow
+              label="Your Earnings"
+              hint="Total Sales − Commission"
+              value={
+                commissionRate !== null
+                  ? formatMoney(
+                      totals.earnings
+                    )
+                  : '—'
               }
-            >
-              Order Performance
-            </Text>
-
-            <View
-              style={
-                styles.performanceList
-              }
-            >
-              <PerformanceRow
-                label="Pending"
-                value={formatNumber(
-                  pendingOrders
-                )}
-              />
-
-              <PerformanceRow
-                label="Active"
-                value={formatNumber(
-                  activeOrders
-                )}
-              />
-
-              <PerformanceRow
-                label="Completed"
-                value={formatNumber(
-                  completedOrders
-                )}
-              />
-
-              <PerformanceRow
-                label="Cancelled"
-                value={formatNumber(
-                  cancelledOrders
-                )}
-              />
-
-              <PerformanceRow
-                label="Completion Rate"
-                value={`${completionRate.toFixed(
-                  1
-                )}%`}
-                isLast
-              />
-            </View>
-          </View>
-
-          {/* WEEKLY ORDERS */}
-
-          <View
-            style={
-              styles.sectionCard
-            }
-          >
-            <View
-              style={
-                styles.sectionHeaderRow
-              }
-            >
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Weekly Orders
-              </Text>
-
-              <Text
-                style={
-                  styles.sectionHint
-                }
-              >
-                Current week
-              </Text>
-            </View>
-
-            <WeeklyChart
-              data={
-                weeklyData
-              }
+              strong
+              last
             />
-          </View>
-
-          {/* SALES SUMMARY */}
-
-          <View
-            style={
-              styles.sectionCard
-            }
-          >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Sales Summary
-            </Text>
 
             <Text
               style={
-                styles.sectionDescription
+                styles.summaryNote
               }
             >
-              Paid orders only. Amounts are
-              your shop&apos;s bouquet sales and
-              exclude delivery fees, which go to
-              Riders.
+              A sale counts only when the order is completed:
+              the customer tapped &quot;Order Received&quot;, or
+              you handed over a pickup order. Paid online orders
+              still in progress are not counted yet. Payout timing
+              (e.g. COD after the Rider remits) is shown in
+              Earnings.
             </Text>
+          </View>
 
+          {/* SALES OVERVIEW */}
+
+          <CollapsibleSection
+            title="Sales Overview"
+            subtitle="Today, this month, all time and by payment method"
+            icon="cash-outline"
+            role="seller"
+          >
             <View
               style={
                 styles.performanceList
@@ -962,42 +1057,81 @@ export default function SellerReportsScreen() {
               <PerformanceRow
                 label="All Time"
                 value={formatMoney(
-                  totalSales
+                  allTimeSales
                 )}
                 isLast
               />
             </View>
-          </View>
+
+            <Text
+              style={
+                styles.subheading
+              }
+            >
+              {periodLabel} by payment method
+            </Text>
+
+            <View
+              style={
+                styles.performanceList
+              }
+            >
+              {totals.byMethod.length >
+              0 ? (
+                totals.byMethod.map(
+                  (
+                    item,
+                    index
+                  ) => (
+                    <PerformanceRow
+                      key={
+                        item.method
+                      }
+                      label={`${PAYMENT_LABELS[item.method] || 'Other'} (${item.orders})`}
+                      value={formatMoney(
+                        item.sales
+                      )}
+                      isLast={
+                        index ===
+                          totals.byMethod.length -
+                            1 &&
+                        totals.preOrderFees <=
+                          0
+                      }
+                    />
+                  )
+                )
+              ) : (
+                <PerformanceRow
+                  label="No completed orders"
+                  value={formatMoney(
+                    0
+                  )}
+                  isLast
+                />
+              )}
+
+              {totals.preOrderFees >
+              0 ? (
+                <PerformanceRow
+                  label="Includes pre-order fees"
+                  value={formatMoney(
+                    totals.preOrderFees
+                  )}
+                  isLast
+                />
+              ) : null}
+            </View>
+          </CollapsibleSection>
 
           {/* TOP PRODUCTS */}
 
-          <View
-            style={
-              styles.sectionCard
-            }
+          <CollapsibleSection
+            title="Top Products"
+            subtitle={`${periodLabel} • what customers paid per bouquet`}
+            icon="flower-outline"
+            role="seller"
           >
-            <View
-              style={
-                styles.sectionHeaderRow
-              }
-            >
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Product Performance
-              </Text>
-
-              <Text
-                style={
-                  styles.sectionHint
-                }
-              >
-                Paid orders
-              </Text>
-            </View>
-
             {topProducts.length >
             0 ? (
               <View
@@ -1083,6 +1217,19 @@ export default function SellerReportsScreen() {
                     </View>
                   )
                 )}
+
+                <Text
+                  style={
+                    styles.summaryNote
+                  }
+                >
+                  Product amount = price × quantity + add-ons (no
+                  delivery fee, before commission
+                  {totals.preOrderFees > 0
+                    ? ', pre-order fees shown in Sales Overview'
+                    : ''}
+                  ).
+                </Text>
               </View>
             ) : (
               <View
@@ -1112,28 +1259,141 @@ export default function SellerReportsScreen() {
                   }
                 >
                   Product performance
-                  will appear after paid
-                  orders are recorded.
+                  will appear after
+                  orders are completed.
                 </Text>
               </View>
             )}
-          </View>
+          </CollapsibleSection>
+
+          {/* ORDERS */}
+
+          <CollapsibleSection
+            title="Orders"
+            subtitle="All your shop orders and their status"
+            icon="receipt-outline"
+            role="seller"
+          >
+            <View
+              style={
+                styles.statsGrid
+              }
+            >
+              <StatCard
+                icon="▣"
+                value={formatNumber(
+                  totalOrders
+                )}
+                label="Total Orders"
+                iconBackground="#EAF5EE"
+              />
+
+              <StatCard
+                icon="✓"
+                value={formatNumber(
+                  completedOrders
+                )}
+                label="Completed"
+                iconBackground="#E8F6ED"
+              />
+
+              <StatCard
+                icon="⌂"
+                value={formatNumber(
+                  awaitingConfirmation
+                )}
+                label="Delivered, awaiting confirmation"
+                iconBackground="#FFF4D9"
+              />
+
+              <StatCard
+                icon="◷"
+                value={formatNumber(
+                  activeOrders
+                )}
+                label="Active Orders"
+                iconBackground="#F0EBFA"
+              />
+            </View>
+
+            <View
+              style={
+                styles.performanceList
+              }
+            >
+              <PerformanceRow
+                label="Pending"
+                value={formatNumber(
+                  pendingOrders
+                )}
+              />
+
+              <PerformanceRow
+                label="Active"
+                value={formatNumber(
+                  activeOrders
+                )}
+              />
+
+              <PerformanceRow
+                label="Delivered (awaiting customer)"
+                value={formatNumber(
+                  awaitingConfirmation
+                )}
+              />
+
+              <PerformanceRow
+                label="Completed"
+                value={formatNumber(
+                  completedOrders
+                )}
+              />
+
+              <PerformanceRow
+                label="Cancelled"
+                value={formatNumber(
+                  cancelledOrders
+                )}
+              />
+
+              <PerformanceRow
+                label="Completion Rate"
+                value={`${completionRate.toFixed(
+                  1
+                )}%`}
+                isLast
+              />
+            </View>
+          </CollapsibleSection>
+
+          {/* WEEKLY ORDERS */}
+
+          <CollapsibleSection
+            title="Weekly Orders"
+            subtitle="Orders placed this week (Mon–Sun)"
+            icon="bar-chart-outline"
+            role="seller"
+          >
+            <WeeklyChart
+              data={
+                weeklyData
+              }
+            />
+          </CollapsibleSection>
 
           {/* CUSTOMER RATING */}
 
-          <View
-            style={
-              styles.sectionCard
+          <CollapsibleSection
+            title="Shop Rating"
+            subtitle={
+              ratingCount > 0 &&
+              averageRating !== null
+                ? `${averageRating.toFixed(1)} from ${ratingCount} ${ratingCount === 1 ? 'rating' : 'ratings'}`
+                : 'No ratings yet'
             }
+            icon="star-outline"
+            role="seller"
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Shop Rating
-            </Text>
-
             {averageRating !==
               null &&
             ratingCount > 0 ? (
@@ -1282,40 +1542,19 @@ export default function SellerReportsScreen() {
                 </View>
               </View>
             )}
-          </View>
+          </CollapsibleSection>
 
           {/* RECENT REVIEWS */}
 
           {reviews &&
           reviews.reviews.length >
             0 ? (
-            <View
-              style={
-                styles.sectionCard
-              }
+            <CollapsibleSection
+              title="Customer Reviews"
+              subtitle="Latest feedback"
+              icon="chatbubble-ellipses-outline"
+              role="seller"
             >
-              <View
-                style={
-                  styles.sectionHeaderRow
-                }
-              >
-                <Text
-                  style={
-                    styles.sectionTitle
-                  }
-                >
-                  Recent Reviews
-                </Text>
-
-                <Text
-                  style={
-                    styles.sectionHint
-                  }
-                >
-                  Latest feedback
-                </Text>
-              </View>
-
               <View
                 style={
                   styles.reviewList
@@ -1434,7 +1673,7 @@ export default function SellerReportsScreen() {
                 }
                 role="seller"
               />
-            </View>
+            </CollapsibleSection>
           ) : null}
 
           <View
@@ -1448,6 +1687,76 @@ export default function SellerReportsScreen() {
         <SellerBottomNav active="reports" />
       </View>
     </SafeAreaView>
+  );
+}
+
+/*
+ * =========================================================
+ * SUMMARY ROW
+ * =========================================================
+ */
+
+function SummaryRow({
+  label,
+  value,
+  hint,
+  muted = false,
+  strong = false,
+  last = false,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  muted?: boolean;
+  strong?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <View
+      style={[
+        styles.summaryRow,
+        last &&
+          styles.summaryRowLast,
+      ]}
+    >
+      <View
+        style={
+          styles.summaryLabelWrap
+        }
+      >
+        <Text
+          style={[
+            styles.summaryLabel,
+            strong &&
+              styles.summaryLabelStrong,
+          ]}
+        >
+          {label}
+        </Text>
+
+        {hint ? (
+          <Text
+            style={
+              styles.summaryHint
+            }
+          >
+            {hint}
+          </Text>
+        ) : null}
+      </View>
+
+      <Text
+        style={[
+          styles.summaryValue,
+          muted &&
+            styles.summaryValueMuted,
+          strong &&
+            styles.summaryValueStrong,
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -1722,7 +2031,299 @@ function RatingRow({
  * =========================================================
  * REPORT HELPERS
  * =========================================================
+ *
+ * Same rules as the Admin report and Seller Earnings
+ * (server: admin/revenue.service.js, sellerPayouts):
+ *
+ *   sale         = order COMPLETED (customer marked received /
+ *                  pickup handed over), not refunded
+ *   sale date    = completedAt (older orders: deliveredAt,
+ *                  then updatedAt)
+ *   Total Sales  = Σ (totalAmount − deliveryFee)
+ *                = price × qty + add-ons + pre-order fee
+ *   Commission   = Σ round(order sales × commission rate)
+ *   Earnings     = Total Sales − Commission
+ * =========================================================
  */
+
+const MANILA_OFFSET_MS =
+  8 * 60 * 60 * 1000;
+
+function roundMoney(
+  value: number
+) {
+  return (
+    Math.round(
+      (Number(value) || 0) *
+        100
+    ) / 100
+  );
+}
+
+function isCompletedSale(
+  order: CustomerOrder
+) {
+  return (
+    order.orderStatus ===
+      'completed' &&
+    order.paymentStatus !==
+      'refunded'
+  );
+}
+
+function getSaleDate(
+  order: CustomerOrder
+) {
+  return new Date(
+    order.completedAt ||
+      order.deliveredAt ||
+      order.updatedAt ||
+      order.createdAt
+  );
+}
+
+/*
+ * What the customer paid for the bouquet line itself:
+ * unit price × quantity + add-ons (no delivery fee, no
+ * pre-order fee, before commission).
+ */
+function getProductLineAmount(
+  order: CustomerOrder
+) {
+  const subtotal =
+    Number(
+      order.subtotal
+    );
+
+  if (
+    Number.isFinite(
+      subtotal
+    ) &&
+    subtotal > 0
+  ) {
+    return subtotal;
+  }
+
+  return (
+    Number(
+      order.unitPrice ||
+        0
+    ) *
+      Number(
+        order.quantity ||
+          1
+      ) +
+    Number(
+      order.addOnsTotal ||
+        0
+    )
+  );
+}
+
+function summarizeSales(
+  saleOrders: CustomerOrder[],
+  rate: number | null
+): SalesTotals {
+  const methods =
+    new Map<
+      string,
+      { sales: number; orders: number }
+    >();
+
+  let sales = 0;
+  let commission = 0;
+  let preOrderFees = 0;
+
+  saleOrders.forEach(
+    order => {
+      const orderSales =
+        roundMoney(
+          getShopRevenue(
+            order
+          )
+        );
+
+      sales += orderSales;
+
+      preOrderFees +=
+        Number(
+          order.preOrderFee ||
+            0
+        );
+
+      if (
+        rate !== null
+      ) {
+        commission +=
+          roundMoney(
+            orderSales *
+              rate
+          );
+      }
+
+      const method =
+        order.paymentMethod ||
+        'other';
+
+      const current =
+        methods.get(
+          method
+        ) || {
+          sales: 0,
+          orders: 0,
+        };
+
+      current.sales +=
+        orderSales;
+
+      current.orders += 1;
+
+      methods.set(
+        method,
+        current
+      );
+    }
+  );
+
+  return {
+    orders:
+      saleOrders.length,
+    sales:
+      roundMoney(
+        sales
+      ),
+    preOrderFees:
+      roundMoney(
+        preOrderFees
+      ),
+    commission:
+      roundMoney(
+        commission
+      ),
+    earnings:
+      roundMoney(
+        sales -
+          commission
+      ),
+    byMethod:
+      Array.from(
+        methods.entries()
+      )
+        .map(
+          ([
+            method,
+            value,
+          ]) => ({
+            method,
+            sales:
+              roundMoney(
+                value.sales
+              ),
+            orders:
+              value.orders,
+          })
+        )
+        .sort(
+          (
+            first,
+            second
+          ) =>
+            second.sales -
+            first.sales
+        ),
+  };
+}
+
+/*
+ * "YYYY-MM-DD" of the Philippine calendar day.
+ */
+function manilaDayKey(
+  date: Date
+) {
+  const time =
+    date.getTime();
+
+  if (
+    Number.isNaN(
+      time
+    )
+  ) {
+    return '';
+  }
+
+  return new Date(
+    time +
+      MANILA_OFFSET_MS
+  )
+    .toISOString()
+    .slice(
+      0,
+      10
+    );
+}
+
+function getPeriodRange(
+  period: ReportPeriod
+): DateRange | null {
+  if (
+    period === 'all'
+  ) {
+    return null;
+  }
+
+  const today =
+    manilaDayKey(
+      new Date()
+    );
+
+  if (
+    period === 'today'
+  ) {
+    return {
+      start: today,
+      end: today,
+    };
+  }
+
+  if (
+    period === 'month'
+  ) {
+    return {
+      start: `${today.slice(0, 7)}-01`,
+      end: today,
+    };
+  }
+
+  return {
+    start:
+      manilaDayKey(
+        new Date(
+          Date.now() -
+            6 *
+              24 *
+              60 *
+              60 *
+              1000
+        )
+      ),
+    end: today,
+  };
+}
+
+function isKeyInRange(
+  key: string,
+  range: DateRange | null
+) {
+  if (!range) {
+    return true;
+  }
+
+  return (
+    Boolean(key) &&
+    key >= range.start &&
+    key <= range.end
+  );
+}
 
 function buildWeeklyData(
   orders: CustomerOrder[]
@@ -1755,6 +2356,9 @@ function buildWeeklyData(
           index
       );
 
+      /*
+       * Bars = orders placed that day.
+       */
       const dayOrders =
         orders.filter(
           order =>
@@ -1766,14 +2370,22 @@ function buildWeeklyData(
             )
         );
 
+      /*
+       * Sales = orders completed that day.
+       */
       const sales =
-        dayOrders
+        orders
           .filter(
             order =>
-              order.paymentStatus ===
-                'paid' &&
-              order.orderStatus !==
-                'cancelled'
+              isCompletedSale(
+                order
+              ) &&
+              isSameDay(
+                getSaleDate(
+                  order
+                ),
+                date
+              )
           )
           .reduce(
             (
@@ -1782,8 +2394,8 @@ function buildWeeklyData(
             ) =>
               total +
               getShopRevenue(
-              order
-            ),
+                order
+              ),
             0
           );
 
@@ -1798,7 +2410,7 @@ function buildWeeklyData(
 }
 
 function buildProductPerformance(
-  orders: CustomerOrder[]
+  saleOrders: CustomerOrder[]
 ): ProductPerformance[] {
   const productMap =
     new Map<
@@ -1806,60 +2418,54 @@ function buildProductPerformance(
       ProductPerformance
     >();
 
-  orders
-    .filter(
-      order =>
-        order.paymentStatus ===
-          'paid' &&
-        SUCCESSFUL_STATUSES.includes(
-          order.orderStatus
-        )
-    )
-    .forEach(
-      order => {
-        const productName =
-          order.productName?.trim() ||
-          'Custom Bouquet';
+  saleOrders.forEach(
+    order => {
+      const productName =
+        order.productName?.trim() ||
+        'Custom Bouquet';
 
-        const quantity =
-          Number(
-            order.quantity ||
-              1
-          );
-
-        const current =
-          productMap.get(
-            productName
-          ) || {
-            name:
-              productName,
-
-            quantity:
-              0,
-
-            sales:
-              0,
-          };
-
-        current.quantity +=
-          Number.isFinite(
-            quantity
-          ) &&
-          quantity > 0
-            ? quantity
-            : 1;
-
-        current.sales +=
-          getShopRevenue(
-              order
-            );
-
-        productMap.set(
-          productName,
-          current
+      const quantity =
+        Number(
+          order.quantity ||
+            1
         );
-      }
-    );
+
+      const current =
+        productMap.get(
+          productName
+        ) || {
+          name:
+            productName,
+
+          quantity:
+            0,
+
+          sales:
+            0,
+        };
+
+      current.quantity +=
+        Number.isFinite(
+          quantity
+        ) &&
+        quantity > 0
+          ? quantity
+          : 1;
+
+      current.sales =
+        roundMoney(
+          current.sales +
+            getProductLineAmount(
+              order
+            )
+        );
+
+      productMap.set(
+        productName,
+        current
+      );
+    }
+  );
 
   return Array.from(
     productMap.values()
@@ -1878,19 +2484,6 @@ function buildProductPerformance(
       0,
       5
     );
-}
-
-function getSaleDate(
-  order: CustomerOrder
-) {
-  const value =
-    order.paidAt ||
-    order.completedAt ||
-    order.createdAt;
-
-  return new Date(
-    value
-  );
 }
 
 function startOfCurrentWeek() {
@@ -1947,29 +2540,6 @@ function isSameDay(
       second.getMonth() &&
     first.getDate() ===
       second.getDate()
-  );
-}
-
-function isSameMonth(
-  first: Date,
-  second: Date
-) {
-  if (
-    Number.isNaN(
-      first.getTime()
-    ) ||
-    Number.isNaN(
-      second.getTime()
-    )
-  ) {
-    return false;
-  }
-
-  return (
-    first.getFullYear() ===
-      second.getFullYear() &&
-    first.getMonth() ===
-      second.getMonth()
   );
 }
 
@@ -2378,6 +2948,124 @@ const styles =
     /*
      * STATS
      */
+
+    /*
+     * PERIOD + EARNINGS SUMMARY
+     */
+
+    periodRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 12,
+    },
+
+    periodChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: '#DCE8E0',
+      backgroundColor: '#FFFFFF',
+    },
+
+    periodChipActive: {
+      backgroundColor: '#5E9874',
+      borderColor: '#5E9874',
+    },
+
+    periodChipText: {
+      color: '#5F6B63',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    periodChipTextActive: {
+      color: '#FFFFFF',
+    },
+
+    summaryCard: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: '#E3EEE7',
+    },
+
+    summaryEyebrow: {
+      color: '#5E9874',
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+      marginBottom: 6,
+    },
+
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: '#EFF2F0',
+      gap: 10,
+    },
+
+    summaryRowLast: {
+      borderBottomWidth: 0,
+    },
+
+    summaryLabelWrap: {
+      flex: 1,
+    },
+
+    summaryLabel: {
+      color: '#414A44',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+
+    summaryLabelStrong: {
+      color: '#2F5C40',
+      fontSize: 14,
+      fontWeight: '900',
+    },
+
+    summaryHint: {
+      marginTop: 2,
+      color: '#949D97',
+      fontSize: 10.5,
+    },
+
+    summaryValue: {
+      color: '#414A44',
+      fontSize: 15,
+      fontWeight: '900',
+    },
+
+    summaryValueMuted: {
+      color: '#B0626F',
+    },
+
+    summaryValueStrong: {
+      color: '#2F7A4D',
+      fontSize: 18,
+    },
+
+    summaryNote: {
+      marginTop: 8,
+      color: '#8A938D',
+      fontSize: 10.5,
+      lineHeight: 15,
+    },
+
+    subheading: {
+      marginTop: 14,
+      color: '#5F6B63',
+      fontSize: 11,
+      fontWeight: '800',
+    },
 
     statsGrid: {
       flexDirection:

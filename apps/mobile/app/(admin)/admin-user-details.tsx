@@ -27,6 +27,7 @@ import {
 } from "../../services/admin";
 
 import { ScreenLoader } from '../../components/ui/state-views';
+import AdminContactActions from '../../components/admin/admin-contact-actions';
 
 const COLORS = {
   purple: "#312E81",
@@ -934,6 +935,11 @@ export default function AdminUserDetailsScreen() {
                 user.phoneNumber ||
                 "Not available"
               }
+            />
+
+            <AdminContactActions
+              phone={user.phoneNumber}
+              compact
             />
 
             <InfoRow

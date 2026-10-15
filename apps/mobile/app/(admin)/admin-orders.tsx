@@ -27,6 +27,11 @@ import {
 
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
 import { SeeAllButton, useSeeAll } from '../../components/ui/see-all';
+import {
+  DateRangeButton,
+  isInRange,
+  type DateRange as CustomDateRange,
+} from '../../components/ui/date-range-picker';
 
 type FilterStatus =
   | "all"
@@ -380,6 +385,17 @@ export default function AdminOrdersScreen() {
       "all"
     );
 
+  /*
+   * Custom calendar range. Picking a quick chip clears it.
+   */
+  const [
+    customRange,
+    setCustomRange,
+  ] =
+    useState<CustomDateRange | null>(
+      null
+    );
+
   const loadOrders =
     useCallback(
       async (
@@ -483,10 +499,15 @@ export default function AdminOrdersScreen() {
           }
 
           if (
-            !isInDateRange(
-              order.createdAt,
-              dateRange
-            )
+            customRange
+              ? !isInRange(
+                  order.createdAt,
+                  customRange
+                )
+              : !isInDateRange(
+                  order.createdAt,
+                  dateRange
+                )
           ) {
             return false;
           }
@@ -536,6 +557,7 @@ export default function AdminOrdersScreen() {
       filter,
       search,
       dateRange,
+      customRange,
     ]);
 
   /*
@@ -543,7 +565,7 @@ export default function AdminOrdersScreen() {
    * status, date or search filter changes.
    */
   const seeAll = useSeeAll(filteredOrders, {
-    resetKey: `${filter}|${dateRange}|${search.trim().toLowerCase()}`,
+    resetKey: `${filter}|${dateRange}|${customRange ? `${customRange.start}_${customRange.end}` : ''}|${search.trim().toLowerCase()}`,
   });
 
   /*
@@ -1072,6 +1094,7 @@ export default function AdminOrdersScreen() {
           >
             {DATE_RANGES.map((item) => {
               const selected =
+                !customRange &&
                 dateRange === item.value;
 
               return (
@@ -1082,9 +1105,10 @@ export default function AdminOrdersScreen() {
                     selected &&
                       styles.dateChipActive,
                   ]}
-                  onPress={() =>
-                    setDateRange(item.value)
-                  }
+                  onPress={() => {
+                    setDateRange(item.value);
+                    setCustomRange(null);
+                  }}
                 >
                   <Ionicons
                     name="calendar-outline"
@@ -1108,6 +1132,13 @@ export default function AdminOrdersScreen() {
                 </Pressable>
               );
             })}
+
+            <DateRangeButton
+              value={customRange}
+              onChange={setCustomRange}
+              role="admin"
+              maxDate={new Date()}
+            />
           </ScrollView>
 
           <View

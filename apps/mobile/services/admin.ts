@@ -508,12 +508,21 @@ export type AdminReportPeriod =
   | "1y"
   | "all";
 
+/*
+ * Custom range: Manila calendar days "YYYY-MM-DD",
+ * both included.
+ */
+export type AdminReportCustomRange = {
+  start: string;
+  end: string;
+};
+
 export type AdminReportGranularity =
   | "day"
   | "month";
 
 export type AdminReportPeriodInfo = {
-  key: AdminReportPeriod;
+  key: AdminReportPeriod | "custom";
 
   startDate:
     | string
@@ -551,15 +560,18 @@ export type AdminReportOverview = {
   cancellationRate: number;
 
   /*
-   * Recognized sales:
-   *
-   * Online:
-   * successfully paid non-COD orders.
-   *
-   * COD:
-   * Admin-verified Rider remittances.
+   * Recognized sales: what customers paid for orders
+   * COMPLETED in the period (customer marked received /
+   * pickup handed over), every payment method.
    */
   recognizedSales: number;
+
+  /*
+   * Number of orders completed in the period.
+   */
+  salesOrders?: number;
+
+  productSales?: number;
 
   commission: number;
 
@@ -579,11 +591,19 @@ export type AdminSalesTrendItem = {
 
   cod: number;
 
+  pickup?: number;
+
   total: number;
+
+  deliveryFees?: number;
+
+  productSales?: number;
 
   commission: number;
 
   sellerShare: number;
+
+  orders?: number;
 };
 
 export type AdminReportSales = {
@@ -607,8 +627,11 @@ export type AdminReportSales = {
 
   /*
    * total − delivery fees; commission is taken from this.
+   * Includes add-ons and pre-order fees (shop income).
    */
   productSales?: number;
+
+  preOrderFees?: number;
 
   commissionRate: number;
 
@@ -617,6 +640,15 @@ export type AdminReportSales = {
   commission: number;
 
   sellerShare: number;
+
+  /*
+   * Informational: completed COD sales whose cash is still
+   * with Riders (remittance not verified yet).
+   */
+  codAwaitingRemittance?: {
+    orders: number;
+    amount: number;
+  };
 
   trend: AdminSalesTrendItem[];
 };
@@ -647,6 +679,11 @@ export type AdminReportOrders = {
   completed: number;
 
   cancelled: number;
+
+  /*
+   * Delivered, customer has not confirmed receipt yet.
+   */
+  awaitingConfirmation?: number;
 
   preOrders: number;
 
@@ -789,11 +826,9 @@ export type AdminTopShop = {
   orders: number;
 
   /*
-   * Completed marketplace order
-   * value for operational ranking.
-   *
-   * This is NOT the same as
-   * recognized platform revenue.
+   * Product sales (order total − delivery fee) of the
+   * shop's orders completed in the period — the same money
+   * the Sales section counts.
    */
   orderValue: number;
 };
@@ -845,6 +880,7 @@ type AdminReportsResponse =
  * ?period=6m
  * ?period=1y
  * ?period=all
+ * ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD (custom)
  *
  * ADMIN ONLY
  * =========================================================
@@ -852,15 +888,18 @@ type AdminReportsResponse =
 
 export async function getAdminReports(
   period: AdminReportPeriod =
-    "30d"
+    "30d",
+  customRange?: AdminReportCustomRange | null
 ): Promise<AdminReportsData> {
+  const query = customRange
+    ? `startDate=${encodeURIComponent(customRange.start)}&endDate=${encodeURIComponent(customRange.end)}`
+    : `period=${encodeURIComponent(period)}`;
+
   const response =
     await apiRequest<
       AdminReportsResponse
     >(
-      `/admin/reports?period=${encodeURIComponent(
-        period
-      )}`,
+      `/admin/reports?${query}`,
       {
         method: "GET",
 

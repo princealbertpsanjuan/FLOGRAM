@@ -22,8 +22,15 @@ import {
   getAdminSettings,
   updateAdminSettings,
 } from "../../services/admin";
+import {
+  isValidPhone,
+  normalizePhone,
+  PHONE_ERROR,
+  sanitizePhoneInput,
+} from "../../utils/validation";
 
 import AdminBottomNav from '../../components/admin/admin-bottom-nav';
+import CollapsibleSection from '../../components/ui/collapsible-section';
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
@@ -104,30 +111,6 @@ function getInitials(
     `${first}${last}`.toUpperCase();
 
   return initials || "A";
-}
-
-type SectionHeaderProps = {
-  title: string;
-  subtitle?: string;
-};
-
-function SectionHeader({
-  title,
-  subtitle,
-}: SectionHeaderProps) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>
-        {title}
-      </Text>
-
-      {subtitle ? (
-        <Text style={styles.sectionSubtitle}>
-          {subtitle}
-        </Text>
-      ) : null}
-    </View>
-  );
 }
 
 type InputFieldProps = {
@@ -403,7 +386,7 @@ export default function AdminSettingsScreen() {
       );
 
       setPhoneNumber(
-        user.phoneNumber || ""
+        normalizePhone(user.phoneNumber)
       );
     }, []);
 
@@ -558,6 +541,15 @@ export default function AdminSettingsScreen() {
         return;
       }
 
+      if (!isValidPhone(cleanPhoneNumber)) {
+        Alert.alert(
+          "Invalid Phone Number",
+          PHONE_ERROR
+        );
+
+        return;
+      }
+
       try {
         setSavingProfile(true);
 
@@ -578,7 +570,7 @@ export default function AdminSettingsScreen() {
                   cleanLastName,
 
                 phoneNumber:
-                  cleanPhoneNumber,
+                  normalizePhone(cleanPhoneNumber),
               }),
             }
           );
@@ -606,8 +598,10 @@ export default function AdminSettingsScreen() {
         );
 
         setPhoneNumber(
-          updatedUser.phoneNumber ||
-            cleanPhoneNumber
+          normalizePhone(
+            updatedUser.phoneNumber ||
+              cleanPhoneNumber
+          )
         );
 
         Alert.alert(
@@ -1065,15 +1059,11 @@ export default function AdminSettingsScreen() {
               styles.section
             }
           >
-            <SectionHeader
+            <CollapsibleSection
               title="Admin Profile"
               subtitle="Manage your administrator information."
-            />
-
-            <View
-              style={
-                styles.card
-              }
+              icon="person-circle-outline"
+              role="admin"
             >
               <View
                 style={
@@ -1203,8 +1193,10 @@ export default function AdminSettingsScreen() {
                 value={
                   phoneNumber
                 }
-                onChangeText={
-                  setPhoneNumber
+                onChangeText={(value) =>
+                  setPhoneNumber(
+                    sanitizePhoneInput(value)
+                  )
                 }
                 placeholder="09XXXXXXXXX"
                 keyboardType="phone-pad"
@@ -1251,7 +1243,7 @@ export default function AdminSettingsScreen() {
                   </>
                 )}
               </Pressable>
-            </View>
+            </CollapsibleSection>
           </View>
 
           <View
@@ -1259,67 +1251,12 @@ export default function AdminSettingsScreen() {
               styles.section
             }
           >
-            <SectionHeader
-              title="Platform Settings"
-              subtitle="Manage FLOGRAM's platform and financial configuration."
-            />
-
-            <View
-              style={
-                styles.card
-              }
+            <CollapsibleSection
+              title="General Configuration"
+              subtitle="Platform identity and commission rate."
+              icon="settings-outline"
+              role="admin"
             >
-              <View
-                style={
-                  styles.cardHeadingRow
-                }
-              >
-                <View
-                  style={[
-                    styles.cardHeadingIcon,
-                    {
-                      backgroundColor:
-                        COLORS.purpleLight,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="settings-outline"
-                    size={21}
-                    color={
-                      COLORS.purpleAccent
-                    }
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.cardHeadingContent
-                  }
-                >
-                  <Text
-                    style={
-                      styles.cardHeadingTitle
-                    }
-                  >
-                    General Configuration
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.cardHeadingSubtitle
-                    }
-                  >
-                    Platform identity and commission rate.
-                  </Text>
-                </View>
-              </View>
-
-              <View
-                style={
-                  styles.divider
-                }
-              />
 
               <InputField
                 label="Platform Name"
@@ -1471,7 +1408,7 @@ export default function AdminSettingsScreen() {
                   </>
                 )}
               </Pressable>
-            </View>
+            </CollapsibleSection>
           </View>
 
           <View
@@ -1479,16 +1416,11 @@ export default function AdminSettingsScreen() {
               styles.section
             }
           >
-            <SectionHeader
+            <CollapsibleSection
               title="Admin Operations"
               subtitle="Quick access to important platform management tasks."
-            />
-
-            <View
-              style={[
-                styles.card,
-                styles.navigationCard,
-              ]}
+              icon="grid-outline"
+              role="admin"
             >
               <NavigationRow
                 icon="storefront-outline"
@@ -1552,7 +1484,7 @@ export default function AdminSettingsScreen() {
                   )
                 }
               />
-            </View>
+            </CollapsibleSection>
           </View>
 
           <View
@@ -1560,67 +1492,12 @@ export default function AdminSettingsScreen() {
               styles.section
             }
           >
-            <SectionHeader
-              title="Account & Security"
-              subtitle="Keep your administrator account secure."
-            />
-
-            <View
-              style={
-                styles.card
-              }
+            <CollapsibleSection
+              title="Change Password"
+              subtitle="Update your administrator password."
+              icon="lock-closed-outline"
+              role="admin"
             >
-              <View
-                style={
-                  styles.cardHeadingRow
-                }
-              >
-                <View
-                  style={[
-                    styles.cardHeadingIcon,
-                    {
-                      backgroundColor:
-                        COLORS.yellowBackground,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={21}
-                    color={
-                      COLORS.yellow
-                    }
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.cardHeadingContent
-                  }
-                >
-                  <Text
-                    style={
-                      styles.cardHeadingTitle
-                    }
-                  >
-                    Change Password
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.cardHeadingSubtitle
-                    }
-                  >
-                    Update your administrator password.
-                  </Text>
-                </View>
-              </View>
-
-              <View
-                style={
-                  styles.divider
-                }
-              />
 
               <View
                 style={
@@ -1866,7 +1743,7 @@ export default function AdminSettingsScreen() {
                   </>
                 )}
               </Pressable>
-            </View>
+            </CollapsibleSection>
           </View>
 
           <View
@@ -1874,15 +1751,11 @@ export default function AdminSettingsScreen() {
               styles.section
             }
           >
-            <SectionHeader
+            <CollapsibleSection
               title="System Information"
               subtitle="Current FLOGRAM platform information."
-            />
-
-            <View
-              style={
-                styles.card
-              }
+              icon="information-circle-outline"
+              role="admin"
             >
               <View
                 style={
@@ -2037,7 +1910,7 @@ export default function AdminSettingsScreen() {
                   Administrator
                 </Text>
               </View>
-            </View>
+            </CollapsibleSection>
           </View>
 
           <View

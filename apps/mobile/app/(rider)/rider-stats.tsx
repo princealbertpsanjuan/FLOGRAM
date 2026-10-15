@@ -30,6 +30,8 @@ import RiderBottomNav, {
 
 import { ScreenLoader } from '../../components/ui/state-views';
 
+import CollapsibleSection from '../../components/ui/collapsible-section';
+
 /*
  * =========================================================
  * RIDER STATS
@@ -614,19 +616,12 @@ export default function RiderStatsScreen() {
               DELIVERY PERFORMANCE
           =================================================== */}
 
-          <View
-            style={
-              styles.sectionCard
-            }
+          <CollapsibleSection
+            title="Delivery Performance"
+            subtitle="Completed and active deliveries"
+            icon="speedometer-outline"
+            role="rider"
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Delivery Performance
-            </Text>
-
             <View
               style={
                 styles.performanceList
@@ -654,63 +649,35 @@ export default function RiderStatsScreen() {
                 isLast
               />
             </View>
-          </View>
+          </CollapsibleSection>
 
           {/* ===================================================
               WEEKLY DELIVERIES
           =================================================== */}
 
-          <View
-            style={
-              styles.sectionCard
-            }
+          <CollapsibleSection
+            title="Weekly Deliveries"
+            subtitle="Current week"
+            icon="bar-chart-outline"
+            role="rider"
           >
-            <View
-              style={
-                styles.sectionHeaderRow
-              }
-            >
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
-                Weekly Deliveries
-              </Text>
-
-              <Text
-                style={
-                  styles.sectionHint
-                }
-              >
-                Current week
-              </Text>
-            </View>
-
             <WeeklyChart
               data={
                 weeklyDeliveries
               }
             />
-          </View>
+          </CollapsibleSection>
 
           {/* ===================================================
               DELIVERY FEES EARNED
           =================================================== */}
 
-          <View
-            style={
-              styles.sectionCard
-            }
+          <CollapsibleSection
+            title="Delivery Fees Earned"
+            subtitle="Today, this month and all time"
+            icon="cash-outline"
+            role="rider"
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Delivery Fees Earned
-            </Text>
-
             <Text
               style={
                 styles.valueDisclaimer
@@ -749,25 +716,18 @@ export default function RiderStatsScreen() {
                 isLast
               />
             </View>
-          </View>
+          </CollapsibleSection>
 
           {/* ===================================================
               RIDER RATING
           =================================================== */}
 
-          <View
-            style={
-              styles.sectionCard
-            }
+          <CollapsibleSection
+            title="Rider Rating"
+            subtitle="Customer ratings of your deliveries"
+            icon="star-outline"
+            role="rider"
           >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Rider Rating
-            </Text>
-
             {averageRating !==
               null &&
             typeof averageRating ===
@@ -865,7 +825,7 @@ export default function RiderStatsScreen() {
                 </View>
               </View>
             )}
-          </View>
+          </CollapsibleSection>
 
           <View
             style={{

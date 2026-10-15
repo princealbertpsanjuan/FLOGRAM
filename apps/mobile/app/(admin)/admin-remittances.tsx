@@ -17,6 +17,11 @@ import {
   getAdminRemittances,
 } from "../../services/admin";
 import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
+import {
+  DateRangeButton,
+  isInRange,
+  type DateRange,
+} from "../../components/ui/date-range-picker";
 
 type FilterStatus = "all" | AdminRemittanceStatus;
 
@@ -203,6 +208,12 @@ export default function AdminRemittancesScreen() {
   const [selectedFilter, setSelectedFilter] =
     useState<FilterStatus>("submitted");
 
+  /*
+   * Optional shift-date range (calendar). null = all dates.
+   */
+  const [dateRange, setDateRange] =
+    useState<DateRange | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [headerRefreshing, setHeaderRefreshing] = useState(false);
@@ -288,20 +299,22 @@ export default function AdminRemittancesScreen() {
   }, [headerRefreshing]);
 
   const filteredRemittances = useMemo(() => {
-    if (selectedFilter === "all") {
-      return remittances;
-    }
-
     return remittances.filter(
-      (item) => item.status === selectedFilter
+      (item) =>
+        (selectedFilter === "all" ||
+          item.status === selectedFilter) &&
+        isInRange(
+          item.shiftDate || item.submittedAt,
+          dateRange
+        )
     );
-  }, [remittances, selectedFilter]);
+  }, [remittances, selectedFilter, dateRange]);
 
   /*
    * Show 5 remittances + "See all"; collapses on tab change.
    */
   const seeAll = useSeeAll(filteredRemittances, {
-    resetKey: selectedFilter,
+    resetKey: `${selectedFilter}|${dateRange ? `${dateRange.start}_${dateRange.end}` : ""}`,
   });
 
   const submittedCount = useMemo(
@@ -603,6 +616,42 @@ export default function AdminRemittancesScreen() {
               </Pressable>
             );
           })}
+        </ScrollView>
+
+        {/* SHIFT DATE */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.filterContainer,
+            styles.dateFilterContainer,
+          ]}
+        >
+          <Pressable
+            style={[
+              styles.filterButton,
+              !dateRange &&
+                styles.filterButtonActive,
+            ]}
+            onPress={() => setDateRange(null)}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                !dateRange &&
+                  styles.filterTextActive,
+              ]}
+            >
+              All dates
+            </Text>
+          </Pressable>
+
+          <DateRangeButton
+            value={dateRange}
+            onChange={setDateRange}
+            role="admin"
+            maxDate={new Date()}
+          />
         </ScrollView>
 
         {error ? (
@@ -1156,6 +1205,11 @@ const styles = StyleSheet.create({
   filterContainer: {
     gap: 7,
     paddingBottom: 18,
+  },
+
+  dateFilterContainer: {
+    alignItems: "center",
+    marginTop: -8,
   },
 
   filterButton: {
