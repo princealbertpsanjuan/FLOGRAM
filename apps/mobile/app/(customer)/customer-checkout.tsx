@@ -353,6 +353,9 @@ type CheckoutQuote = {
 
   deliveryFee?: number;
 
+  // Road distance service was unavailable; fee from straight-line estimate
+  deliveryFeeEstimated?: boolean;
+
   preOrderFee?: number;
 
   totalAmount?: number;
@@ -4817,6 +4820,17 @@ export default function CustomerCheckoutScreen() {
                       }
                     />
 
+
+                    {quote.deliveryFeeEstimated ? (
+
+                      <Text style={styles.estimatedFeeNote}>
+
+                        Delivery fee is estimated from straight-line distance (map service is busy).
+
+                      </Text>
+
+                    ) : null}
+
                     <SummaryRow
                       label="Pre-order fee"
                       value={
@@ -5004,6 +5018,17 @@ export default function CustomerCheckoutScreen() {
                       quote.deliveryFee
                     }
                   />
+
+
+                  {quote.deliveryFeeEstimated ? (
+
+                    <Text style={styles.estimatedFeeNote}>
+
+                      Delivery fee is estimated from straight-line distance (map service is busy).
+
+                    </Text>
+
+                  ) : null}
 
                   <SummaryRow
                     label="Pre-order fee"
@@ -7084,6 +7109,13 @@ const styles =
 
       color:
         COLORS.text,
+    },
+
+    estimatedFeeNote: {
+      marginTop: -2,
+      marginBottom: 6,
+      color: "#8A6D1F",
+      fontSize: 11,
     },
 
     totalDivider: {

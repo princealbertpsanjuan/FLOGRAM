@@ -842,6 +842,10 @@ const calculateShopDelivery =
         route
           .durationSeconds ??
         null,
+
+      // true when OpenRouteService was unavailable
+      deliveryFeeEstimated:
+        route.estimated === true,
     };
   };
 
@@ -1124,6 +1128,10 @@ export const quoteCustomerCheckout =
           route
             .deliveryDurationSeconds,
 
+        deliveryFeeEstimated:
+
+          route.deliveryFeeEstimated === true,
+
         items:
           shopQuotedItems,
       });
@@ -1182,6 +1190,14 @@ export const quoteCustomerCheckout =
 
       deliveryFee:
         totalDeliveryFee,
+
+      deliveryFeeEstimated:
+
+        quotedShops.some(
+
+          (shop) => shop.deliveryFeeEstimated
+
+        ),
 
       preOrderFee:
         totalPreOrderFee,
@@ -1415,6 +1431,9 @@ export const quoteCustomBouquetCheckout =
       productsSubtotal,
 
       deliveryFee,
+
+      deliveryFeeEstimated:
+        route.deliveryFeeEstimated === true,
 
       preOrderFee,
 

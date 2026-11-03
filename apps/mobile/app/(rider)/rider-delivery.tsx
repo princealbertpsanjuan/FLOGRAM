@@ -77,6 +77,9 @@ import ContactActions from '../../components/ui/contact-actions';
  * =========================================================
  */
 
+// How often the rider route is recalculated while driving
+const NAVIGATION_REFRESH_MS = 30000;
+
 export default function RiderDeliveryScreen() {
   const params =
     useLocalSearchParams<{
@@ -215,6 +218,16 @@ export default function RiderDeliveryScreen() {
 
   const sendingLocation =
   useRef(false);
+
+  /*
+   * GPS arrives every ~5 s, but the route only needs a
+   * refresh every 30 s (each refresh is an
+   * OpenRouteService call with a daily quota). A status
+   * change (e.g. picked up -> new destination) still
+   * refreshes right away.
+   */
+  const lastNavigationRefresh =
+  useRef<{ at: number; status: string | null }>({ at: 0, status: null });
 
 /*
  * True after the backend has successfully
@@ -574,8 +587,25 @@ const sendLocationToBackend =
         /*
          * Safe now because the backend has
          * already received Rider GPS.
+         * Throttled to once every 30 s
+         * unless the status changed.
          */
-        await loadNavigation();
+        const navigationAge =
+          Date.now() -
+          lastNavigationRefresh.current.at;
+
+        if (
+          navigationAge >= NAVIGATION_REFRESH_MS ||
+          lastNavigationRefresh.current.status !==
+            statusAfterUpdate
+        ) {
+          lastNavigationRefresh.current = {
+            at: Date.now(),
+            status: statusAfterUpdate,
+          };
+
+          await loadNavigation();
+        }
 
         /*
          * Check status once more before
