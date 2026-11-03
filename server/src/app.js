@@ -20,6 +20,13 @@ const app = express();
 app.disable("x-powered-by");
 
 /*
+ * Render (and Cloudflare Tunnel) put a proxy in front of
+ * the API; trust one hop so req.ip is the real client
+ * address for rate limiting.
+ */
+app.set("trust proxy", 1);
+
+/*
  * crossOriginResourcePolicy: the Admin web portal runs on a
  * different origin and must be able to show uploaded
  * images (proofs, product photos) from /uploads.
@@ -32,10 +39,24 @@ app.use(
   })
 );
 
+/*
+ * The mobile app sends no Origin header and is always
+ * allowed. Browsers (the Admin web portal) are limited to
+ * CORS_ORIGINS when it is set, e.g.
+ * CORS_ORIGINS=https://flogram-admin.onrender.com
+ * Auth uses a Bearer token, not cookies.
+ */
+const allowedOrigins = String(process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: true,
-    credentials: true,
+    origin: allowedOrigins.length
+      ? (origin, callback) =>
+          callback(null, !origin || allowedOrigins.includes(origin))
+      : true,
   })
 );
 

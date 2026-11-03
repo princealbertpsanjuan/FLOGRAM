@@ -1,3 +1,4 @@
+import { getScheduleProblem } from "../../utils/deliverySchedule.js";
 import {
   body,
   validationResult,
@@ -448,12 +449,15 @@ export const createOrderValidation = [
       );
     }
 
-    if (
-      requestedDate <=
-      new Date()
-    ) {
+    const scheduleProblem =
+      getScheduleProblem(
+        requestedDate,
+        value.requestedDeliveryTimeEnd || null
+      );
+
+    if (scheduleProblem) {
       throw new Error(
-        "Pre-order delivery date must be in the future."
+        scheduleProblem
       );
     }
 

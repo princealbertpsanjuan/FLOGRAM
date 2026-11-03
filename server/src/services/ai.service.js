@@ -7,6 +7,13 @@ const AI_SERVICE_URL =
   process.env.AI_SERVICE_URL ||
   "http://localhost:8000";
 
+/*
+ * The Hugging Face Space sleeps when idle and can take a
+ * minute to wake; never wait longer than this.
+ */
+const AI_SERVICE_TIMEOUT_MS =
+  Number(process.env.AI_SERVICE_TIMEOUT_MS) || 60000;
+
 const getMimeType = (filePath) => {
   const extension = path
     .extname(filePath)
@@ -50,22 +57,50 @@ const sendImageToEmbeddingService = async (
     filename
   );
 
-  const response = await fetch(
+  let response;
+
+  try {
+    response = await fetch(
     `${AI_SERVICE_URL}/embed-image`,
     {
+      signal: AbortSignal.timeout(AI_SERVICE_TIMEOUT_MS),
       method: "POST",
       body: formData,
     }
   );
+  } catch (cause) {
+    const error = new Error(
+      cause?.name === "TimeoutError"
+        ? "The image search service is waking up. Please try again in a minute."
+        : "The image search service could not be reached."
+    );
+    error.statusCode = 503;
+    throw error;
+  }
 
-  const result = await response.json();
+  let result;
+
+  try {
+    result = await response.json();
+  } catch {
+    const error = new Error("The image search service returned an invalid response.");
+    error.statusCode = 502;
+    throw error;
+  }
+
 
   if (!response.ok) {
     const error = new Error(
-      result.detail ||
+      result?.detail ||
         "AI service failed to generate image embedding."
     );
 
+    error.statusCode = 502;
+    throw error;
+  }
+
+  if (!Array.isArray(result?.data?.embedding)) {
+    const error = new Error("The image search service returned no embedding.");
     error.statusCode = 502;
     throw error;
   }

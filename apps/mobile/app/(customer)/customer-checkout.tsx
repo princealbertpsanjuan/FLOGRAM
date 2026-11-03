@@ -868,6 +868,53 @@ const isCartItemPurchasable = (
  * SCREEN
  * ======================================================= */
 
+/*
+ * =========================================================
+ * CURRENT LOCATION WITH A TIME LIMIT
+ * =========================================================
+ *
+ * Indoors (e.g. a defense room) a high-accuracy GPS fix can
+ * take minutes or never come, leaving the button spinning.
+ * Wait up to 12 s, then use the last known position, then
+ * ask the customer to type the address or tap the map.
+ * =========================================================
+ */
+const GPS_TIMEOUT_MS = 12000;
+
+const getCurrentPositionSafely =
+  async (): Promise<Location.LocationObject> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      return await Promise.race([
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("GPS timeout")),
+            GPS_TIMEOUT_MS
+          );
+        }),
+      ]);
+    } catch {
+      const lastKnown =
+        await Location.getLastKnownPositionAsync({
+          maxAge: 10 * 60 * 1000,
+        }).catch(() => null);
+
+      if (lastKnown) {
+        return lastKnown;
+      }
+
+      throw new Error(
+        "Couldn't get a GPS signal. Type the delivery address or tap the map to place the pin."
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
 export default function CustomerCheckoutScreen() {
   const router =
     useRouter();
@@ -1832,13 +1879,7 @@ export default function CustomerCheckoutScreen() {
           );
 
           const currentLocation =
-            await Location
-              .getCurrentPositionAsync(
-                {
-                  accuracy:
-                    Location.Accuracy.High,
-                }
-              );
+            await getCurrentPositionSafely();
 
           const coordinate:
             LatLng = {

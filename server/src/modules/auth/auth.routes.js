@@ -1,3 +1,6 @@
+import { rateLimit } from "../../middleware/rateLimit.js";
+
+const byEmail = (req) => req.body?.email;
 import { Router } from "express";
 
 import {
@@ -26,6 +29,7 @@ const authRouter = Router();
 // Public routes
 authRouter.post(
   "/register",
+  rateLimit({ max: 30, windowMs: 60 * 60 * 1000, message: "Too many sign-ups from this network. Please try again later." }),
   registerValidation,
   validateRequest,
   register
@@ -33,6 +37,7 @@ authRouter.post(
 
 authRouter.post(
   "/login",
+  rateLimit({ max: 10, keyBy: byEmail, message: "Too many login attempts for this account. Please wait 15 minutes and try again." }),
   loginValidation,
   validateRequest,
   login
@@ -40,6 +45,7 @@ authRouter.post(
 
 authRouter.post(
   "/forgot-password",
+  rateLimit({ max: 5, keyBy: byEmail, message: "Too many reset requests. Please wait 15 minutes and try again." }),
   forgotPasswordValidation,
   validateRequest,
   forgotPassword
@@ -47,6 +53,7 @@ authRouter.post(
 
 authRouter.post(
   "/verify-reset-code",
+  rateLimit({ max: 10, keyBy: byEmail }),
   verifyResetCodeValidation,
   validateRequest,
   verifyResetCode
@@ -54,6 +61,7 @@ authRouter.post(
 
 authRouter.post(
   "/reset-password",
+  rateLimit({ max: 10, keyBy: byEmail }),
   resetPasswordValidation,
   validateRequest,
   resetPassword

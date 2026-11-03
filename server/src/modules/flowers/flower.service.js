@@ -126,17 +126,30 @@ export const createFlower = async (
   let imageEmbedding = [];
   let embeddingModel = null;
 
+  /*
+   * The image-search embedding is a bonus: if the AI
+   * service is asleep or down, still save the listing
+   * (it just won't appear in image search until its
+   * photo is updated).
+   */
   if (images.length > 0) {
-    const aiResult =
-      await generateImageEmbedding(
-        images[0]
+    try {
+      const aiResult =
+        await generateImageEmbedding(
+          images[0]
+        );
+
+      imageEmbedding =
+        aiResult.embedding;
+
+      embeddingModel =
+        aiResult.model;
+    } catch (error) {
+      console.warn(
+        "Image embedding skipped for new listing:",
+        error.message
       );
-
-    imageEmbedding =
-      aiResult.embedding;
-
-    embeddingModel =
-      aiResult.model;
+    }
   }
 
   const flower =
@@ -197,11 +210,14 @@ export const createFlower = async (
 
 export const getSellerFlowers =
   async (userId) => {
+    // The 512-number image embedding is only used by image search
     return Flower.find({
       seller: userId,
-    }).sort({
-      createdAt: -1,
-    });
+    })
+      .select("-imageEmbedding -embeddingModel")
+      .sort({
+        createdAt: -1,
+      });
   };
 
 export const getFlowerById = async (
@@ -211,9 +227,11 @@ export const getFlowerById = async (
     await Flower.findById(
       flowerId
     )
+      // Public endpoint: no seller email, no image embedding
+      .select("-imageEmbedding -embeddingModel")
       .populate(
         "seller",
-        "firstName lastName email"
+        "firstName lastName"
       )
       .populate(
         "florist",
@@ -357,11 +375,38 @@ const buildLooseWordRegex = (value) => {
   return new RegExp(`\\b${pattern}`, "i");
 };
 
+/*
+ * Shops that may sell right now (approved + active). Cached
+ * for 60 s so catalog requests do not query it every time.
+ * Bouquets from rejected, deactivated or re-verifying shops
+ * are hidden from the catalog, recommendations and image
+ * search (checkout also refuses them).
+ */
+let sellableShopCache = { at: 0, ids: [] };
+
+const getSellableFloristIds = async () => {
+  if (Date.now() - sellableShopCache.at < 60 * 1000) {
+    return sellableShopCache.ids;
+  }
+
+  const ids = await Florist.find({
+    verificationStatus: "approved",
+    isActive: { $ne: false },
+  }).distinct("_id");
+
+  sellableShopCache = { at: Date.now(), ids };
+  return ids;
+};
+
 export const getPublicFlowers =
   async (filters = {}) => {
+    const sellableShops =
+      await getSellableFloristIds();
+
     const query = {
       isActive: true,
       isAvailable: true,
+      florist: { $in: sellableShops },
     };
 
     /*
@@ -373,7 +418,11 @@ export const getPublicFlowers =
         String(filters.florist)
       )
     ) {
-      query.florist = filters.florist;
+      query.florist = sellableShops.some(
+        (id) => String(id) === String(filters.florist)
+      )
+        ? filters.florist
+        : { $in: [] };
     }
 
     /*
@@ -503,6 +552,7 @@ export const getRecommendedFlowers =
       await Flower.find({
         isActive: true,
         isAvailable: true,
+        florist: { $in: await getSellableFloristIds() },
       })
         .populate(
           "florist",
@@ -825,6 +875,7 @@ export const searchFlowersByImage =
       await Flower.find({
         isActive: true,
         isAvailable: true,
+        florist: { $in: await getSellableFloristIds() },
 
         imageEmbedding: {
           $exists: true,

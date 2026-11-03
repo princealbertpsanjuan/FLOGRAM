@@ -25,6 +25,8 @@ const generateAccessToken = (user) => {
   );
 };
 
+export const MAX_RESET_CODE_ATTEMPTS = 5;
+
 const generateResetCode = () => {
   return crypto.randomInt(100000, 1000000).toString();
 };
@@ -156,7 +158,7 @@ export const createPasswordResetCode = async (email) => {
   const user = await User.findOne({
     email: normalizedEmail,
   }).select(
-    "+passwordResetCode +passwordResetCodeExpiresAt +passwordResetVerified"
+    "+passwordResetCode +passwordResetCodeExpiresAt +passwordResetVerified +passwordResetAttempts"
   );
 
   if (!user) {
@@ -177,6 +179,7 @@ export const createPasswordResetCode = async (email) => {
     Date.now() + RESET_CODE_EXPIRATION_MINUTES * 60 * 1000
   );
   user.passwordResetVerified = false;
+  user.passwordResetAttempts = 0;
 
   await user.save();
 
@@ -198,7 +201,7 @@ export const verifyPasswordResetCode = async ({ email, code }) => {
   const user = await User.findOne({
     email: normalizedEmail,
   }).select(
-    "+passwordResetCode +passwordResetCodeExpiresAt +passwordResetVerified"
+    "+passwordResetCode +passwordResetCodeExpiresAt +passwordResetVerified +passwordResetAttempts"
   );
 
   if (!user || !user.passwordResetCode || !user.passwordResetCodeExpiresAt) {
@@ -219,13 +222,39 @@ export const verifyPasswordResetCode = async ({ email, code }) => {
     throw error;
   }
 
-  const submittedCodeHash = hashResetCode(normalizedCode);
+  const submittedCodeHash = Buffer.from(hashResetCode(normalizedCode), "hex");
+  const storedCodeHash = Buffer.from(String(user.passwordResetCode), "hex");
 
-  if (submittedCodeHash !== user.passwordResetCode) {
-    const error = new Error("Invalid password reset code.");
+  const matches =
+    submittedCodeHash.length === storedCodeHash.length &&
+    crypto.timingSafeEqual(submittedCodeHash, storedCodeHash);
+
+  if (!matches) {
+    user.passwordResetAttempts = (user.passwordResetAttempts || 0) + 1;
+
+    if (user.passwordResetAttempts >= MAX_RESET_CODE_ATTEMPTS) {
+      user.passwordResetCode = null;
+      user.passwordResetCodeExpiresAt = null;
+      user.passwordResetVerified = false;
+      user.passwordResetAttempts = 0;
+      await user.save();
+
+      const error = new Error("Too many wrong codes. Request a new password reset code.");
+      error.statusCode = 429;
+      throw error;
+    }
+
+    await user.save();
+
+    const remaining = MAX_RESET_CODE_ATTEMPTS - user.passwordResetAttempts;
+    const error = new Error(
+      `Invalid password reset code. ${remaining} attempt${remaining === 1 ? "" : "s"} left.`
+    );
     error.statusCode = 400;
     throw error;
   }
+
+  user.passwordResetAttempts = 0;
 
   user.passwordResetVerified = true;
   await user.save();

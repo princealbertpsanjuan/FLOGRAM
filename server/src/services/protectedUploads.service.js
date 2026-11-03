@@ -26,8 +26,8 @@ import Florist from "../modules/florists/florist.model.js";
 const LINK_LIFETIME_SECONDS = 15 * 60;
 const PROTECTED_PREFIX = "/verification/";
 
-const secret = () =>
-  process.env.UPLOAD_SIGNING_SECRET || process.env.JWT_SECRET || "flogram-dev-upload-secret";
+// JWT_SECRET is required at startup (server.js), so a signing secret always exists
+const secret = () => process.env.UPLOAD_SIGNING_SECRET || process.env.JWT_SECRET;
 
 const toUploadsPath = (value) =>
   `/${String(value || "")

@@ -64,5 +64,10 @@ their screens redirect to the login page on web.
 
 ```bash
 cd server && npm run verify:shifts   # rider shift slot-limit integration check
-cd server && npm run verify:requirements   # automated requirement checks (no database needed)
+cd server && npm test                      # all checks below that need no database
+cd server && npm run verify:requirements   # automated requirement checks
+cd server && npm run verify:routing        # delivery fee, route cache, OpenRouteService fallback
+cd server && npm run verify:checkout       # scheduled-delivery date rules (Philippine time)
+cd server && npm run verify:analytics      # FP-Growth vs brute force, AFINN sentiment
+cd server && npm run verify:security       # rate limiting, document review rules
 ```

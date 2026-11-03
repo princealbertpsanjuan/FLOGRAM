@@ -10,6 +10,11 @@
     "create-admin": "node scripts/createAdmin.js",
     "verify:shifts": "node scripts/verifyShiftRules.js",
     "verify:requirements": "node scripts/verifyRequirementChecks.js",
+    "verify:routing": "node scripts/verifyRouting.js",
+    "verify:analytics": "node scripts/verifyAnalytics.js",
+    "verify:security": "node scripts/verifySecurity.js",
+    "verify:checkout": "node scripts/verifyCheckoutRules.js",
+    "test": "node scripts/verifyRequirementChecks.js && node scripts/verifyRouting.js && node scripts/verifyAnalytics.js && node scripts/verifySecurity.js && node scripts/verifyCheckoutRules.js",
     "upload-to-cloud": "node scripts/uploadExistingFiles.js"
   },
   "keywords": [],

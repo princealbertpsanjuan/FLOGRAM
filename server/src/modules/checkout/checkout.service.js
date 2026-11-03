@@ -31,6 +31,7 @@ import {
   verifyPayMongoWebhookSignature,
 } from "../payments/paymongo.service.js";
 import { resolveAddOnSelections } from "../addons/addon.service.js";
+import { getScheduleProblem } from "../../utils/deliverySchedule.js";
 import GiftAddOn from "../addons/addon.model.js";
 
 /*
@@ -44,6 +45,24 @@ const PRE_ORDER_FEE = 50;
 const PAYMONGO_API_URL =
   process.env.PAYMONGO_API_URL ||
   "https://api.paymongo.com";
+
+// PayMongo calls give up after 20 s instead of hanging the request
+const PAYMONGO_TIMEOUT_MS =
+  Number(process.env.PAYMONGO_TIMEOUT_MS) || 20000;
+
+/*
+ * fetch() itself failed (timeout, DNS, no internet).
+ */
+const throwPayMongoNetworkError = (cause) => {
+  const error = new Error(
+    cause?.name === "TimeoutError"
+      ? "PayMongo is taking too long to respond. Please try again."
+      : "Unable to reach PayMongo right now. Please try again."
+  );
+  error.statusCode = 502;
+  throw error;
+};
+
 
 /*
  * =========================================================
@@ -294,16 +313,6 @@ const resolveSchedule =
       );
     }
 
-    if (
-      isPreOrder &&
-      requestedDeliveryDate <=
-        new Date()
-    ) {
-      throw createError(
-        "Pre-order delivery date must be in the future."
-      );
-    }
-
     const requestedDeliveryTimeStart =
       checkoutData
         .requestedDeliveryTimeStart ||
@@ -313,6 +322,20 @@ const resolveSchedule =
       checkoutData
         .requestedDeliveryTimeEnd ||
       null;
+
+    // Same-day schedules are allowed (Philippine calendar day)
+    const scheduleProblem =
+      isPreOrder &&
+      getScheduleProblem(
+        requestedDeliveryDate,
+        requestedDeliveryTimeEnd
+      );
+
+    if (scheduleProblem) {
+      throw createError(
+        scheduleProblem
+      );
+    }
 
     /*
      * Both must exist together.
@@ -530,6 +553,22 @@ const resolveCartItems =
         throw createError(
           `The florist for ${flower.name} was not found.`,
           404
+        );
+      }
+
+      /*
+       * A shop that was rejected, deactivated or is waiting
+       * for re-verification must not receive new orders,
+       * even if its bouquet is still in someone's cart.
+       */
+      if (
+        florist.verificationStatus !==
+          "approved" ||
+        florist.isActive === false
+      ) {
+        throw createError(
+          `${florist.shopName || "This shop"} is not accepting orders right now. Remove ${flower.name} from your cart to continue.`,
+          409
         );
       }
 
@@ -3159,6 +3198,7 @@ export const createCheckoutPayMongoSession =
       await fetch(
         `${PAYMONGO_API_URL}/v1/checkout_sessions`,
         {
+          signal: AbortSignal.timeout(PAYMONGO_TIMEOUT_MS),
           method:
             "POST",
 
@@ -3185,7 +3225,7 @@ export const createCheckoutPayMongoSession =
               },
             }),
         }
-      );
+      ).catch(throwPayMongoNetworkError);
 
     let result;
 

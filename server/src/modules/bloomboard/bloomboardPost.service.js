@@ -21,25 +21,40 @@ const normalizePath = (filePath) => {
     .replace(/^\/+/, "");
 };
 
+/*
+ * Like and comment counts for a page of posts. One
+ * aggregate query for all comment counts instead of one
+ * query per post.
+ */
 const addPostCounts = async (
   posts
 ) => {
-  return Promise.all(
-    posts.map(async (post) => {
-      const commentCount =
-        await BloomboardComment.countDocuments({
-          post: post._id,
-          isActive: true,
-        });
+  if (!posts.length) {
+    return [];
+  }
 
-      return {
-        ...post,
-        likeCount:
-          post.likes?.length || 0,
-        commentCount,
-      };
-    })
+  const counts =
+    await BloomboardComment.aggregate([
+      {
+        $match: {
+          post: { $in: posts.map((post) => post._id) },
+          isActive: true,
+        },
+      },
+      { $group: { _id: "$post", count: { $sum: 1 } } },
+    ]);
+
+  const byPost = new Map(
+    counts.map((row) => [String(row._id), row.count])
   );
+
+  return posts.map((post) => ({
+    ...post,
+    likeCount:
+      post.likes?.length || 0,
+    commentCount:
+      byPost.get(String(post._id)) || 0,
+  }));
 };
 
 /*

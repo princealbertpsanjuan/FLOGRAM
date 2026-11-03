@@ -213,6 +213,186 @@ export const calculateDeliveryFee = (
  * ]
  * =========================================================
  */
+/*
+ * =========================================================
+ * ROUTE CACHE + SAFE FALLBACK
+ * =========================================================
+ *
+ * Every checkout quote, every created order and every rider
+ * GPS update used to call OpenRouteService. Its free plan
+ * allows 40 requests/minute and 2,000/day, so a rider
+ * screen left open (one call every ~5 s) plus repeated
+ * checkout tests could use up the key and make checkout
+ * fail with "Unable to calculate delivery route" / quota
+ * errors, even though it worked earlier the same day.
+ *
+ * Now:
+ * 1. Same pickup + destination (rounded to ~11 m) reuses
+ *    the result for ROUTE_CACHE_MINUTES (default 10).
+ * 2. Each call times out after ROUTING_TIMEOUT_MS (10 s).
+ * 3. If OpenRouteService is down, slow, out of quota or
+ *    cannot snap the pin to a road, the distance is
+ *    estimated (straight line × 1.35, 25 km/h) so checkout
+ *    still works. The result says estimated: true.
+ *    Set ROUTING_FALLBACK=off to disable the estimate.
+ * =========================================================
+ */
+
+const ROUTE_CACHE_TTL_MS =
+  Math.max(Number(process.env.ROUTE_CACHE_MINUTES) || 10, 0) * 60 * 1000;
+const ROUTE_CACHE_MAX_ENTRIES = 500;
+const ROUTING_TIMEOUT_MS = Math.max(Number(process.env.ROUTING_TIMEOUT_MS) || 10000, 1000);
+const ROAD_DISTANCE_FACTOR = 1.35;
+const ESTIMATED_SPEED_KMH = 25;
+
+const routeCache = new Map();
+
+const cacheKey = (pickup, delivery) =>
+  [pickup.latitude, pickup.longitude, delivery.latitude, delivery.longitude]
+    .map((value) => value.toFixed(4))
+    .join(",");
+
+const readCache = (key) => {
+  const entry = routeCache.get(key);
+
+  if (!entry) return null;
+
+  if (Date.now() - entry.at > ROUTE_CACHE_TTL_MS) {
+    routeCache.delete(key);
+    return null;
+  }
+
+  return entry.route;
+};
+
+const writeCache = (key, route) => {
+  if (!ROUTE_CACHE_TTL_MS) return;
+
+  if (routeCache.size >= ROUTE_CACHE_MAX_ENTRIES) {
+    // Map keeps insertion order: drop the oldest entry
+    routeCache.delete(routeCache.keys().next().value);
+  }
+
+  routeCache.set(key, { at: Date.now(), route });
+};
+
+export const clearRouteCache = () => routeCache.clear();
+
+/*
+ * Great-circle distance in meters.
+ */
+export const haversineMeters = (a, b) => {
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const dLat = toRadians(b.latitude - a.latitude);
+  const dLng = toRadians(b.longitude - a.longitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(a.latitude)) * Math.cos(toRadians(b.latitude)) * Math.sin(dLng / 2) ** 2;
+
+  return 2 * earthRadius * Math.asin(Math.sqrt(h));
+};
+
+const buildRoute = ({ distanceMeters, durationSeconds, geometry, estimated }) => ({
+  distanceMeters,
+  distanceKilometers: Number((distanceMeters / 1000).toFixed(2)),
+  durationSeconds,
+  durationMinutes: Math.ceil(durationSeconds / 60),
+  // Enforces the 25 km service area too
+  deliveryFee: calculateDeliveryFee(distanceMeters),
+  geometry: geometry || null,
+  estimated,
+  source: estimated ? "estimate" : "openrouteservice",
+});
+
+export const estimateRoute = (pickup, delivery) => {
+  const distanceMeters = Math.round(haversineMeters(pickup, delivery) * ROAD_DISTANCE_FACTOR);
+  const durationSeconds = Math.round((distanceMeters / 1000 / ESTIMATED_SPEED_KMH) * 3600);
+
+  return buildRoute({ distanceMeters, durationSeconds, geometry: null, estimated: true });
+};
+
+const fallbackAllowed = () => String(process.env.ROUTING_FALLBACK || "on").toLowerCase() !== "off";
+
+const routingError = (message, statusCode = 502, details = null) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  if (details) error.routingResponse = details;
+  return error;
+};
+
+/*
+ * One OpenRouteService request (throws on any failure).
+ */
+const requestOpenRouteService = async (pickup, delivery) => {
+  const apiKey = getOpenRouteServiceApiKey();
+
+  let response;
+
+  try {
+    response = await fetch(`${OPENROUTESERVICE_API_URL}/v2/directions/driving-car/geojson`, {
+      method: "POST",
+      headers: {
+        Authorization: apiKey,
+        Accept: "application/geo+json, application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        coordinates: [
+          [pickup.longitude, pickup.latitude],
+          [delivery.longitude, delivery.latitude],
+        ],
+        instructions: false,
+      }),
+      signal: AbortSignal.timeout(ROUTING_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw routingError(
+      error?.name === "TimeoutError"
+        ? "The routing service took too long to respond."
+        : "The routing service could not be reached."
+    );
+  }
+
+  let result;
+
+  try {
+    result = await response.json();
+  } catch {
+    throw routingError("Unable to read the routing service response.");
+  }
+
+  if (!response.ok) {
+    // Log the status and message only (the body can be large)
+    console.error(
+      "OpenRouteService error:",
+      response.status,
+      result?.error?.message || result?.message || result?.error || ""
+    );
+
+    throw routingError(
+      result?.error?.message ||
+        (typeof result?.error === "string" ? result.error : "") ||
+        result?.message ||
+        "Unable to calculate delivery route.",
+      502,
+      result
+    );
+  }
+
+  const feature = result?.features?.[0];
+  const summary = feature?.properties?.summary;
+  const distanceMeters = Number(summary?.distance);
+  const durationSeconds = Number(summary?.duration);
+
+  if (!Number.isFinite(distanceMeters) || !Number.isFinite(durationSeconds)) {
+    console.error("Unexpected routing response: missing route summary");
+    throw routingError("Routing service returned an invalid route.");
+  }
+
+  return { distanceMeters, durationSeconds, geometry: feature?.geometry || null };
+};
+
 export const calculateDeliveryRoute =
   async ({
     pickupLatitude,
@@ -234,171 +414,33 @@ export const calculateDeliveryRoute =
         "Delivery"
       );
 
-    const apiKey =
-      getOpenRouteServiceApiKey();
+    const key = cacheKey(pickup, delivery);
+    const cached = readCache(key);
 
-    const response =
-      await fetch(
-        `${OPENROUTESERVICE_API_URL}/v2/directions/driving-car/geojson`,
-        {
-          method: "POST",
+    if (cached) {
+      return cached;
+    }
 
-          headers: {
-            Authorization:
-              apiKey,
-
-            Accept:
-              "application/geo+json, application/json",
-
-            "Content-Type":
-              "application/json",
-          },
-
-          body:
-            JSON.stringify({
-              coordinates: [
-                [
-                  pickup.longitude,
-                  pickup.latitude,
-                ],
-
-                [
-                  delivery.longitude,
-                  delivery.latitude,
-                ],
-              ],
-
-              instructions:
-                false,
-            }),
-        }
-      );
-
-    let result;
+    let route;
 
     try {
-      result =
-        await response.json();
-    } catch {
-      const error = new Error(
-        "Unable to read the routing service response."
-      );
+      const result = await requestOpenRouteService(pickup, delivery);
+      route = buildRoute({ ...result, estimated: false });
+    } catch (error) {
+      if (!fallbackAllowed() || error?.statusCode === 400) {
+        throw error;
+      }
 
-      error.statusCode = 502;
+      console.warn(`Routing fallback used (${error.message}).`);
 
-      throw error;
+      // Throws the normal 400 when outside the 25 km area
+      route = estimateRoute(pickup, delivery);
+
+      // Keep estimates briefly so OpenRouteService is retried soon
+      routeCache.set(key, { at: Date.now() - Math.max(ROUTE_CACHE_TTL_MS - 60000, 0), route });
+      return route;
     }
 
-    if (!response.ok) {
-      console.error(
-        "OpenRouteService error:",
-        result
-      );
-
-      const message =
-        result?.error
-          ?.message ||
-        result?.message ||
-        "Unable to calculate delivery route.";
-
-      const error =
-        new Error(message);
-
-      error.statusCode = 502;
-
-      error.routingResponse =
-        result;
-
-      throw error;
-    }
-
-    /*
-     * GeoJSON Directions response:
-     *
-     * features[0].properties.summary
-     *
-     * {
-     *   distance: meters,
-     *   duration: seconds
-     * }
-     */
-    const feature =
-      result?.features?.[0];
-
-    const summary =
-      feature
-        ?.properties
-        ?.summary;
-
-    const distanceMeters =
-      Number(
-        summary?.distance
-      );
-
-    const durationSeconds =
-      Number(
-        summary?.duration
-      );
-
-    if (
-      !Number.isFinite(
-        distanceMeters
-      ) ||
-      !Number.isFinite(
-        durationSeconds
-      )
-    ) {
-      console.error(
-        "Unexpected routing response:",
-        result
-      );
-
-      const error = new Error(
-        "Routing service returned an invalid route."
-      );
-
-      error.statusCode = 502;
-
-      throw error;
-    }
-
-    /*
-     * Calculate delivery fee using
-     * FLOGRAM pricing rules.
-     */
-    const deliveryFee =
-      calculateDeliveryFee(
-        distanceMeters
-      );
-
-    return {
-      distanceMeters,
-
-      distanceKilometers:
-        Number(
-          (
-            distanceMeters /
-            1000
-          ).toFixed(2)
-        ),
-
-      durationSeconds,
-
-      durationMinutes:
-        Math.ceil(
-          durationSeconds /
-          60
-        ),
-
-      deliveryFee,
-
-      /*
-       * GeoJSON geometry can later be
-       * returned to the frontend and
-       * displayed using Leaflet.
-       */
-      geometry:
-        feature?.geometry ||
-        null,
-    };
+    writeCache(key, route);
+    return route;
   };
