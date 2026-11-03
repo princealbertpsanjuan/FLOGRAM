@@ -1,3 +1,4 @@
+import { getPenaltyNotificationColors } from '../../constants/status-colors';
 import {
   router,
   useFocusEffect,
@@ -893,10 +894,16 @@ function NotificationCard({
   onPress:
     () => void;
 }) {
-  const appearance =
-    getNotificationAppearance(
-      notification.type
-    );
+  const penaltyTone =
+    getPenaltyNotificationColors(notification);
+
+  const appearance = penaltyTone
+    ? {
+        ...getNotificationAppearance(notification.type),
+        color: penaltyTone.solid,
+        backgroundColor: penaltyTone.background,
+      }
+    : getNotificationAppearance(notification.type);
 
   return (
     <Pressable
@@ -967,9 +974,7 @@ function NotificationCard({
             styles.alertCategory,
             {
               color:
-                getNotificationAppearance(
-                  notification.type
-                ).color,
+                appearance.color,
             },
           ]}
         >

@@ -36,6 +36,7 @@ import sellerPayoutRouter from "../modules/sellerPayouts/seller-payout.routes.js
 import workAssistantRouter from "../modules/assistant/work-assistant.routes.js";
 import listingCommentRouter from "../modules/flowerComments/flower-comment.routes.js";
 import geoRouter from "../modules/geo/geo.routes.js";
+import pricingRouter from "../modules/pricing/price-history.routes.js";
 
 const apiRouter = Router();
 
@@ -344,6 +345,15 @@ apiRouter.use(
 apiRouter.use(
   "/listing-comments",
   listingCommentRouter
+);
+
+/*
+ * PRICE HISTORY (bouquets + gift add-ons)
+ */
+
+apiRouter.use(
+  "/pricing",
+  pricingRouter
 );
 
 export default apiRouter;

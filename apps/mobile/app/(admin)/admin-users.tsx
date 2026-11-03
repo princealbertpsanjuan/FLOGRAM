@@ -1,3 +1,4 @@
+import { getStatusColors as getToneColors } from "../../constants/status-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   useFocusEffect,
@@ -381,16 +382,18 @@ function getStatusStyle(
           COLORS.green,
       };
 
+    /*
+     * Orange = temporary suspension, red = permanent ban.
+     */
     case "suspended":
-    case "banned":
+    case "banned": {
+      const tone = getToneColors(status);
       return {
-        backgroundColor:
-          COLORS.redBackground,
-        textColor:
-          COLORS.red,
-        dotColor:
-          COLORS.red,
+        backgroundColor: tone.background,
+        textColor: tone.text,
+        dotColor: tone.solid,
       };
+    }
 
     default:
       return {

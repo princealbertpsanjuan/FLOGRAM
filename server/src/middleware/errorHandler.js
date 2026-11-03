@@ -20,6 +20,14 @@ const errorHandler = (error, req, res, next) => {
     message: error.message || "Internal server error.",
   };
 
+  /*
+   * Field-level problems (e.g. requirement checks) so the
+   * app can show exactly what to fix.
+   */
+  if (Array.isArray(error.errors)) {
+    response.errors = error.errors;
+  }
+
   if (process.env.NODE_ENV === "development") {
     response.stack = error.stack;
   }

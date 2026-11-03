@@ -33,6 +33,9 @@ import AlsoBoughtRow from '../../components/customer/also-bought-row';
 import ListingComments from '../../components/customer/listing-comments';
 import GiftHint from '../../components/customer/gift-hint';
 import FollowShopButton from '../../components/customer/follow-shop-button';
+import ShopCommunityRating from '../../components/customer/shop-community-rating';
+import CollapsibleSection from '../../components/ui/collapsible-section';
+import PriceHistoryView from '../../components/ui/price-history';
 
 /*
  * =========================================================
@@ -1244,6 +1247,8 @@ export default function CustomerProductDetailsScreen() {
                 </Text>
               ) : null}
 
+              <ShopCommunityRating floristId={florist?._id} />
+
               <View
                 style={
                   styles.floristDivider
@@ -1451,6 +1456,16 @@ export default function CustomerProductDetailsScreen() {
             </View>
 
             <GiftHint floristId={florist?._id} />
+
+            <CollapsibleSection
+              title="Price history"
+              subtitle="How this bouquet's price changed over time"
+              icon="pricetags-outline"
+              role="customer"
+              style={{ marginTop: 14 }}
+            >
+              <PriceHistoryView flowerId={flower._id} role="customer" />
+            </CollapsibleSection>
 
             <ListingComments flowerId={flower._id} />
 

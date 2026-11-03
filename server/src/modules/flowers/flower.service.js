@@ -8,6 +8,7 @@ import {
   generateUploadedImageEmbedding,
 } from "../../services/ai.service.js";
 import { notifyFollowersOfNewProduct } from "../follows/follow.service.js";
+import { recordPriceChange } from "../pricing/price-history.service.js";
 
 const normalizePath = (filePath) => {
   return filePath
@@ -178,6 +179,9 @@ export const createFlower = async (
         true,
     });
 
+  // First entry of the price history
+  await recordPriceChange({ itemType: "flower", item: flower, changedBy: userId });
+
   /*
    * Let customers who follow this shop know.
    * Runs in the background; never blocks the seller.
@@ -261,6 +265,9 @@ export const updateFlower = async (
     "isAvailable",
   ];
 
+  const previousPrice =
+    flower.price;
+
   allowedFields.forEach(
     (field) => {
       if (
@@ -274,6 +281,14 @@ export const updateFlower = async (
   );
 
   await flower.save();
+
+  // Logs only when the price actually changed
+  await recordPriceChange({
+    itemType: "flower",
+    item: flower,
+    oldPrice: previousPrice,
+    changedBy: userId,
+  });
 
   return flower;
 };

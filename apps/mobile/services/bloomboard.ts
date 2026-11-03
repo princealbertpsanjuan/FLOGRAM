@@ -121,3 +121,50 @@ export const setPostSaved = async (postId: string, saved: boolean) =>
       { method: saved ? 'POST' : 'DELETE', authenticated: true }
     )
   ).data;
+
+/*
+ * =========================================================
+ * SHOP TAGS + RATINGS
+ * =========================================================
+ */
+
+export type TaggableShop = {
+  _id: string;
+  shopName: string;
+  shopLogo?: string | null;
+  canRate: boolean;
+  verifiedBuyer: boolean;
+  alreadyRated: boolean;
+};
+
+export type ShopCommunityRating = {
+  tagCount: number;
+  ratingCount: number;
+  averageRating: number | null;
+  distribution: Record<'1' | '2' | '3' | '4' | '5', number>;
+  sentiment: { positive: number; neutral: number; negative: number };
+};
+
+export type TaggedPost = BloomboardPost & {
+  taggedFlorist?: { _id: string; shopName?: string; shopLogo?: string | null } | null;
+  shopRating?: number | null;
+  verifiedOrder?: string | null;
+  sentiment?: { label?: 'positive' | 'neutral' | 'negative' | null; score?: number | null } | null;
+};
+
+export const getTaggableShops = async () =>
+  (
+    await apiRequest<{ success: boolean; message: string; data: { count: number; shops: TaggableShop[] } }>(
+      '/bloomboard/shops/taggable',
+      { method: 'GET', authenticated: true }
+    )
+  ).data.shops;
+
+export const getShopTaggedPosts = async (floristId: string, limit = 10) =>
+  (
+    await apiRequest<{
+      success: boolean;
+      message: string;
+      data: { florist: { _id: string; shopName: string }; summary: ShopCommunityRating; posts: TaggedPost[] };
+    }>(`/bloomboard/shops/${encodeURIComponent(floristId)}/tagged?limit=${limit}`, { method: 'GET' })
+  ).data;

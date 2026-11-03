@@ -1,3 +1,13 @@
+import type { RequirementDocuments } from '../components/admin/requirement-documents';
+
+/*
+ * Admin's per-document decisions sent with approve/reject.
+ */
+export type VerificationReviewPayload = {
+  documentReviews: { documentKey: string; decision: 'accepted' | 'needs_resubmission'; note?: string }[];
+  riskAcknowledged?: boolean;
+};
+
 import { apiRequest } from "./api";
 import { appendImageFile } from "../utils/form-file";
 
@@ -52,11 +62,7 @@ export type AdminFlorist = {
   /*
    * Uploaded requirement photos (detail endpoint only).
    */
-  documents?: {
-    status?: string;
-    submittedAt?: string;
-    files: { key: string; label: string; path: string }[];
-  } | null;
+  documents?: RequirementDocuments;
 
   owner?:
     | AdminUser
@@ -1037,7 +1043,8 @@ export async function getAdminFloristById(
  */
 
 export async function approveFlorist(
-  floristId: string
+  floristId: string,
+  review: VerificationReviewPayload
 ): Promise<AdminFlorist> {
   const response =
     await apiRequest<
@@ -1049,6 +1056,7 @@ export async function approveFlorist(
       {
         method: "PATCH",
         authenticated: true,
+        body: JSON.stringify(review),
       }
     );
 
@@ -1064,7 +1072,8 @@ export async function approveFlorist(
 
 export async function rejectFlorist(
   floristId: string,
-  remarks: string
+  remarks: string,
+  review?: VerificationReviewPayload
 ): Promise<AdminFlorist> {
   const cleanRemarks =
     remarks.trim();
@@ -1089,6 +1098,8 @@ export async function rejectFlorist(
         body: JSON.stringify({
           remarks:
             cleanRemarks,
+          documentReviews:
+            review?.documentReviews || [],
         }),
       }
     );
@@ -1270,11 +1281,7 @@ export type AdminRiderVerification = {
   /*
    * Uploaded requirement photos (detail endpoint only).
    */
-  documents?: {
-    status?: string;
-    submittedAt?: string;
-    files: { key: string; label: string; path: string }[];
-  } | null;
+  documents?: RequirementDocuments;
   _id?: string;
   id?: string;
 
@@ -1437,7 +1444,8 @@ export async function getAdminRiderById(
  */
 
 export async function approveAdminRider(
-  riderId: string
+  riderId: string,
+  review: VerificationReviewPayload
 ): Promise<AdminRiderVerification> {
   if (!riderId.trim()) {
     throw new Error(
@@ -1455,6 +1463,7 @@ export async function approveAdminRider(
       {
         method: "PATCH",
         authenticated: true,
+        body: JSON.stringify(review),
       }
     );
 
@@ -1480,7 +1489,8 @@ export async function approveAdminRider(
 
 export async function rejectAdminRider(
   riderId: string,
-  remarks: string
+  remarks: string,
+  review?: VerificationReviewPayload
 ): Promise<AdminRiderVerification> {
   if (!riderId.trim()) {
     throw new Error(
@@ -1511,6 +1521,8 @@ export async function rejectAdminRider(
         body: JSON.stringify({
           remarks:
             cleanRemarks,
+          documentReviews:
+            review?.documentReviews || [],
         }),
       }
     );

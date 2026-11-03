@@ -1,3 +1,4 @@
+import { protectVerificationUploads } from "./services/protectedUploads.service.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -168,6 +169,15 @@ app.use(
  * SERVE UPLOADED FILES
  * =========================================================
  */
+
+/*
+ * Seller/Rider requirement documents need a signed,
+ * short-lived link (see protectedUploads.service.js).
+ */
+app.use(
+  "/uploads",
+  protectVerificationUploads
+);
 
 app.use(
   "/uploads",

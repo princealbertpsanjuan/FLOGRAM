@@ -59,3 +59,15 @@ const authenticate = async (req, res, next) => {
 
 
 export default authenticate;
+
+/*
+ * Public routes that show more to a signed-in owner/Admin
+ * (e.g. price history sales). No token -> continue as guest.
+ */
+export const optionalAuthenticate = (req, res, next) => {
+  if (!req.headers.authorization?.startsWith("Bearer ")) {
+    return next();
+  }
+
+  return authenticate(req, res, next);
+};

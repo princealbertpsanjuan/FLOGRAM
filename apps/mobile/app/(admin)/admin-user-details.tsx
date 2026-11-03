@@ -1,3 +1,4 @@
+import { getStatusColors as getToneColors } from "../../constants/status-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   useFocusEffect,
@@ -145,12 +146,20 @@ function getStatusStyle(
           "checkmark-circle-outline" as const,
       };
 
+    /*
+     * Orange = temporary suspension, red = permanent ban.
+     */
     case "suspended":
+      return {
+        backgroundColor: getToneColors("suspended").background,
+        textColor: getToneColors("suspended").text,
+        icon: "time-outline" as const,
+      };
+
     case "banned":
       return {
-        backgroundColor:
-          COLORS.redBackground,
-        textColor: COLORS.red,
+        backgroundColor: getToneColors("banned").background,
+        textColor: getToneColors("banned").text,
         icon: "ban-outline" as const,
       };
 
@@ -1178,11 +1187,9 @@ export default function AdminUserDetailsScreen() {
                   }
                 >
                   <Ionicons
-                    name="ban-outline"
+                    name="time-outline"
                     size={17}
-                    color={
-                      COLORS.red
-                    }
+                    color={getToneColors("suspended").solid}
                   />
 
                   <Text
@@ -1715,16 +1722,17 @@ const styles =
       fontWeight: "800",
     },
 
+    // Orange: temporary suspension (constants/status-colors.ts)
     suspendButton: {
       backgroundColor:
-        COLORS.redBackground,
+        getToneColors("suspended").background,
       borderWidth: 1,
       borderColor:
-        "#F5D4DC",
+        getToneColors("suspended").border,
     },
 
     suspendButtonText: {
-      color: COLORS.red,
+      color: getToneColors("suspended").text,
       fontSize: 10,
       fontWeight: "800",
     },

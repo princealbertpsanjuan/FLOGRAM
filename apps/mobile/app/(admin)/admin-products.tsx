@@ -1,3 +1,4 @@
+import PriceChangeLog from '../../components/ui/price-change-log';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
@@ -299,6 +300,9 @@ export default function AdminProductsScreen() {
             />
           }
         >
+          {/* Price changes; large increases first (possible price gouging) */}
+          <PriceChangeLog mode="admin" />
+
           {/* SEARCH */}
 
           <View style={styles.searchBox}>

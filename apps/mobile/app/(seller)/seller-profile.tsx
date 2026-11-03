@@ -1,3 +1,4 @@
+import ShopCommunityRating from '../../components/customer/shop-community-rating';
 import {
   useCallback,
   useEffect,
@@ -1138,6 +1139,9 @@ export default function SellerProfileScreen() {
               last
             />
           </View>
+
+          {/* BLOOMBOARD TAGS + RATINGS from customers */}
+          <ShopCommunityRating floristId={florist?._id} />
 
           {/* ADDRESS */}
 

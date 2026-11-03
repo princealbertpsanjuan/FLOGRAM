@@ -1,3 +1,4 @@
+import PriceChangeLog from '../../components/ui/price-change-log';
 import {
   useFocusEffect,
 } from 'expo-router';
@@ -882,6 +883,9 @@ export default function SellerReportsScreen() {
             />
           }
         >
+          {/* Every price change in the shop */}
+          <PriceChangeLog mode="seller" />
+
           {errorMessage ? (
             <View
               style={
