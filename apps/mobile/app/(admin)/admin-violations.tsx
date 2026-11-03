@@ -1,3 +1,5 @@
+import StatusBadge, { PenaltyLegend } from '../../components/ui/status-badge';
+import { getStatusColors } from '../../constants/status-colors';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -230,7 +232,8 @@ export default function AdminViolationsScreen() {
             </View>
 
             <Text style={styles.label}>Penalty</Text>
-            <View style={styles.chips}>
+            <PenaltyLegend />
+            <View style={[styles.chips, { marginTop: 10 }]}>
               {PENALTIES.map(item => (
                 <Chip
                   key={item}
@@ -315,14 +318,22 @@ export default function AdminViolationsScreen() {
           {recordsSeeAll.visible.map(violation => (
             <View
               key={violation._id}
-              style={[styles.card, violation.status === 'lifted' && { opacity: 0.65 }]}
+              style={[
+                styles.card,
+                styles.recordCard,
+                // Color strip: yellow warning, orange suspension, red ban; gray once lifted
+                { borderLeftColor: violation.status === 'lifted' ? getStatusColors('lifted').solid : getStatusColors(violation.penalty).solid },
+                violation.status === 'lifted' && { opacity: 0.7 },
+              ]}
             >
               <View style={styles.rowBetween}>
-                <Text style={[styles.penalty, { color: PENALTY_COLORS[violation.penalty] }]}>
-                  {PENALTY_LABELS[violation.penalty]}
-                  {violation.penalty === 'suspension' && violation.suspensionDays ? ` · ${violation.suspensionDays}d` : ''}
-                </Text>
-                <Text style={styles.meta}>{violation.status === 'lifted' ? 'LIFTED' : 'ACTIVE'}</Text>
+                <StatusBadge
+                  status={violation.penalty}
+                  label={`${PENALTY_LABELS[violation.penalty]}${
+                    violation.penalty === 'suspension' && violation.suspensionDays ? ` · ${violation.suspensionDays}d` : ''
+                  }`}
+                />
+                <StatusBadge status={violation.status === 'lifted' ? 'lifted' : 'active'} label={violation.status === 'lifted' ? 'LIFTED' : 'IN EFFECT'} size="sm" />
               </View>
 
               {!userId ? (
@@ -430,6 +441,7 @@ const styles = StyleSheet.create({
   section: { marginTop: 8, color: TEXT, fontSize: 16, fontWeight: '800' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   penalty: { fontSize: 14, fontWeight: '900' },
+  recordCard: { borderLeftWidth: 6 },
   userLink: { marginTop: 4, color: ACCENT, fontSize: 14, fontWeight: '800' },
   type: { marginTop: 6, color: TEXT, fontSize: 14, fontWeight: '700' },
   body: { marginTop: 4, color: TEXT, fontSize: 13, lineHeight: 19 },

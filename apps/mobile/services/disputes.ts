@@ -1,3 +1,4 @@
+import { STATUS_TONES } from '../constants/status-colors';
 import { apiRequest } from './api';
 import { appendImageFile } from '../utils/form-file';
 
@@ -43,11 +44,12 @@ export const DISPUTE_STATUS_LABELS: Record<DisputeStatus, string> = {
   rejected: 'Closed',
 };
 
+// Yellow = needs attention, blue = in progress, green = done, gray = closed
 export const DISPUTE_STATUS_COLORS: Record<DisputeStatus, string> = {
-  open: '#D97706',
-  under_review: '#2563EB',
-  resolved: '#15803D',
-  rejected: '#6B7280',
+  open: STATUS_TONES.caution.solid,
+  under_review: STATUS_TONES.info.solid,
+  resolved: STATUS_TONES.success.solid,
+  rejected: STATUS_TONES.neutral.solid,
 };
 
 export const DISPUTE_ACTION_LABELS: Record<DisputeAction, string> = {

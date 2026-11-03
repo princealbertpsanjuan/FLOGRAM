@@ -1,3 +1,5 @@
+import { applyReviewDecision, flaggedDocumentLabels } from "../verification/verification-review.js";
+import { signUploadPath } from "../../services/protectedUploads.service.js";
 import Florist from "./florist.model.js";
 import { notifySafely } from "../notifications/notify-helpers.js";
 import User from "../auth/auth.model.js";
@@ -346,7 +348,8 @@ export const getFloristById =
         user: florist.owner?._id || florist.owner,
         role: "seller",
       })
-        .select("sellerDocuments status remarks createdAt updatedAt")
+        .select("sellerDocuments sellerDetails automatedChecks riskLevel documentReviews history status remarks createdAt updatedAt")
+        .populate("history.by", "firstName lastName role")
         .lean();
 
     const docs = verification?.sellerDocuments || {};
@@ -363,7 +366,20 @@ export const getFloristById =
               { key: "birDocument", label: "BIR registration", path: docs.birDocument || null },
               { key: "bankProof", label: "Bank account proof", path: docs.bankProof || null },
               { key: "shopLogo", label: "Shop logo", path: docs.shopLogo || null },
-            ].filter((file) => file.path),
+            ]
+              .filter((file) => file.path)
+              .map((file) => ({ ...file, path: signUploadPath(file.path) })),
+            details: [
+              { label: "ID type", value: verification.sellerDetails?.validIdType || "" },
+              { label: "ID expiry", value: verification.sellerDetails?.validIdExpiry ? new Date(verification.sellerDetails.validIdExpiry).toISOString().slice(0, 10) : "" },
+              { label: "DTI certificate no.", value: verification.sellerDetails?.dtiNumber || "" },
+              { label: "BIR TIN", value: verification.sellerDetails?.tinNumber || "" },
+            ].filter((item) => item.value),
+            automatedChecks: verification.automatedChecks || [],
+            // Older submissions have no automated checks
+            riskLevel: verification.automatedChecks?.length ? verification.riskLevel : null,
+            documentReviews: verification.documentReviews || [],
+            history: verification.history || [],
           }
         : null,
     };
@@ -376,7 +392,8 @@ export const getFloristById =
 export const approveFlorist =
   async (
     floristId,
-    adminId
+    adminId,
+    review = {}
   ) => {
     const florist =
       await Florist.findById(
@@ -430,6 +447,13 @@ export const approveFlorist =
 
       throw error;
     }
+
+    applyReviewDecision(verification, {
+      decision: "approved",
+      reviews: review.documentReviews,
+      riskAcknowledged: review.riskAcknowledged === true,
+      adminId,
+    });
 
     const reviewedAt =
       new Date();
@@ -495,7 +519,8 @@ export const rejectFlorist =
   async (
     floristId,
     adminId,
-    remarks
+    remarks,
+    review = {}
   ) => {
     const florist =
       await Florist.findById(
@@ -550,6 +575,14 @@ export const rejectFlorist =
       throw error;
     }
 
+    applyReviewDecision(verification, {
+      decision: "rejected",
+      reviews: review.documentReviews,
+      riskAcknowledged: review.riskAcknowledged === true,
+      adminId,
+      remarks,
+    });
+
     const reviewedAt =
       new Date();
 
@@ -603,7 +636,7 @@ export const rejectFlorist =
       role: "seller",
       type: "verification_rejected",
       title: "Shop application needs changes",
-      message: remarks ? `Admin's remarks: ${String(remarks).slice(0, 300)}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
+      message: `${remarks ? `Admin's remarks: ${String(remarks).slice(0, 300)}. ` : ""}${flaggedDocumentLabels(verification).length ? `Resubmit: ${flaggedDocumentLabels(verification).join(", ")}. ` : ""}Please update and resubmit your requirements.`,
     });
 
     return florist;

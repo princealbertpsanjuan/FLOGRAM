@@ -131,6 +131,7 @@ export const generateGrokResponse =
     const response = await fetch(
       `${XAI_API_URL}/responses`,
       {
+        signal: AbortSignal.timeout(60000),
         method: "POST",
 
         headers: {
@@ -310,6 +311,7 @@ export const generateGrokImage =
     const response = await fetch(
       `${XAI_API_URL}/images/generations`,
       {
+        signal: AbortSignal.timeout(90000),
         method: "POST",
 
         headers: {

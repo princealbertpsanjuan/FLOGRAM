@@ -21,6 +21,17 @@ export const createBloomboardPostValidation =
         "Caption cannot exceed 2000 characters."
       ),
 
+    body("taggedFlorist")
+      .optional({ checkFalsy: true })
+      .isMongoId()
+      .withMessage("Tagged shop is invalid."),
+
+    body("shopRating")
+      .optional({ checkFalsy: true })
+      .isInt({ min: 1, max: 5 })
+      .withMessage("Shop rating must be 1 to 5 stars.")
+      .toInt(),
+
     body("postType")
       .optional()
       .isIn([

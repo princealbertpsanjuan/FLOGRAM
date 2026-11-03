@@ -1,3 +1,4 @@
+import { getPenaltyNotificationColors } from '../../constants/status-colors';
 import { useCallback, useEffect, useState } from 'react';
 
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
@@ -187,9 +188,19 @@ export default function NotificationsScreen() {
             onPress={() => void open(item)}
             style={({ pressed }) => [styles.card, !item.isRead && { borderColor: accent }, pressed && { opacity: 0.85 }]}
           >
-            <View style={[styles.icon, { backgroundColor: `${accent}1A` }]}>
-              <Ionicons name={ICONS[item.type] || 'notifications-outline'} size={19} color={accent} />
-            </View>
+            {(() => {
+              // Penalties use yellow / orange / red; everything else the role color
+              const tone = getPenaltyNotificationColors(item);
+              return (
+                <View style={[styles.icon, { backgroundColor: tone ? tone.background : `${accent}1A` }]}>
+                  <Ionicons
+                    name={tone ? (tone.icon as never) : ICONS[item.type] || 'notifications-outline'}
+                    size={19}
+                    color={tone ? tone.solid : accent}
+                  />
+                </View>
+              );
+            })()}
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, !item.isRead && { fontWeight: '900' }]}>{item.title}</Text>
               <Text style={styles.message}>{item.message}</Text>

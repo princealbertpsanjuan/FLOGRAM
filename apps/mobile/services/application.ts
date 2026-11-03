@@ -31,10 +31,21 @@ export type ApplicationProfile = {
   shopName?: string;
 };
 
+export type AutomatedCheck = {
+  documentKey: string;
+  label: string;
+  status: 'pass' | 'warning' | 'fail';
+  message: string;
+};
+
 export type VerificationRecord = {
   _id: string;
   status: 'pending' | 'approved' | 'rejected';
   remarks?: string;
+  riskLevel?: 'low' | 'medium' | 'high';
+  automatedChecks?: AutomatedCheck[];
+  flaggedDocuments?: string[];
+  documentReviews?: { documentKey: string; decision: 'accepted' | 'needs_resubmission'; note?: string }[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -52,6 +63,33 @@ export const RIDER_DOCUMENTS = [
   { key: 'orcr', label: 'Vehicle OR/CR', hint: 'Official Receipt and Certificate of Registration' },
   { key: 'policeClearance', label: 'Police clearance', hint: 'Issued within the last 6 months' },
 ] as const;
+
+export const VALID_ID_TYPES = [
+  'PhilSys National ID',
+  'Passport',
+  "Driver's License",
+  'UMID',
+  'SSS ID',
+  'PRC ID',
+  'Postal ID',
+  "Voter's ID",
+] as const;
+
+/*
+ * Typed details checked against the documents.
+ * Dates are YYYY-MM-DD.
+ */
+export type SellerRequirementDetails = {
+  dtiNumber: string;
+  tinNumber: string;
+  validIdType: string;
+  validIdExpiry: string;
+};
+
+export type RiderRequirementDetails = {
+  licenseExpiry: string;
+  policeClearanceIssuedAt: string;
+};
 
 export const VEHICLE_TYPES = ['motorcycle', 'bicycle', 'car', 'van', 'other'] as const;
 
@@ -115,8 +153,17 @@ export const createRiderProfile = (input: {
     body: JSON.stringify(input),
   });
 
-export const submitDocuments = async (role: ApplicationRole, files: Record<string, string>) => {
+export const submitDocuments = async (
+  role: ApplicationRole,
+  files: Record<string, string>,
+  details: Partial<SellerRequirementDetails & RiderRequirementDetails> = {}
+) => {
   const formData = new FormData();
+
+  for (const [key, value] of Object.entries(details)) {
+    if (value) formData.append(key, String(value));
+  }
+
 
   for (const [key, uri] of Object.entries(files)) {
     await appendImageFile(formData, key, uri, `${key}.jpg`);

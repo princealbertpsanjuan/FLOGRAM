@@ -24,7 +24,7 @@ import {
   rejectAdminRider,
 } from "../../services/admin";
 
-import RequirementDocumentsView from "../../components/admin/requirement-documents";
+import RequirementDocumentsView, { useRequirementReview } from "../../components/admin/requirement-documents";
 import AdminContactActions from "../../components/admin/admin-contact-actions";
 import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
 
@@ -260,6 +260,12 @@ export default function AdminRiderVerificationScreen() {
 
   const [documentsLoading, setDocumentsLoading] = useState(false);
 
+  /*
+   * Per-document Accept / Resubmit decisions. Approve stays
+   * locked until every document is accepted.
+   */
+  const review = useRequirementReview(selectedRider?.documents);
+
   const openDetails = useCallback((rider: AdminRiderVerification) => {
     setSelectedRider(rider);
     setDetailsVisible(true);
@@ -286,6 +292,28 @@ export default function AdminRiderVerificationScreen() {
       return;
     }
 
+    const isOpen =
+      detailsVisible &&
+      selectedRider &&
+      getRiderId(selectedRider) === riderId &&
+      selectedRider.documents;
+
+    if (!isOpen) {
+      openDetails(rider);
+      Alert.alert(
+        "Review Documents First",
+        "Check each uploaded requirement and mark it Accept or Resubmit before approving."
+      );
+      return;
+    }
+
+    if (!review.canApprove) {
+      Alert.alert("Not Ready to Approve", review.blockedReason);
+      return;
+    }
+
+    const reviewPayload = review.payload;
+
     Alert.alert(
       "Approve Rider",
       `Approve ${getRiderName(rider)} as a verified FLOGRAM rider?`,
@@ -300,7 +328,7 @@ export default function AdminRiderVerificationScreen() {
             try {
               setProcessingId(riderId);
 
-              await approveAdminRider(riderId);
+              await approveAdminRider(riderId, reviewPayload);
 
               setRiders((current) =>
                 current.filter((item) => getRiderId(item) !== riderId)
@@ -329,11 +357,14 @@ export default function AdminRiderVerificationScreen() {
         },
       ]
     );
-  }, []);
+  }, [detailsVisible, openDetails, review, selectedRider]);
 
   const openReject = useCallback(
     (rider: AdminRiderVerification) => {
-      setSelectedRider(rider);
+      // Keep the loaded record (with document decisions) when rejecting from the details view
+      setSelectedRider((current) =>
+        current && getRiderId(current) === getRiderId(rider) ? current : rider
+      );
       setRejectionReason("");
       setDetailsVisible(false);
       setRejectVisible(true);
@@ -366,7 +397,7 @@ export default function AdminRiderVerificationScreen() {
     try {
       setProcessingId(riderId);
 
-      await rejectAdminRider(riderId, reason);
+      await rejectAdminRider(riderId, reason, review.payload);
 
       setRiders((current) =>
         current.filter((item) => getRiderId(item) !== riderId)
@@ -392,7 +423,7 @@ export default function AdminRiderVerificationScreen() {
     } finally {
       setProcessingId(null);
     }
-  }, [rejectionReason, selectedRider]);
+  }, [rejectionReason, review.payload, selectedRider]);
 
   /*
    * Show 5 applications + "See all".
@@ -960,6 +991,7 @@ export default function AdminRiderVerificationScreen() {
                 <RequirementDocumentsView
                   documents={selectedRider.documents}
                   loading={documentsLoading}
+                  review={review}
                 />
               </ScrollView>
 
@@ -988,9 +1020,10 @@ export default function AdminRiderVerificationScreen() {
                 </Pressable>
 
                 <Pressable
-                  style={
-                    styles.modalApproveButton
-                  }
+                  style={[
+                    styles.modalApproveButton,
+                    !review.canApprove && { opacity: 0.5 },
+                  ]}
                   onPress={() =>
                     approveRider(selectedRider)
                   }

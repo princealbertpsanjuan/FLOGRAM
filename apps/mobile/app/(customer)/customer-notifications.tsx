@@ -1,3 +1,4 @@
+import { getPenaltyNotificationColors } from '../../constants/status-colors';
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import {
@@ -1557,10 +1558,17 @@ function NotificationCard({
   onPress:
     () => void;
 }) {
-  const presentation =
-    getNotificationPresentation(
-      notification.type
-    );
+  const penaltyTone =
+    getPenaltyNotificationColors(notification);
+
+  const presentation = penaltyTone
+    ? {
+        ...getNotificationPresentation(notification.type),
+        icon: `${penaltyTone.icon}-outline` as never,
+        background: penaltyTone.background,
+        foreground: penaltyTone.solid,
+      }
+    : getNotificationPresentation(notification.type);
 
   const hasDestination =
     Boolean(

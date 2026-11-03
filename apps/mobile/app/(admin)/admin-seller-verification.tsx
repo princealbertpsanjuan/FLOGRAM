@@ -25,7 +25,7 @@ import {
   rejectFlorist,
 } from "../../services/admin";
 
-import RequirementDocumentsView from "../../components/admin/requirement-documents";
+import RequirementDocumentsView, { useRequirementReview } from "../../components/admin/requirement-documents";
 import AdminContactActions from "../../components/admin/admin-contact-actions";
 import { SeeAllButton, useSeeAll } from "../../components/ui/see-all";
 
@@ -190,6 +190,13 @@ export default function AdminSellerVerificationScreen() {
 
   const [rejectVisible, setRejectVisible] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+
+  /*
+   * Per-document Accept / Resubmit decisions for the open
+   * application. Approve stays locked until every document
+   * is accepted (and high risk is confirmed).
+   */
+  const review = useRequirementReview(selectedFlorist?.documents);
 
   /* =======================================================
    * LOAD SELLERS
@@ -358,6 +365,32 @@ export default function AdminSellerVerificationScreen() {
     }
 
     /*
+     * Documents must be reviewed one by one first. From the
+     * list, open the application instead.
+     */
+    const isOpen =
+      detailsVisible &&
+      selectedFlorist &&
+      getFloristId(selectedFlorist) === floristId &&
+      selectedFlorist.documents;
+
+    if (!isOpen) {
+      void openDetails(florist);
+      Alert.alert(
+        "Review Documents First",
+        "Check each uploaded requirement and mark it Accept or Resubmit before approving."
+      );
+      return;
+    }
+
+    if (!review.canApprove) {
+      Alert.alert("Not Ready to Approve", review.blockedReason);
+      return;
+    }
+
+    const reviewPayload = review.payload;
+
+    /*
      * Approving without a map pin is allowed, but the Admin
      * is warned first: customers can't get delivery quotes
      * until the seller sets it.
@@ -384,7 +417,7 @@ export default function AdminSellerVerificationScreen() {
             try {
               setProcessingId(floristId);
 
-              await approveFlorist(floristId);
+              await approveFlorist(floristId, reviewPayload);
 
               setFlorists((current) =>
                 current.filter(
@@ -417,14 +450,17 @@ export default function AdminSellerVerificationScreen() {
         },
       ]
     );
-  }, []);
+  }, [detailsVisible, openDetails, review, selectedFlorist]);
 
   /* =======================================================
    * REJECT
    * =======================================================*/
 
   const openReject = useCallback((florist: AdminFlorist) => {
-    setSelectedFlorist(florist);
+    // Keep the loaded record (with document decisions) when rejecting from the details view
+    setSelectedFlorist((current) =>
+      current && getFloristId(current) === getFloristId(florist) ? current : florist
+    );
     setRejectionReason("");
     setDetailsVisible(false);
     setRejectVisible(true);
@@ -458,7 +494,7 @@ export default function AdminSellerVerificationScreen() {
     try {
       setProcessingId(floristId);
 
-      await rejectFlorist(floristId, reason);
+      await rejectFlorist(floristId, reason, review.payload);
 
       setFlorists((current) =>
         current.filter(
@@ -486,7 +522,7 @@ export default function AdminSellerVerificationScreen() {
     } finally {
       setProcessingId(null);
     }
-  }, [rejectionReason, selectedFlorist]);
+  }, [rejectionReason, review.payload, selectedFlorist]);
 
   /* =======================================================
    * LOADING
@@ -1220,6 +1256,7 @@ export default function AdminSellerVerificationScreen() {
                   <RequirementDocumentsView
                     documents={selectedFlorist.documents}
                     loading={detailsLoading}
+                    review={review}
                   />
                 </ScrollView>
               )}
@@ -1257,7 +1294,7 @@ export default function AdminSellerVerificationScreen() {
                   <Pressable
                     style={[
                       styles.modalApproveButton,
-                      processingId &&
+                      (processingId || !review.canApprove) &&
                         styles.disabledButton,
                     ]}
                     disabled={Boolean(

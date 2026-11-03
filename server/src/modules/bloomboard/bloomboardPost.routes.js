@@ -12,6 +12,8 @@ import {
   savePost,
   unlikePost,
   unsavePost,
+  getShopTagged,
+  getTaggable,
 } from "./bloomboardPost.controller.js";
 
 import {
@@ -91,6 +93,28 @@ bloomboardPostRouter.get(
   "/comments/mine",
   authenticate,
   getMyComments
+);
+
+/*
+ * =========================================================
+ * SHOP TAGS + RATINGS
+ * =========================================================
+ *
+ * GET /bloomboard/shops/taggable          customer: shops to tag
+ * GET /bloomboard/shops/:floristId/tagged public: tagged posts
+ *                                         + community rating
+ * =========================================================
+ */
+bloomboardPostRouter.get(
+  "/shops/taggable",
+  authenticate,
+  authorize("customer"),
+  getTaggable
+);
+
+bloomboardPostRouter.get(
+  "/shops/:floristId/tagged",
+  getShopTagged
 );
 
 /*

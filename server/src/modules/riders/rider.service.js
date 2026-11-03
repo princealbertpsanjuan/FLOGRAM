@@ -1,3 +1,5 @@
+import { applyReviewDecision, flaggedDocumentLabels } from "../verification/verification-review.js";
+import { signUploadPath } from "../../services/protectedUploads.service.js";
 import Rider from "./rider.model.js";
 import { notifyAdmins, notifySafely } from "../notifications/notify-helpers.js";
 import User from "../auth/auth.model.js";
@@ -420,7 +422,8 @@ export const getRiderById = async (
       user: rider.owner?._id || rider.owner,
       role: "rider",
     })
-      .select("riderDocuments status remarks createdAt updatedAt")
+      .select("riderDocuments riderDetails automatedChecks riskLevel documentReviews history status remarks createdAt updatedAt")
+      .populate("history.by", "firstName lastName role")
       .lean();
 
   return {
@@ -433,7 +436,20 @@ export const getRiderById = async (
             { key: "driverLicense", label: "Driver's license", path: verification.riderDocuments?.driverLicense || null },
             { key: "orcr", label: "Vehicle OR/CR", path: verification.riderDocuments?.orcr || null },
             { key: "policeClearance", label: "Police clearance", path: verification.riderDocuments?.policeClearance || null },
-          ].filter((file) => file.path),
+          ]
+            .filter((file) => file.path)
+            .map((file) => ({ ...file, path: signUploadPath(file.path) })),
+          details: [
+            { label: "License no.", value: rider.driverLicenseNumber || "" },
+            { label: "License expiry", value: verification.riderDetails?.licenseExpiry ? new Date(verification.riderDetails.licenseExpiry).toISOString().slice(0, 10) : "" },
+            { label: "Police clearance issued", value: verification.riderDetails?.policeClearanceIssuedAt ? new Date(verification.riderDetails.policeClearanceIssuedAt).toISOString().slice(0, 10) : "" },
+            { label: "Plate no.", value: rider.vehiclePlateNumber || "" },
+          ].filter((item) => item.value),
+          automatedChecks: verification.automatedChecks || [],
+          // Older submissions have no automated checks
+          riskLevel: verification.automatedChecks?.length ? verification.riskLevel : null,
+          documentReviews: verification.documentReviews || [],
+          history: verification.history || [],
         }
       : null,
   };
@@ -447,7 +463,8 @@ export const getRiderById = async (
 
 export const approveRider = async (
   riderId,
-  adminId
+  adminId,
+  review = {}
 ) => {
   const rider =
     await Rider.findById(
@@ -493,6 +510,13 @@ export const approveRider = async (
 
     throw error;
   }
+
+  applyReviewDecision(verification, {
+    decision: "approved",
+    reviews: review.documentReviews,
+    riskAcknowledged: review.riskAcknowledged === true,
+    adminId,
+  });
 
   const reviewedAt =
     new Date();
@@ -557,7 +581,8 @@ export const approveRider = async (
 export const rejectRider = async (
   riderId,
   adminId,
-  remarks
+  remarks,
+  review = {}
 ) => {
   const rider =
     await Rider.findById(
@@ -603,6 +628,14 @@ export const rejectRider = async (
 
     throw error;
   }
+
+  applyReviewDecision(verification, {
+    decision: "rejected",
+    reviews: review.documentReviews,
+    riskAcknowledged: review.riskAcknowledged === true,
+    adminId,
+    remarks,
+  });
 
   const reviewedAt =
     new Date();
@@ -655,7 +688,7 @@ export const rejectRider = async (
     role: "rider",
     type: "verification_rejected",
     title: "Rider application needs changes",
-    message: remarks ? `Admin's remarks: ${String(remarks).slice(0, 300)}. Please update and resubmit your requirements.` : "Please update and resubmit your requirements.",
+    message: `${remarks ? `Admin's remarks: ${String(remarks).slice(0, 300)}. ` : ""}${flaggedDocumentLabels(verification).length ? `Resubmit: ${flaggedDocumentLabels(verification).join(", ")}. ` : ""}Please update and resubmit your requirements.`,
   });
 
   return rider;

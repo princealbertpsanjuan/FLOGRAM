@@ -44,9 +44,30 @@ their screens redirect to the login page on web.
 - Seller earnings (sales − platform commission) and Admin Seller payouts
 - Disputes (report a problem on an order, Admin resolves) and policy violations
   (warning / temporary suspension / ban; suspended accounts cannot log in)
+- Seller/Rider requirement security checks: real file type (magic bytes), readable
+  image size, same photo used twice, identical document from another account
+  (SHA-256), DTI/TIN/ID/license formats and expiry dates, risk level (low/medium/high),
+  per-document Accept/Resubmit review before approval, audit trail, and private
+  verification files served only through signed links that expire in 15 minutes
+- One status color system (`apps/mobile/constants/status-colors.ts`): red = permanent
+  ban/rejected/failed, orange = temporary suspension, yellow = warning/pending,
+  blue = in progress, green = active/approved, gray = lifted/closed (always with an
+  icon and text, so it also works for color-blind users)
+- BloomBoard shop tags and ratings: customers tag the shop that made a bouquet and
+  rate it 1–5 stars (verified buyers only, one rating per shop); AFINN sentiment of
+  the caption; community rating on the product page and the seller profile
+- Price history: every bouquet / add-on price change is recorded (append-only), with
+  a chart and timeline for customers, orders and revenue at each price for sellers,
+  and Admin alerts for increases of 50% or more
 
 ## Checks
 
 ```bash
 cd server && npm run verify:shifts   # rider shift slot-limit integration check
+cd server && npm test                      # all checks below that need no database
+cd server && npm run verify:requirements   # automated requirement checks
+cd server && npm run verify:routing        # delivery fee, route cache, OpenRouteService fallback
+cd server && npm run verify:checkout       # scheduled-delivery date rules (Philippine time)
+cd server && npm run verify:analytics      # FP-Growth vs brute force, AFINN sentiment
+cd server && npm run verify:security       # rate limiting, document review rules
 ```

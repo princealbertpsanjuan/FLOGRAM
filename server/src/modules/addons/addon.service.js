@@ -1,3 +1,4 @@
+import { recordPriceChange } from "../pricing/price-history.service.js";
 import GiftAddOn, { ADD_ON_CATEGORIES } from "./addon.model.js";
 import Florist from "../florists/florist.model.js";
 
@@ -64,15 +65,23 @@ export const getMyAddOns = async (sellerUserId) => {
 export const createAddOn = async (sellerUserId, data) => {
   const florist = await getSellerFlorist(sellerUserId);
 
-  return GiftAddOn.create({
+  const addOn = await GiftAddOn.create({
     ...cleanAddOnInput(data),
     florist: florist._id,
     seller: sellerUserId,
   });
+
+  await recordPriceChange({ itemType: "addon", item: addOn, changedBy: sellerUserId });
+
+  return addOn;
 };
 
 export const updateAddOn = async (sellerUserId, addOnId, data) => {
   const florist = await getSellerFlorist(sellerUserId);
+
+  const before = await GiftAddOn.findOne({ _id: addOnId, florist: florist._id, isActive: true })
+    .select("price")
+    .lean();
 
   const addOn = await GiftAddOn.findOneAndUpdate(
     { _id: addOnId, florist: florist._id, isActive: true },
@@ -83,6 +92,13 @@ export const updateAddOn = async (sellerUserId, addOnId, data) => {
   if (!addOn) {
     throw createError("Add-on was not found.", 404);
   }
+
+  await recordPriceChange({
+    itemType: "addon",
+    item: addOn,
+    oldPrice: before?.price ?? null,
+    changedBy: sellerUserId,
+  });
 
   return addOn;
 };

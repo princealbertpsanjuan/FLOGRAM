@@ -10,6 +10,8 @@ import {
   unlikeBloomboardPost,
   unsaveBloomboardPost,
   getMyLikedBloomboardPosts,
+  getShopTaggedPosts,
+  getTaggableShops,
 } from "./bloomboardPost.service.js";
 
 export const createPost = async (
@@ -292,3 +294,39 @@ export const getMyLikedPosts =
       next(error);
     }
   };
+
+/*
+ * CUSTOMER
+ * Shops that can be tagged / rated in a post
+ */
+export const getTaggable = async (req, res, next) => {
+  try {
+    const shops = await getTaggableShops(req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Taggable shops retrieved successfully.",
+      data: { count: shops.length, shops },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/*
+ * PUBLIC
+ * Posts that tag a shop + community rating
+ */
+export const getShopTagged = async (req, res, next) => {
+  try {
+    const result = await getShopTaggedPosts(req.params.floristId, req.query.limit);
+
+    res.status(200).json({
+      success: true,
+      message: "Tagged posts retrieved successfully.",
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

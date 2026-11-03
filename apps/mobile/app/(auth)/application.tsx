@@ -29,6 +29,7 @@ import ShopLocationPicker, { type ShopCoordinate } from '../../components/seller
 import {
   RIDER_DOCUMENTS,
   SELLER_DOCUMENTS,
+  VALID_ID_TYPES,
   VEHICLE_TYPES,
   createRiderProfile,
   createSellerProfile,
@@ -79,6 +80,50 @@ const COLORS = {
 
 type Stage = 'details' | 'documents' | 'review' | 'rejected';
 
+/*
+ * Requirement detail checks (same rules as the server,
+ * see server/src/modules/verification/requirement-checks.js)
+ */
+const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(value).getTime());
+const formatDateInput = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  return [digits.slice(0, 4), digits.slice(4, 6), digits.slice(6, 8)].filter(Boolean).join('-');
+};
+const daysFromToday = (value: string) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(value).getTime() - today.getTime()) / 86400000);
+};
+const normalizeDti = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^BN/, '');
+const isValidDti = (value: string) => /^\d{6,10}$/.test(normalizeDti(value));
+const formatTinInput = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  return [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 9), digits.slice(9)].filter(Boolean).join('-');
+};
+const isValidTin = (value: string) => /^\d{9}(\d{3,5})?$/.test(value.replace(/\D/g, ''));
+
+const checkSellerDetails = (details: Record<string, string>) => {
+  const problems: string[] = [];
+  if (!isValidDti(details.dtiNumber)) problems.push('DTI certificate number must be 6–10 digits.');
+  if (!isValidTin(details.tinNumber)) problems.push('TIN must be 9 digits plus an optional branch code (123-456-789-000).');
+  if (!details.validIdType) problems.push('Choose the type of government ID you uploaded.');
+  if (details.validIdType && details.validIdType !== 'PhilSys National ID') {
+    if (!isDate(details.validIdExpiry)) problems.push('Enter the ID expiry date as YYYY-MM-DD.');
+    else if (daysFromToday(details.validIdExpiry) < 0) problems.push('Your ID is expired. Upload a valid ID.');
+  }
+  return problems;
+};
+
+const checkRiderDetails = (details: Record<string, string>) => {
+  const problems: string[] = [];
+  if (!isDate(details.licenseExpiry)) problems.push('Enter the license expiry date as YYYY-MM-DD.');
+  else if (daysFromToday(details.licenseExpiry) < 0) problems.push("Your driver's license is expired.");
+  if (!isDate(details.policeClearanceIssuedAt)) problems.push('Enter the police clearance issue date as YYYY-MM-DD.');
+  else if (daysFromToday(details.policeClearanceIssuedAt) > 0) problems.push('Police clearance issue date cannot be in the future.');
+  else if (daysFromToday(details.policeClearanceIssuedAt) < -183) problems.push('Police clearance must be issued within the last 6 months.');
+  return problems;
+};
+
 // Plate number: letters and digits, 2-8 characters (e.g. ABC1234)
 const PLATE_ERROR = 'Enter a valid plate number: 2 to 8 letters and numbers (e.g. ABC1234).';
 const formatPlateInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
@@ -120,6 +165,17 @@ export default function ApplicationScreen() {
 
   // Step 2 files
   const [files, setFiles] = useState<Record<string, string>>({});
+
+  // Step 2 details typed from the documents
+  const [details, setDetails] = useState<Record<string, string>>({
+    dtiNumber: '',
+    tinNumber: '',
+    validIdType: '',
+    validIdExpiry: '',
+    licenseExpiry: '',
+    policeClearanceIssuedAt: '',
+  });
+  const setDetail = (key: string) => (value: string) => setDetails(current => ({ ...current, [key]: value }));
 
   const load = useCallback(async () => {
     try {
@@ -164,6 +220,12 @@ export default function ApplicationScreen() {
 
   const accent = COLORS[role];
   const documents = role === 'seller' ? SELLER_DOCUMENTS : RIDER_DOCUMENTS;
+  const flagged = new Set(verification?.status === 'rejected' ? verification.flaggedDocuments || [] : []);
+  const flaggedNotes = new Map(
+    (verification?.documentReviews || [])
+      .filter(review => review.decision === 'needs_resubmission')
+      .map(review => [review.documentKey, review.note || ''])
+  );
 
   const stage: Stage = !profile
     ? 'details'
@@ -294,9 +356,30 @@ export default function ApplicationScreen() {
       return;
     }
 
+    const problems = role === 'seller' ? checkSellerDetails(details) : checkRiderDetails(details);
+
+    if (problems.length) {
+      Alert.alert('Check your document details', problems.join('\n'));
+      return;
+    }
+
     try {
       setSaving(true);
-      await submitDocuments(role, files);
+      await submitDocuments(
+        role,
+        files,
+        role === 'seller'
+          ? {
+              dtiNumber: normalizeDti(details.dtiNumber),
+              tinNumber: details.tinNumber,
+              validIdType: details.validIdType,
+              validIdExpiry: details.validIdType === 'PhilSys National ID' ? '' : details.validIdExpiry,
+            }
+          : {
+              licenseExpiry: details.licenseExpiry,
+              policeClearanceIssuedAt: details.policeClearanceIssuedAt,
+            }
+      );
       setResubmitting(false);
       setFiles({});
       await load();
@@ -522,6 +605,22 @@ export default function ApplicationScreen() {
               <Text style={styles.statusText}>
                 {verification?.remarks || profile?.verificationRemarks || 'Admin asked you to update your requirements.'}
               </Text>
+              {flagged.size ? (
+                <View style={styles.flagBox}>
+                  <Text style={styles.flagTitle}>Documents to replace</Text>
+                  {documents
+                    .filter(doc => flagged.has(doc.key))
+                    .map(doc => (
+                      <View key={doc.key} style={styles.flagRow}>
+                        <Ionicons name="close-circle" size={16} color={COLORS.danger} />
+                        <Text style={styles.flagText}>
+                          {doc.label}
+                          {flaggedNotes.get(doc.key) ? ` — ${flaggedNotes.get(doc.key)}` : ''}
+                        </Text>
+                      </View>
+                    ))}
+                </View>
+              ) : null}
               <PrimaryButton
                 color={accent}
                 label="Upload requirements again"
@@ -539,12 +638,17 @@ export default function ApplicationScreen() {
 
               {documents.map(doc => {
                 const uri = files[doc.key];
+                const needsReplacement = flagged.has(doc.key) && !uri;
 
                 return (
                   <Pressable
                     key={doc.key}
                     onPress={() => void pickDocument(doc.key)}
-                    style={[styles.docRow, uri && { borderColor: accent }]}
+                    style={[
+                      styles.docRow,
+                      needsReplacement && { borderColor: COLORS.danger, backgroundColor: '#FDF1F0' },
+                      uri && { borderColor: accent },
+                    ]}
                   >
                     {uri ? (
                       <Image source={{ uri }} style={styles.docThumb} />
@@ -556,6 +660,9 @@ export default function ApplicationScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.docLabel}>{doc.label}</Text>
                       <Text style={styles.docHint}>{doc.hint}</Text>
+                      {needsReplacement ? (
+                        <Text style={styles.docFlag}>Admin asked you to replace this document</Text>
+                      ) : null}
                     </View>
                     <Ionicons
                       name={uri ? 'checkmark-circle' : 'add-circle-outline'}
@@ -565,6 +672,64 @@ export default function ApplicationScreen() {
                   </Pressable>
                 );
               })}
+
+              <Text style={[styles.cardTitle, { marginTop: 20 }]}>Document details</Text>
+              <Text style={styles.statusText}>
+                Type these exactly as printed. FLOGRAM checks the format and dates automatically, then Admin compares
+                them with your photos.
+              </Text>
+
+              {role === 'seller' ? (
+                <>
+                  <Text style={styles.label}>Government ID uploaded</Text>
+                  <View style={styles.chips}>
+                    {VALID_ID_TYPES.map(type => {
+                      const active = details.validIdType === type;
+                      return (
+                        <Pressable
+                          key={type}
+                          onPress={() => setDetail('validIdType')(type)}
+                          style={[styles.chip, { borderColor: accent }, active && { backgroundColor: accent }]}
+                        >
+                          <Text style={[styles.chipText, { color: active ? '#FFFFFF' : accent }]}>{type}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {details.validIdType && details.validIdType !== 'PhilSys National ID' ? (
+                    <DateField label="ID expiry date" value={details.validIdExpiry} onChangeText={setDetail('validIdExpiry')} />
+                  ) : null}
+                  <Field
+                    label="DTI certificate number"
+                    value={details.dtiNumber}
+                    onChangeText={value => setDetail('dtiNumber')(value.toUpperCase().replace(/[^A-Z0-9 -]/g, '').slice(0, 14))}
+                    autoCapitalize="characters"
+                    placeholder="1234567"
+                  />
+                  {details.dtiNumber && !isValidDti(details.dtiNumber) ? (
+                    <Text style={styles.fieldError}>DTI certificate number must be 6–10 digits.</Text>
+                  ) : null}
+                  <Field
+                    label="BIR TIN"
+                    value={details.tinNumber}
+                    onChangeText={value => setDetail('tinNumber')(formatTinInput(value))}
+                    keyboardType="number-pad"
+                    placeholder="123-456-789-000"
+                  />
+                  {details.tinNumber && !isValidTin(details.tinNumber) ? (
+                    <Text style={styles.fieldError}>Enter 9 digits plus an optional branch code.</Text>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <DateField label="Driver's license expiry date" value={details.licenseExpiry} onChangeText={setDetail('licenseExpiry')} />
+                  <DateField
+                    label="Police clearance issue date"
+                    value={details.policeClearanceIssuedAt}
+                    onChangeText={setDetail('policeClearanceIssuedAt')}
+                  />
+                </>
+              )}
 
               <PrimaryButton
                 color={accent}
@@ -631,6 +796,24 @@ function Field({
         placeholderTextColor="#A9A3AA"
         style={[styles.input, multiline && { minHeight: 80, textAlignVertical: 'top' }]}
       />
+    </>
+  );
+}
+
+function DateField({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) {
+  const complete = value.length === 10;
+
+  return (
+    <>
+      <Field
+        label={label}
+        value={value}
+        onChangeText={next => onChangeText(formatDateInput(next))}
+        keyboardType="number-pad"
+        maxLength={10}
+        placeholder="YYYY-MM-DD"
+      />
+      {complete && !isDate(value) ? <Text style={styles.fieldError}>Enter a real date (YYYY-MM-DD).</Text> : null}
     </>
   );
 }
@@ -719,6 +902,11 @@ const styles = StyleSheet.create({
   docThumbEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#F6F4F7' },
   docLabel: { color: COLORS.text, fontSize: 14, fontWeight: '800' },
   docHint: { marginTop: 2, color: COLORS.muted, fontSize: 12, lineHeight: 16 },
+  docFlag: { marginTop: 4, color: COLORS.danger, fontSize: 12, fontWeight: '700' },
+  flagBox: { marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: '#FDF1F0', gap: 6 },
+  flagTitle: { color: COLORS.danger, fontSize: 13, fontWeight: '800' },
+  flagRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  flagText: { flex: 1, color: COLORS.text, fontSize: 13, lineHeight: 18 },
   statusIcon: { alignItems: 'center', marginBottom: 8 },
   statusTitle: { color: COLORS.text, fontSize: 18, fontWeight: '800', textAlign: 'center' },
   statusText: { marginTop: 6, color: COLORS.muted, fontSize: 13, lineHeight: 19 },

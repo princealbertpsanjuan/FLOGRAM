@@ -14,7 +14,8 @@ export const submitRiderVerification = async (
     const verification =
       await saveRiderVerification(
         req.user.userId,
-        req.files
+        req.files,
+        req.body
       );
 
     res.status(201).json({
@@ -39,7 +40,8 @@ export const submitSellerVerification = async (
     const verification =
       await saveSellerVerification(
         req.user.userId,
-        req.files
+        req.files,
+        req.body
       );
 
     res.status(201).json({

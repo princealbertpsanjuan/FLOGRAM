@@ -1,3 +1,4 @@
+import { STATUS_TONES } from '../constants/status-colors';
 import { apiRequest } from './api';
 
 /*
@@ -45,10 +46,14 @@ export const PENALTY_LABELS: Record<Penalty, string> = {
   ban: 'Permanent ban',
 };
 
+/*
+ * Yellow = warning, orange = temporary suspension,
+ * red = permanent ban (constants/status-colors.ts).
+ */
 export const PENALTY_COLORS: Record<Penalty, string> = {
-  warning: '#D97706',
-  suspension: '#DC2626',
-  ban: '#111827',
+  warning: STATUS_TONES.caution.solid,
+  suspension: STATUS_TONES.serious.solid,
+  ban: STATUS_TONES.danger.solid,
 };
 
 type Person = { _id: string; firstName?: string; lastName?: string; email?: string; role?: string; accountStatus?: string; suspendedUntil?: string | null };

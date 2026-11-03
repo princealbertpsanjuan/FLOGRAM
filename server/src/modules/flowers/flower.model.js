@@ -103,6 +103,14 @@ const flowerSchema = new mongoose.Schema(
   }
 );
 
+/*
+ * Indexes for the queries the app runs most:
+ * seller's own listings, public catalog, shop pages.
+ */
+flowerSchema.index({ seller: 1, createdAt: -1 });
+flowerSchema.index({ isActive: 1, isAvailable: 1, createdAt: -1 });
+flowerSchema.index({ florist: 1, isActive: 1 });
+
 const Flower = mongoose.model(
   "Flower",
   flowerSchema

@@ -4,6 +4,24 @@ const PAYMONGO_API_URL =
   process.env.PAYMONGO_API_URL ||
   "https://api.paymongo.com";
 
+// PayMongo calls give up after 20 s instead of hanging the request
+const PAYMONGO_TIMEOUT_MS =
+  Number(process.env.PAYMONGO_TIMEOUT_MS) || 20000;
+
+/*
+ * fetch() itself failed (timeout, DNS, no internet).
+ */
+const throwPayMongoNetworkError = (cause) => {
+  const error = new Error(
+    cause?.name === "TimeoutError"
+      ? "PayMongo is taking too long to respond. Please try again."
+      : "Unable to reach PayMongo right now. Please try again."
+  );
+  error.statusCode = 502;
+  throw error;
+};
+
+
 /*
  * =========================================================
  * PAYMONGO CONFIGURATION
@@ -474,6 +492,7 @@ export const createPayMongoCheckoutSession =
       await fetch(
         `${PAYMONGO_API_URL}/v1/checkout_sessions`,
         {
+          signal: AbortSignal.timeout(PAYMONGO_TIMEOUT_MS),
           method:
             "POST",
 
@@ -496,7 +515,7 @@ export const createPayMongoCheckoutSession =
               },
             }),
         }
-      );
+      ).catch(throwPayMongoNetworkError);
 
     let result;
 
@@ -620,6 +639,7 @@ export const retrievePayMongoCheckoutSession =
             checkoutSessionId
           )}`,
           {
+            signal: AbortSignal.timeout(PAYMONGO_TIMEOUT_MS),
             method:
               "GET",
 
@@ -713,6 +733,7 @@ export const expirePayMongoCheckoutSession =
             checkoutSessionId
           )}/expire`,
           {
+            signal: AbortSignal.timeout(PAYMONGO_TIMEOUT_MS),
             method:
               "POST",
 

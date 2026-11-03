@@ -127,6 +127,17 @@ const userSchema = new mongoose.Schema(
       default: false,
       select: false,
     },
+
+    /*
+     * Wrong reset codes entered for the current code. After
+     * MAX_RESET_CODE_ATTEMPTS the code is cancelled, so the
+     * 6-digit code cannot be guessed by trying many values.
+     */
+    passwordResetAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
   },
   {
     timestamps: true,

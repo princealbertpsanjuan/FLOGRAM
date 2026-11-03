@@ -183,6 +183,11 @@ const notificationSchema =
           "rating_received",
 
           /*
+           * A customer tagged the shop in a BloomBoard post.
+           */
+          "shop_tagged",
+
+          /*
            * =================================================
            * GENERAL
            * =================================================

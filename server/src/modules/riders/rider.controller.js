@@ -551,7 +551,8 @@ export const approve = async (
   try {
     const rider = await approveRider(
       req.params.riderId,
-      req.user.userId
+      req.user.userId,
+      req.body || {}
     );
 
     res.status(200).json({
@@ -585,7 +586,8 @@ export const reject = async (
     const rider = await rejectRider(
       req.params.riderId,
       req.user.userId,
-      req.body.remarks
+      req.body.remarks,
+      req.body || {}
     );
 
     res.status(200).json({

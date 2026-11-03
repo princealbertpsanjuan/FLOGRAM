@@ -142,6 +142,9 @@ const floristSchema = new mongoose.Schema(
   }
 );
 
+// Public shop list and checkout shop checks
+floristSchema.index({ verificationStatus: 1, isActive: 1 });
+
 const Florist = mongoose.model(
   "Florist",
   floristSchema

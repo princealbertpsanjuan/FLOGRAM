@@ -1,3 +1,4 @@
+import { getScheduleProblem } from "../../utils/deliverySchedule.js";
 import { autoCompleteDeliveredOrders } from "./order-auto-complete.js";
 import {
   cancelUnpaidOnlineOrder,
@@ -1107,14 +1108,18 @@ if (
   throw error;
 }
 
-if (
+// Same-day schedules are allowed (Philippine calendar day)
+const scheduleProblem =
   isPreOrder &&
-  requestedDeliveryDate <=
-    new Date()
-) {
+  getScheduleProblem(
+    requestedDeliveryDate,
+    orderData.requestedDeliveryTimeEnd || null
+  );
+
+if (scheduleProblem) {
   const error =
     new Error(
-      "Pre-order delivery date must be in the future."
+      scheduleProblem
     );
 
   error.statusCode = 400;

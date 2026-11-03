@@ -33,6 +33,7 @@ import { getStoredUser } from "../../services/auth";
 import CustomerBottomNav from '../../components/customer/customer-bottom-nav';
 
 import NotificationBell from '../../components/customer/notification-bell';
+import ShopTagPicker, { TaggedShopLine, type ShopTag } from '../../components/customer/shop-tag-picker';
 
 import { File as ExpoFile } from "expo-file-system";
 
@@ -65,6 +66,9 @@ type BloomPost = {
   author?: Author | null;
   authorRole?: "customer" | "seller";
   florist?: Florist | null;
+  taggedFlorist?: Florist | null;
+  shopRating?: number | null;
+  verifiedOrder?: string | null;
   caption?: string;
   images?: string[];
   postType?:
@@ -657,6 +661,12 @@ export default function CustomerBloomboardScreen() {
   ] = useState<SelectedImage[]>(
     []
   );
+
+  /*
+   * Optional shop tag + 1-5 star rating.
+   */
+  const [shopTag, setShopTag] =
+    useState<ShopTag>(null);
 
   const [
     creatingPost,
@@ -1350,6 +1360,20 @@ export default function CustomerBloomboardScreen() {
           "general"
         );
 
+        if (shopTag) {
+          formData.append(
+            "taggedFlorist",
+            shopTag.floristId
+          );
+
+          if (shopTag.rating) {
+            formData.append(
+              "shopRating",
+              String(shopTag.rating)
+            );
+          }
+        }
+
         selectedImages.forEach(
           (image) => {
 
@@ -1383,6 +1407,7 @@ export default function CustomerBloomboardScreen() {
 
         setCaption("");
         setSelectedImages([]);
+        setShopTag(null);
 
         if (createdPost) {
           setMyPosts(
@@ -2236,6 +2261,8 @@ const openRequestAiConversation = (
             </Text>
           )}
 
+          <TaggedShopLine post={post} />
+
           <View
             style={
               styles.feedActions
@@ -2460,6 +2487,8 @@ const openRequestAiConversation = (
             {post.caption}
           </Text>
         )}
+
+        <TaggedShopLine post={post} />
 
         {image && (
           <View>
@@ -3563,6 +3592,12 @@ const openRequestAiConversation = (
               style={
                 styles.captionInput
               }
+            />
+
+            <ShopTagPicker
+              value={shopTag}
+              onChange={setShopTag}
+              disabled={creatingPost}
             />
 
             {selectedImages.length >

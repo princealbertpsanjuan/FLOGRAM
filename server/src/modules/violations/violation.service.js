@@ -177,7 +177,7 @@ export const liftViolation = async (adminId, violationId, reason = "") => {
         type: "account_penalty",
         title: "Penalty lifted",
         message: user.accountStatus === "active" ? "Your account is active again." : "One of your penalties was lifted.",
-        metadata: { violationId: String(violation._id) },
+        metadata: { violationId: String(violation._id), penalty: "lifted" },
       });
     } catch (error) {
       console.error("Penalty notification failed:", error.message);

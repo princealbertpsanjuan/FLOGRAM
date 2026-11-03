@@ -1,3 +1,5 @@
+import CollapsibleSection from '../../components/ui/collapsible-section';
+import PriceHistoryView from '../../components/ui/price-history';
 import React, {
   useCallback,
   useEffect,
@@ -895,6 +897,17 @@ useEffect(() => {
               Cancel
             </Text>
           </Pressable>
+
+          {/* PRICE HISTORY: every change + orders at each price */}
+          <CollapsibleSection
+            title="Price history"
+            subtitle="Every price change and what sold at each price"
+            icon="pricetags-outline"
+            role="seller"
+            style={{ marginTop: 16 }}
+          >
+            <PriceHistoryView flowerId={flowerId} role="seller" showSales />
+          </CollapsibleSection>
 
           <View
             style={
