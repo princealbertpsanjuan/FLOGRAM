@@ -1,3 +1,4 @@
+import ProofPhoto from '../../components/ui/proof-photo';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -3111,20 +3112,14 @@ setLocationError(null);
                     styles.proofPreviewContainer
                   }
                 >
-                  <Image
-                    source={{
-                      uri:
-                        getUploadUrl(
-                          delivery
-                            .proofOfDelivery
-                            ?.imageUrl
-                        ) as string,
-                    }}
-                    style={
-                      styles.proofPreview
+                  <ProofPhoto
+                    uri={
+                      delivery
+                        .proofOfDelivery
+                        ?.imageUrl
                     }
-                    resizeMode="cover"
-                    accessibilityLabel="Proof of delivery photo"
+                    label="Proof of delivery"
+                    height={180}
                   />
                 </View>
               ) : (

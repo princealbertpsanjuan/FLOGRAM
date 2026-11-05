@@ -1552,12 +1552,13 @@ function OrderCard({
     );
 
   /*
-   * The shop can decline a new order or cancel an accepted
-   * one, but not after preparation starts.
+   * Sellers cannot decline or cancel orders: they control
+   * what can be ordered by setting a bouquet unavailable.
+   * Only the customer (before preparation) or Admin can
+   * cancel. Kept as a constant so the old dialog stays
+   * unreachable.
    */
-  const canSellerCancel =
-    ['pending', 'confirmed'].includes(order.orderStatus) &&
-    !isAwaitingOnlinePayment(order);
+  const canSellerCancel = false;
 
   const productName =
     order.productName ||

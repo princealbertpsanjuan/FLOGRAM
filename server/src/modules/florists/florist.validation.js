@@ -1,3 +1,4 @@
+import { GMAIL_ERROR, isValidGmail } from "../../utils/emailRules.js";
 import {
   body,
   validationResult,
@@ -86,6 +87,8 @@ export const floristProfileValidation = [
     .withMessage(
       "Enter a valid business email address."
     )
+    .custom((value) => isValidGmail(value))
+    .withMessage(GMAIL_ERROR)
     .normalizeEmail(),
 
   /*
@@ -214,6 +217,8 @@ export const updateFloristValidation = [
     .withMessage(
       "Enter a valid business email address."
     )
+    .custom((value) => isValidGmail(value))
+    .withMessage(GMAIL_ERROR)
     .normalizeEmail(),
 
   /*

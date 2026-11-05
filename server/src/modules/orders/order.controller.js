@@ -1,6 +1,5 @@
 import {
   cancelCustomerOrder,
-  cancelSellerOrder,
   completePickupOrder,
   completeCustomerOrder,
   createOrder,
@@ -294,11 +293,15 @@ export const pickedUp = async (req, res, next) => {
   }
 };
 
-export const sellerCancel = async (req, res, next) => {
-  try {
-    const order = await cancelSellerOrder(req.params.orderId, req.user.userId, req.body?.reason);
-    res.status(200).json({ success: true, message: "Order cancelled.", data: { order } });
-  } catch (error) {
-    next(error);
-  }
-};
+/*
+ * Sellers can no longer decline or cancel orders (panel
+ * recommendation): they manage what can be ordered by
+ * marking bouquets unavailable. The route stays so older
+ * app versions get a clear message instead of a 404.
+ */
+export const sellerCancel = async (req, res) =>
+  res.status(403).json({
+    success: false,
+    message:
+      "Sellers cannot cancel orders. Mark the bouquet as unavailable to stop new orders, or ask Admin for help with this order.",
+  });

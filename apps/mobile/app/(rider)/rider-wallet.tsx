@@ -46,6 +46,7 @@ import RiderBottomNav, {
   useRiderBottomNavSpace,
 } from '../../components/rider/rider-bottom-nav';
 
+import ProofPhoto from '../../components/ui/proof-photo';
 import RiderEarningsPanel from '../../components/rider/rider-earnings-panel';
 
 import { ScreenLoader } from '../../components/ui/state-views';
@@ -2016,15 +2017,12 @@ export default function RiderWalletScreen() {
                     styles.proofPreviewContainer
                   }
                 >
-                  <Image
-                    source={{
-                      uri:
-                        proofImage.uri,
-                    }}
-                    style={
-                      styles.proofPreview
+                  <ProofPhoto
+                    uri={
+                      proofImage.uri
                     }
-                    resizeMode="cover"
+                    label="Remittance proof"
+                    height={180}
                   />
 
                   <Pressable
@@ -2934,6 +2932,23 @@ function DailyRemittanceCard({
           </Pressable>
         ) : null}
       </View>
+
+      {/* The proof the rider uploaded, visible after submitting */}
+      {remittance.proofImageUrl ? (
+        <View style={{ marginTop: 10, gap: 6 }}>
+          <Text style={styles.fieldLabel}>
+            Your proof of remittance
+            {remittance.referenceNumber
+              ? ` · Ref ${remittance.referenceNumber}`
+              : ''}
+          </Text>
+          <ProofPhoto
+            uri={remittance.proofImageUrl}
+            label="Proof of remittance"
+            height={150}
+          />
+        </View>
+      ) : null}
 
       {remittance.status ===
         'submitted' ? (
@@ -4566,6 +4581,7 @@ const styles =
 
     proofConfirmImage: {
       flex: 1,
+      minHeight: 300,
       width: '100%',
       borderRadius: 12,
     },
@@ -4780,6 +4796,8 @@ const styles =
 
     proofPreviewContainer: {
       overflow: 'hidden',
+      width: '100%',
+      alignSelf: 'stretch',
       height: 180,
       borderRadius: 12,
       backgroundColor:

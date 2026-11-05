@@ -1,3 +1,4 @@
+import { GMAIL_ERROR, isValidGmail } from "../../utils/emailRules.js";
 import { body, validationResult } from "express-validator";
 
 import {
@@ -41,6 +42,9 @@ export const registerValidation = [
     .withMessage("Email address is required.")
     .isEmail()
     .withMessage("Enter a valid email address.")
+    // New accounts: Gmail only (see utils/emailRules.js)
+    .custom((value) => isValidGmail(value))
+    .withMessage(GMAIL_ERROR)
     .normalizeEmail(),
 
   body("phoneNumber")
