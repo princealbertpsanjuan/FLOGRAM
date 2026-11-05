@@ -1,3 +1,4 @@
+import { isOnlinePaymentEnabled } from "../utils/paymentSettings.js";
 import { Router } from "express";
 
 import authRouter from "../modules/auth/auth.routes.js";
@@ -50,6 +51,20 @@ apiRouter.use(
   "/health",
   healthRouter
 );
+
+/*
+ * PUBLIC APP SETTINGS
+ * The app reads these at checkout (e.g. hide PayMongo when
+ * ONLINE_PAYMENTS_ENABLED=false). No secrets here.
+ */
+apiRouter.get("/config", (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      onlinePaymentsEnabled: isOnlinePaymentEnabled(),
+    },
+  });
+});
 
 /*
  * Address search / map pin → address (public).

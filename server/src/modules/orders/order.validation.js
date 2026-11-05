@@ -1,3 +1,4 @@
+import { ONLINE_PAYMENTS_OFF_MESSAGE, isOnlinePaymentEnabled } from "../../utils/paymentSettings.js";
 import { getScheduleProblem } from "../../utils/deliverySchedule.js";
 import {
   body,
@@ -330,7 +331,9 @@ export const createOrderValidation = [
     ])
     .withMessage(
       "Payment method must be cash_on_delivery, cash_on_pickup, or paymongo."
-    ),
+    )
+    .custom((value) => value !== "paymongo" || isOnlinePaymentEnabled())
+    .withMessage(ONLINE_PAYMENTS_OFF_MESSAGE),
 
   /*
    * =======================================================
