@@ -59,6 +59,23 @@ try {
   console.log(`\nDatabase: ${db.databaseName} on ${hostOf(uri)}`);
   console.log(confirm ? "Mode: DELETE\n" : "Mode: PREVIEW (nothing will be deleted)\n");
 
+  /*
+   * Guard: refuse to touch a database that is not FLOGRAM's
+   * (e.g. another project's cluster in a copied .env).
+   */
+  const existing = new Set(
+    (await db.listCollections({}, { nameOnly: true }).toArray()).map((item) => item.name)
+  );
+  const missing = ["users", "florists", "flowers"].filter((name) => !existing.has(name));
+
+  if (missing.length) {
+    console.error(
+      `This does not look like the FLOGRAM database (missing: ${missing.join(", ")}). ` +
+        "Check MONGODB_URI in server/.env: copy it from Render → flogram-api → Environment."
+    );
+    process.exit(1);
+  }
+
   const users = db.collection(USERS_COLLECTION);
   const admins = await users
     .find({ role: "admin" }, { projection: { email: 1, firstName: 1, lastName: 1 } })
