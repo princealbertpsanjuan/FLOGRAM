@@ -14,6 +14,7 @@
     "verify:analytics": "node scripts/verifyAnalytics.js",
     "verify:security": "node scripts/verifySecurity.js",
     "verify:checkout": "node scripts/verifyCheckoutRules.js",
+    "db:reset-preview": "node scripts/resetToAdminOnly.js",
     "test": "node scripts/verifyRequirementChecks.js && node scripts/verifyRouting.js && node scripts/verifyAnalytics.js && node scripts/verifySecurity.js && node scripts/verifyCheckoutRules.js",
     "upload-to-cloud": "node scripts/uploadExistingFiles.js"
   },
