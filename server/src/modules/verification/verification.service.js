@@ -282,7 +282,9 @@ export const saveSellerVerification = async (
   floristProfile.verificationStatus = "pending";
   floristProfile.verificationRemarks = "";
   floristProfile.isActive = true;
-  floristProfile.shopLogo = floristProfile.shopLogo || `/${prepared.paths.shopLogo}`;
+  // The logo uploaded with the application is the shop's profile logo
+  // (a resubmission replaces it).
+  floristProfile.shopLogo = `/${prepared.paths.shopLogo}`;
   await floristProfile.save();
 
   await notifyAdmins({

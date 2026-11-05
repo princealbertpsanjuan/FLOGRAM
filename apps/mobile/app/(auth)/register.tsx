@@ -34,8 +34,9 @@ type RegistrationRole = Exclude<
   "admin"
 >;
 
+// Gmail only (same rule as server/src/utils/emailRules.js)
 const EMAIL_REGEX =
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  /^[a-z0-9](?:[a-z0-9]|\.(?!\.)){4,28}[a-z0-9]@(gmail\.com|googlemail\.com)$/i;
 
 const LOWERCASE_REGEX =
   /[a-z]/;
@@ -178,8 +179,8 @@ export default function RegisterScreen() {
       )
     ) {
       Alert.alert(
-        "Invalid Email",
-        "Please enter a valid email address."
+        "Gmail Required",
+        "Use a valid Gmail address (example: yourname@gmail.com)."
       );
 
       return false;
@@ -592,7 +593,7 @@ export default function RegisterScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder="sofia@email.com"
+              placeholder="yourname@gmail.com"
               placeholderTextColor="#B8AFB4"
               value={email}
               onChangeText={

@@ -285,7 +285,9 @@ export default function ApplicationScreen() {
       if (role === 'seller') {
         if (!form.shopName.trim()) throw new Error('Enter your shop name.');
         if (!isValidPhone(form.contactNumber)) throw new Error(PHONE_ERROR);
-        if (!/^\S+@\S+\.\S+$/.test(form.businessEmail.trim())) throw new Error('Enter a valid business email.');
+        // Gmail only (same rule as the server)
+        if (!/^[a-z0-9](?:[a-z0-9]|\.(?!\.)){4,28}[a-z0-9]@(gmail\.com|googlemail\.com)$/i.test(form.businessEmail.trim()))
+          throw new Error('Use a valid Gmail address for the business email (example: shopname@gmail.com).');
         if (!shopLocation) {
           setShopLocationError('Place your shop pin on the map so customers can order with delivery.');
           throw new Error(

@@ -19,6 +19,7 @@ import assert from "assert/strict";
 
 import { rateLimit, resetRateLimits } from "../src/middleware/rateLimit.js";
 import { applyReviewDecision, flaggedDocumentLabels } from "../src/modules/verification/verification-review.js";
+import { isValidGmail } from "../src/utils/emailRules.js";
 
 let passed = 0;
 const test = (name, fn) => {
@@ -125,6 +126,24 @@ test("rejection records which documents to resubmit", () => {
   });
   assert.deepEqual(flaggedDocumentLabels(verification), ["Bank account proof"]);
   assert.equal(verification.documentReviews.length, 1, "unknown document keys are dropped");
+});
+
+test("only valid Gmail addresses can register", () => {
+  for (const email of ["pasanjuan@gmail.com", "p.a.sanjuan@gmail.com", "PASanJuan@Gmail.com", "pasanjuan@googlemail.com"]) {
+    assert.ok(isValidGmail(email), email);
+  }
+  for (const email of [
+    "pasanjuan@adnu.edu.ph",
+    "pasanjuan@gbox.adnu.edu.ph",
+    "ab@gmail.com",
+    "pa..sanjuan@gmail.com",
+    ".pasanjuan@gmail.com",
+    "pasanjuan+shop@gmail.com",
+    "pa_sanjuan@gmail.com",
+    "pasanjuan@gmail.co",
+  ]) {
+    assert.equal(isValidGmail(email), false, email);
+  }
 });
 
 console.log(`\nSecurity checks: ${passed} passed.`);

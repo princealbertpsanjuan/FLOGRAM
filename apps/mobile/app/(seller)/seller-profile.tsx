@@ -1,3 +1,4 @@
+import { getUploadUrl } from '../../utils/media';
 import ShopCommunityRating from '../../components/customer/shop-community-rating';
 import {
   useCallback,
@@ -902,11 +903,14 @@ export default function SellerProfileScreen() {
                   styles.logoWrapper
                 }
               >
-                {florist?.shopLogo ? (
+                {/* Stored as /uploads/...; needs the server address */}
+                {getUploadUrl(florist?.shopLogo) ? (
                   <Image
                     source={{
                       uri:
-                        florist.shopLogo,
+                        getUploadUrl(
+                          florist?.shopLogo
+                        ) as string,
                     }}
                     style={
                       styles.shopLogo
@@ -1899,9 +1903,12 @@ export default function SellerProfileScreen() {
                               .profileImage ? (
                               <Image
                                 source={{
-                                  uri: item
-                                    .customer
-                                    .profileImage,
+                                  uri:
+                                    getUploadUrl(
+                                      item.customer
+                                        .profileImage
+                                    ) ||
+                                    undefined,
                                 }}
                                 style={
                                   styles.followerAvatar

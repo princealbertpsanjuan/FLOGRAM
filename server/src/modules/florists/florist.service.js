@@ -139,6 +139,22 @@ export const getMyFloristProfile =
       throw error;
     }
 
+    /*
+     * Shops that applied before the logo was copied to the
+     * profile: use the logo from their application.
+     */
+    if (!florist.shopLogo) {
+      const verification = await Verification.findOne({ user: userId })
+        .select("sellerDocuments.shopLogo")
+        .lean();
+      const applicationLogo = verification?.sellerDocuments?.shopLogo;
+
+      if (applicationLogo) {
+        florist.shopLogo = `/${String(applicationLogo).replace(/^\/+/, "")}`;
+        await florist.save();
+      }
+    }
+
     return florist;
   };
 

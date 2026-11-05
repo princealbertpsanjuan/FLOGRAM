@@ -1,6 +1,7 @@
+import ProofPhoto from '../../components/ui/proof-photo';
 import { useCallback, useEffect, useState } from 'react';
 
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,7 +15,6 @@ import {
   type SellerEarnings,
   type SellerPayout,
 } from '../../services/seller-payouts';
-import { getUploadUrl } from '../../utils/media';
 
 /*
  * =========================================================
@@ -206,11 +206,9 @@ export default function SellerEarningsScreen() {
                             <Line label="Method" value={openPayout.paymentMethod || 'Bank Transfer'} />
                             <Line label="Reference" value={openPayout.referenceNumber || '—'} />
                             {openPayout.proofImageUrl ? (
-                              <Image
-                                source={{ uri: getUploadUrl(openPayout.proofImageUrl) || undefined }}
-                                style={styles.proof}
-                                resizeMode="cover"
-                              />
+                              <View style={{ marginTop: 8 }}>
+                                <ProofPhoto uri={openPayout.proofImageUrl} label="Payout transfer proof" height={180} />
+                              </View>
                             ) : null}
                           </>
                         ) : null}

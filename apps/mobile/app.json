@@ -2,14 +2,14 @@
   "expo": {
     "name": "FLOGRAM",
     "slug": "flogram",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "flogram",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.flogram.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

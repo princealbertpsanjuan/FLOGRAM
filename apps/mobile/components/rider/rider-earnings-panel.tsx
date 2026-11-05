@@ -1,8 +1,8 @@
+import ProofPhoto from '../ui/proof-photo';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -20,7 +20,6 @@ import {
   type RiderPayout,
 } from '../../services/delivery';
 
-import { getUploadUrl } from '../../utils/media';
 
 import { SeeAllButton, useSeeAll } from '../ui/see-all';
 
@@ -319,13 +318,8 @@ export default function RiderEarningsPanel({ refreshKey }: Props) {
                 ) : null}
 
                 <Text style={styles.modalSection}>Payment Proof</Text>
-                {getUploadUrl(selected.proofImageUrl) ? (
-                  <Image
-                    source={{ uri: getUploadUrl(selected.proofImageUrl) as string }}
-                    style={styles.proofImage}
-                    resizeMode="contain"
-                    accessibilityLabel="Admin payment proof"
-                  />
+                {selected.proofImageUrl ? (
+                  <ProofPhoto uri={selected.proofImageUrl} label="Admin payment proof" height={260} />
                 ) : (
                   <Text style={styles.emptyText}>
                     {selected.status === 'paid'
