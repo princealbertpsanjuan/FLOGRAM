@@ -32,6 +32,7 @@ import {
 } from "../payments/paymongo.service.js";
 import { resolveAddOnSelections } from "../addons/addon.service.js";
 import { getScheduleProblem } from "../../utils/deliverySchedule.js";
+import { ONLINE_PAYMENTS_OFF_MESSAGE, isOnlinePaymentEnabled } from "../../utils/paymentSettings.js";
 import GiftAddOn from "../addons/addon.model.js";
 
 /*
@@ -401,6 +402,17 @@ const validatePaymentMethod =
     ) {
       throw createError(
         "Payment method is invalid."
+      );
+    }
+
+    // Admin switch: ONLINE_PAYMENTS_ENABLED=false
+    if (
+      paymentMethod ===
+        "paymongo" &&
+      !isOnlinePaymentEnabled()
+    ) {
+      throw createError(
+        ONLINE_PAYMENTS_OFF_MESSAGE
       );
     }
 
@@ -2685,6 +2697,12 @@ export const createCheckoutPayMongoSession =
     ) {
       throw createError(
         "This checkout does not use PayMongo."
+      );
+    }
+
+    if (!isOnlinePaymentEnabled()) {
+      throw createError(
+        ONLINE_PAYMENTS_OFF_MESSAGE
       );
     }
 

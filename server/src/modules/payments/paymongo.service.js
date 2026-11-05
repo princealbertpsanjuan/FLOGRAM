@@ -1,3 +1,4 @@
+import { ONLINE_PAYMENTS_OFF_MESSAGE, isOnlinePaymentEnabled } from "../../utils/paymentSettings.js";
 import crypto from "crypto";
 
 const PAYMONGO_API_URL =
@@ -167,6 +168,13 @@ export const createPayMongoCheckoutSession =
     customer,
     idempotencyKey = null,
   }) => {
+    // Admin switch: ONLINE_PAYMENTS_ENABLED=false
+    if (!isOnlinePaymentEnabled()) {
+      const error = new Error(ONLINE_PAYMENTS_OFF_MESSAGE);
+      error.statusCode = 400;
+      throw error;
+    }
+
     if (!order) {
       const error = new Error(
         "Order is required to create a PayMongo checkout session."

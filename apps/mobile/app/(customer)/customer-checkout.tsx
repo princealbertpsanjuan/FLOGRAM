@@ -1,3 +1,4 @@
+import { getAppConfig } from '../../services/app-config';
 import { Ionicons } from "@expo/vector-icons";
 import {
   useLocalSearchParams,
@@ -1213,6 +1214,39 @@ export default function CustomerCheckoutScreen() {
     useState<PaymentMethod>(
       "cash_on_delivery"
     );
+
+  /*
+   * Admin can turn PayMongo off for everyone
+   * (ONLINE_PAYMENTS_ENABLED=false on the server).
+   */
+  const [
+    onlinePaymentsEnabled,
+    setOnlinePaymentsEnabled,
+  ] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    void getAppConfig().then(config => {
+      if (!active) return;
+
+      setOnlinePaymentsEnabled(
+        config.onlinePaymentsEnabled
+      );
+
+      if (!config.onlinePaymentsEnabled) {
+        setPaymentMethod(current =>
+          current === "paymongo"
+            ? "cash_on_delivery"
+            : current
+        );
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /* =======================================================
    * GROUPED CART CHECKOUT STATE
@@ -4620,6 +4654,7 @@ export default function CustomerCheckoutScreen() {
               />
             )}
 
+            {onlinePaymentsEnabled ? (
             <PaymentChoice
               icon="card-outline"
               title="PayMongo"
@@ -4638,6 +4673,11 @@ export default function CustomerCheckoutScreen() {
                 )
               }
             />
+            ) : (
+              <Text style={styles.onlinePaymentOffNote}>
+                Online payment (PayMongo) is not available yet.
+              </Text>
+            )}
           </Section>
 
           {/* =================================================
@@ -7116,6 +7156,12 @@ const styles =
       marginBottom: 6,
       color: "#8A6D1F",
       fontSize: 11,
+    },
+
+    onlinePaymentOffNote: {
+      marginTop: 4,
+      color: "#77737B",
+      fontSize: 12,
     },
 
     totalDivider: {

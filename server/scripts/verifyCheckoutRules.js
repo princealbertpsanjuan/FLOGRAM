@@ -15,6 +15,7 @@
 import assert from "assert/strict";
 
 import { getScheduleProblem, toManilaDay } from "../src/utils/deliverySchedule.js";
+import { isOnlinePaymentEnabled } from "../src/utils/paymentSettings.js";
 
 let passed = 0;
 const test = (name, fn) => {
@@ -55,6 +56,20 @@ test("Manila day is used even when the server runs in UTC", () => {
 
 test("invalid date is reported", () => {
   assert.match(getScheduleProblem("not a date"), /invalid/);
+});
+
+test("online payment switch: on by default, off only with false", () => {
+  const original = process.env.ONLINE_PAYMENTS_ENABLED;
+  delete process.env.ONLINE_PAYMENTS_ENABLED;
+  assert.equal(isOnlinePaymentEnabled(), true);
+  process.env.ONLINE_PAYMENTS_ENABLED = "false";
+  assert.equal(isOnlinePaymentEnabled(), false);
+  process.env.ONLINE_PAYMENTS_ENABLED = " FALSE ";
+  assert.equal(isOnlinePaymentEnabled(), false);
+  process.env.ONLINE_PAYMENTS_ENABLED = "true";
+  assert.equal(isOnlinePaymentEnabled(), true);
+  if (original === undefined) delete process.env.ONLINE_PAYMENTS_ENABLED;
+  else process.env.ONLINE_PAYMENTS_ENABLED = original;
 });
 
 console.log(`\nCheckout rule checks: ${passed} passed.`);
